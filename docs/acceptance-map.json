@@ -1,0 +1,562 @@
+{
+  "schema": "kndbgx.acceptance-map.v1",
+  "findings": [
+    {
+      "id": "F01",
+      "productPath": "ui/index.html",
+      "tests": [
+        "tools/test-bootstrap.mjs"
+      ],
+      "assertions": [
+        "T-BOOT-01 negative control detects original script order"
+      ]
+    },
+    {
+      "id": "F02",
+      "productPath": "kndbgx.sln",
+      "tests": [
+        "tools/test-bootstrap.mjs"
+      ],
+      "assertions": [
+        "T-BUILD-01 solution project blocks are balanced"
+      ]
+    },
+    {
+      "id": "F03",
+      "productPath": "src/engine/EngineCore.cpp",
+      "tests": [
+        "src/selftest/ExecutionRegression.h"
+      ],
+      "assertions": [
+        "thread.owner.reject-before-engine-call"
+      ]
+    },
+    {
+      "id": "F04",
+      "productPath": "src/core/Execution.h",
+      "tests": [
+        "src/selftest/ExecutionRegression.h"
+      ],
+      "assertions": [
+        "cancel.blocked-executor-finishes",
+        "cancel.stale-request-id-does-not-cancel-new-work"
+      ]
+    },
+    {
+      "id": "F05",
+      "productPath": "src/ui/UiApp.cpp",
+      "tests": [
+        "src/selftest/EngineIntegration.cpp"
+      ],
+      "assertions": [
+        "host.leases-drain-and-module-unloads"
+      ]
+    },
+    {
+      "id": "F06",
+      "productPath": "src/core/Epochs.h",
+      "tests": [
+        "src/selftest/LayoutRegression.h"
+      ],
+      "assertions": [
+        "context.logical-dtb-invalidated-by-context-epoch"
+      ]
+    },
+    {
+      "id": "F07",
+      "productPath": "src/engine/ContextGuard.h",
+      "tests": [
+        "src/selftest/ExecutionRegression.h"
+      ],
+      "assertions": [
+        "context.restore-failure-faults-and-retains-all-steps",
+        "context.stale-restore-never-applies-old-context"
+      ]
+    },
+    {
+      "id": "F08",
+      "productPath": "src/cmd/CommandSpec.cpp",
+      "tests": [
+        "src/selftest/PolicyRegression.h"
+      ],
+      "assertions": [
+        "policy.unknown-never-reaches-engine",
+        "policy.compound-typed-input-rejected"
+      ]
+    },
+    {
+      "id": "F09",
+      "productPath": "src/core/Mutation.h",
+      "tests": [
+        "src/selftest/PolicyRegression.h"
+      ],
+      "assertions": [
+        "plan.token-bound-to-server-plan",
+        "plan.approval-single-use"
+      ]
+    },
+    {
+      "id": "F10",
+      "productPath": "src/core/MutationGrammar.h",
+      "tests": [
+        "src/selftest/PolicyRegression.h"
+      ],
+      "assertions": [
+        "plan.invalid-last-value-has-no-intent"
+      ]
+    },
+    {
+      "id": "F11",
+      "productPath": "src/core/Input.h",
+      "tests": [
+        "src/selftest/PureRegression.h"
+      ],
+      "assertions": [
+        "T-FILL-01 product planner phase and empty pattern"
+      ]
+    },
+    {
+      "id": "F12",
+      "productPath": "src/core/Mutation.h",
+      "tests": [
+        "src/selftest/PolicyRegression.h"
+      ],
+      "assertions": [
+        "plan.complete-preview-does-not-write"
+      ]
+    },
+    {
+      "id": "F13",
+      "productPath": "src/cmd/MutationService.cpp",
+      "tests": [
+        "src/selftest/EngineIntegration.cpp"
+      ],
+      "assertions": [
+        "host.typed-bitfield-write-rejected",
+        "host.typed-signed-overflow-rejected"
+      ]
+    },
+    {
+      "id": "F14",
+      "productPath": "src/cmd/CommandSpec.cpp",
+      "tests": [
+        "src/selftest/PolicyRegression.h"
+      ],
+      "assertions": [
+        "policy.removed-mutation-product-dispatch"
+      ]
+    },
+    {
+      "id": "F15",
+      "productPath": "src/core/Result.h",
+      "tests": [
+        "src/selftest/FaultRegression.h"
+      ],
+      "assertions": [
+        "T-PARTIAL-01 no retry after physical partial failure"
+      ]
+    },
+    {
+      "id": "F16",
+      "productPath": "src/cmd/Dispatcher.cpp",
+      "tests": [
+        "src/selftest/FaultRegression.h"
+      ],
+      "assertions": [
+        "T-PARTIAL-01 native exception is not success",
+        "T-PARTIAL-01 C++ exception is not success"
+      ]
+    },
+    {
+      "id": "F17",
+      "productPath": "src/util/Json.cpp",
+      "tests": [
+        "src/selftest/PureRegression.h"
+      ],
+      "assertions": [
+        "T-JSON-01 rejects malformed grammar and duplicate keys",
+        "T-JSON-01 depth budget"
+      ]
+    },
+    {
+      "id": "F18",
+      "productPath": "src/util/Json.cpp",
+      "tests": [
+        "src/selftest/PureRegression.h"
+      ],
+      "assertions": [
+        "T-JSON-01 nonfinite serialization fails",
+        "T-JSON-01 round-trip precision"
+      ]
+    },
+    {
+      "id": "F19",
+      "productPath": "src/util/Text.cpp",
+      "tests": [
+        "src/selftest/PureRegression.h"
+      ],
+      "assertions": [
+        "T-PARSE-01 unmatched quote",
+        "T-PARSE-01 multiline command rejected"
+      ]
+    },
+    {
+      "id": "F20",
+      "productPath": "src/engine/EngineCore.cpp",
+      "tests": [
+        "src/selftest/PureRegression.h",
+        "src/selftest/EngineIntegration.cpp"
+      ],
+      "assertions": [
+        "T-PARSE-01 error text is not a register value",
+        "host.typed-register-read"
+      ]
+    },
+    {
+      "id": "F21",
+      "productPath": "src/engine/PageWalk.cpp",
+      "tests": [
+        "src/selftest/LayoutRegression.h"
+      ],
+      "assertions": [
+        "paging.unknown-mode-rejected",
+        "paging.reserved-large-page-alignment-rejected"
+      ]
+    },
+    {
+      "id": "F22",
+      "productPath": "src/engine/LayoutResolver.cpp",
+      "tests": [
+        "src/selftest/LayoutRegression.h",
+        "src/selftest/EngineIntegration.cpp"
+      ],
+      "assertions": [
+        "layout.array-multiplication-bounded",
+        "host.layout-pdb-guid-mismatch-rejected"
+      ]
+    },
+    {
+      "id": "F23",
+      "productPath": "src/core/Process.h",
+      "tests": [
+        "src/selftest/CollectorRegression.h"
+      ],
+      "assertions": [
+        "proc.no-fabricated-record-or-partial-number",
+        "proc.cycle-partial"
+      ]
+    },
+    {
+      "id": "F24",
+      "productPath": "src/core/Vad.h",
+      "tests": [
+        "src/selftest/CollectorRegression.h"
+      ],
+      "assertions": [
+        "vad.missing-mapping-is-unknown",
+        "vad.unreadable-high-vpn-not-zero"
+      ]
+    },
+    {
+      "id": "F25",
+      "productPath": "src/core/ProcessViews.h",
+      "tests": [
+        "src/selftest/CollectorRegression.h"
+      ],
+      "assertions": [
+        "handles.file-thread-bits-not-process-vm-access",
+        "handles.truncated-count-rejected-not-clamped"
+      ]
+    },
+    {
+      "id": "F26",
+      "productPath": "src/core/ProcessViews.h",
+      "tests": [
+        "src/selftest/CollectorRegression.h"
+      ],
+      "assertions": [
+        "crossview.toolhelp-failure-not-ghosts",
+        "crossview.pid-reuse-not-same-identity"
+      ]
+    },
+    {
+      "id": "F27",
+      "productPath": "src/core/Walker.h",
+      "tests": [
+        "src/selftest/LayoutRegression.h"
+      ],
+      "assertions": [
+        "walk.visitor-stop-is-global",
+        "walk.budget-shared-across-buckets"
+      ]
+    },
+    {
+      "id": "F28",
+      "productPath": "src/core/ObjectRead.h",
+      "tests": [
+        "src/selftest/CollectorRegression.h"
+      ],
+      "assertions": [
+        "object.sparse-type-table-survives-null-and-unreadable-slots",
+        "object.partial-unicode-not-zero-filled"
+      ]
+    },
+    {
+      "id": "F29",
+      "productPath": "src/cmd/CallbacksCmds.cpp",
+      "tests": [
+        "src/selftest/ScannerRegression.h"
+      ],
+      "assertions": [
+        "callback.named-function-not-first-canonical-member"
+      ],
+      "limitation": "Driver-free failure contracts and decoder/layout fixtures only; real kernel memory support remains Experimental."
+    },
+    {
+      "id": "F30",
+      "productPath": "src/cmd/ScannerCmds.cpp",
+      "tests": [
+        "src/selftest/ScannerRegression.h"
+      ],
+      "assertions": [
+        "scanner.incomplete-ownership-never-clean",
+        "idt.short-gate-no-zero-fill"
+      ],
+      "limitation": "Driver-free failure contracts and decoder/layout fixtures only; real kernel memory support remains Experimental."
+    },
+    {
+      "id": "F31",
+      "productPath": "src/cmd/ScannerCmds.cpp",
+      "tests": [
+        "src/selftest/ScannerRegression.h"
+      ],
+      "assertions": [
+        "collector.msr-no-target-not-zero",
+        "collector.cr-no-target-not-clean"
+      ],
+      "limitation": "Driver-free failure contracts and decoder/layout fixtures only; real kernel memory support remains Experimental."
+    },
+    {
+      "id": "F32",
+      "productPath": "src/cmd/MoreScanners.cpp",
+      "tests": [
+        "src/selftest/ScannerRegression.h"
+      ],
+      "assertions": [
+        "collector.etw-no-layout-not-clean",
+        "layout.array-dimensions-inconsistent-rejected"
+      ],
+      "limitation": "Driver-free failure contracts and decoder/layout fixtures only; real kernel memory support remains Experimental."
+    },
+    {
+      "id": "F33",
+      "productPath": "src/cmd/KernelScanners2.cpp",
+      "tests": [
+        "src/selftest/ScannerRegression.h"
+      ],
+      "assertions": [
+        "timer.two-dimensional-PDB-leaf-stride-bounds",
+        "epoch.internal-scope-never-hides-resume"
+      ],
+      "limitation": "Driver-free failure contracts and decoder/layout fixtures only; real kernel memory support remains Experimental."
+    },
+    {
+      "id": "F34",
+      "productPath": "src/cmd/DrvobjCmds.cpp",
+      "tests": [
+        "src/selftest/CollectorRegression.h"
+      ],
+      "assertions": [
+        "driver.ULONG-size-excludes-adjacent-flags",
+        "driver.normalization-no-double-prefix"
+      ]
+    },
+    {
+      "id": "F35",
+      "productPath": "src/core/BinaryFormats.h",
+      "tests": [
+        "src/selftest/PureRegression.h",
+        "src/selftest/ScannerRegression.h"
+      ],
+      "assertions": [
+        "T-PE-01 invalid e_lfanew",
+        "module.wrong-file-or-missing-PDB-not-comparable"
+      ]
+    },
+    {
+      "id": "F36",
+      "productPath": "src/core/BinaryFormats.h",
+      "tests": [
+        "src/selftest/PureRegression.h"
+      ],
+      "assertions": [
+        "T-DUMP-01 stream outside file",
+        "T-DUMP-01 count overflow"
+      ]
+    },
+    {
+      "id": "F37",
+      "productPath": "src/cmd/BuiltinCmds.cpp",
+      "tests": [
+        "src/selftest/FaultRegression.h",
+        "src/selftest/EngineIntegration.cpp"
+      ],
+      "assertions": [
+        "T-FILE-01 existing destination preserved by default",
+        "host.create-real-minidump-fixture"
+      ]
+    },
+    {
+      "id": "F38",
+      "productPath": "src/cmd/ExtraCmds.cpp",
+      "tests": [
+        "src/selftest/ScannerRegression.h"
+      ],
+      "assertions": [
+        "collector.unloaded-no-profile-not-clean",
+        "collector.piddb-no-profile-not-clean",
+        "collector.ci-no-profile-not-clean"
+      ],
+      "limitation": "Driver-free failure contracts and decoder/layout fixtures only; real kernel memory support remains Experimental."
+    },
+    {
+      "id": "F39",
+      "productPath": "src/util/HostCollectors.h",
+      "tests": [
+        "src/selftest/FaultRegression.h"
+      ],
+      "assertions": [
+        "T-WFP-01 positive DWORD error is failure"
+      ]
+    },
+    {
+      "id": "F40",
+      "productPath": "src/util/HostCollectors.h",
+      "tests": [
+        "src/selftest/FaultRegression.h"
+      ],
+      "assertions": [
+        "T-ACPI-01 signature and failure provenance"
+      ]
+    },
+    {
+      "id": "F41",
+      "productPath": "src/util/HostCollectors.h",
+      "tests": [
+        "src/selftest/FaultRegression.h"
+      ],
+      "assertions": [
+        "T-HASH-01 read failure never exposes prefix digest",
+        "T-HASH-02 cancellation and budget never expose a digest"
+      ]
+    },
+    {
+      "id": "F42",
+      "productPath": "src/core/Pool.h",
+      "tests": [
+        "src/selftest/ScannerRegression.h"
+      ],
+      "assertions": [
+        "pool.unaligned-allocation-last-page-included",
+        "pool.truncated-count-not-clamped"
+      ],
+      "limitation": "Driver-free failure contracts and decoder/layout fixtures only; real kernel memory support remains Experimental."
+    },
+    {
+      "id": "F43",
+      "productPath": "src/cmd/UserCollectors.cpp",
+      "tests": [
+        "src/selftest/ScannerRegression.h"
+      ],
+      "assertions": [
+        "token.wrong-authority-or-short-SID-unavailable",
+        "collector.hv-no-target-not-conclusion"
+      ],
+      "limitation": "Driver-free failure contracts and decoder/layout fixtures only; real kernel memory support remains Experimental."
+    },
+    {
+      "id": "F44",
+      "productPath": "src/util/ArtifactWriter.h",
+      "tests": [
+        "src/selftest/FaultRegression.h",
+        "src/selftest/SnapshotRpcRegression.h"
+      ],
+      "assertions": [
+        "T-FILE-01 failed operation never commits or deletes foreign file",
+        "snapshot.checksum-tamper-rejected"
+      ]
+    },
+    {
+      "id": "F45",
+      "productPath": "src/core/Snapshot.h",
+      "tests": [
+        "src/selftest/SnapshotRpcRegression.h"
+      ],
+      "assertions": [
+        "snapshot.failed-collector-not-removed",
+        "snapshot.duplicate-identities-preserve-ambiguity"
+      ]
+    },
+    {
+      "id": "F46",
+      "productPath": "src/core/Rpc.h",
+      "tests": [
+        "src/selftest/SnapshotRpcRegression.h"
+      ],
+      "assertions": [
+        "rpc.request-replay-rejected",
+        "rpc.actual-document-source-required",
+        "rpc.previous-navigation-rejected"
+      ]
+    },
+    {
+      "id": "F47",
+      "productPath": "ui/app.js",
+      "tests": [
+        "tools/test-ui-policy.mjs"
+      ],
+      "assertions": [
+        "T-PLAN-UI no global switch, duplicate submission, failed preview, token binding and discard",
+        "T-UX-01 Korean IME, 100k-row virtualization, bounded console and demand paging",
+        "T-NAV-UI shared CLI result, address-space routing, historical state and modal focus trap"
+      ]
+    },
+    {
+      "id": "F48",
+      "productPath": "src/cmd/CommandSpec.cpp",
+      "tests": [
+        "src/selftest/PolicyRegression.h",
+        "src/selftest/SnapshotRpcRegression.h"
+      ],
+      "assertions": [
+        "policy.option-contract-enforced",
+        "policy.single-registry-alias-handler-contract",
+        "rpc.catalog-support-matches-command-registry"
+      ]
+    },
+    {
+      "id": "F49",
+      "productPath": "tools/BuildSettings.props",
+      "tests": [
+        "tools/release.py",
+        "tools/validate-release.ps1"
+      ],
+      "assertions": [
+        "release.dependency-hash-tamper-rejected",
+        "release.binary-hardening-and-pdb",
+        "release.reproducible-release-dll",
+        "release.both-release-pdbs-match"
+      ]
+    },
+    {
+      "id": "F50",
+      "productPath": "src/selftest/SelfTest.cpp",
+      "tests": [
+        "tools/check-acceptance.py"
+      ],
+      "assertions": [
+        "release.all-failure-ids-have-executed-product-assertions"
+      ]
+    }
+  ]
+}

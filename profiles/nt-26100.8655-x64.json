@@ -1,0 +1,22 @@
+{
+  "schema": "kndbgx.layout-profile.v1",
+  "id": "NT-26100.8655-PDB-11D7FE79-age1",
+  "support": "Experimental",
+  "scope": "Native SSDT extent only; runtime signed-relative decoding still needs kernel memory validation",
+  "machine": "0x8664",
+  "timestamp": "0x90b083da",
+  "imageSize": "0x1450000",
+  "pdbGuid": "11d7fe79-cc24-5612-0555-03ee86bb0e3e",
+  "pdbAge": 1,
+  "imageSha256": "ee04f9e58743d6a6b5bc53c4bfa89ff97cd715b9091b0d67afd72e278bfc5395",
+  "pdbSha256": "e6a8a3c646a41b9a55b5e04975f03fae987d525c4200c0d97ebcbcab880a72d0",
+  "pdbSource": "https://msdl.microsoft.com/download/symbols/ntkrnlmp.pdb/11D7FE79CC245612055503EE86BB0E3E1/ntkrnlmp.pdb",
+  "tableSymbol": "KiServiceTable",
+  "tableRva": "0xda7d0",
+  "limitSymbol": "KiServiceLimit",
+  "limitRva": "0xdaf74",
+  "count": 489,
+  "diskEncoding": "ImageRva32",
+  "runtimeEncoding": "SignedRelative32ArithmeticShift4",
+  "evidence": "Matching image RSDS and public PDB symbol RVAs; disk entries point to executable sections. Disk encoding is not the runtime encoding."
+}

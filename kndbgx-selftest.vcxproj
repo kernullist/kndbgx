@@ -1,0 +1,95 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{E7B21F44-9C63-4A18-8D52-3F6A0B7C4D91}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>kndbgx-selftest</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="tools\BuildSettings.props" />
+  <PropertyGroup>
+    <OutDir>$(ProjectDir)x64\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)x64\$(Configuration)\obj-st\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(VSInstallDir)DIA SDK\include;$(ProjectDir)src;$(ProjectDir)deps\webview2\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <SubSystem>Console</SubSystem>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>oleaut32.lib;dbgeng.lib;ole32.lib;bcrypt.lib;rpcrt4.lib;advapi32.lib;tdh.lib;wintrust.lib;WebView2LoaderStatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)deps\webview2\build\native\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\selftest\SelfTest.cpp" />
+    <ClCompile Include="src\ui\Bridge.cpp" />
+    <ClCompile Include="src\catalog\Catalog.cpp" />
+    <ClCompile Include="src\cmd\Dispatcher.cpp" />
+    <ClCompile Include="src\cmd\CommandSpec.cpp" />
+    <ClCompile Include="src\cmd\Jobs.cpp" />
+    <ClCompile Include="src\cmd\MutationService.cpp" />
+    <ClCompile Include="src\cmd\BuiltinCmds.cpp" />
+    <ClCompile Include="src\cmd\DebuggerCmds.cpp" />
+    <ClCompile Include="src\cmd\KernelAnalysisCmds.cpp" />
+    <ClCompile Include="src\cmd\DriverEvidenceCmds.cpp" />
+    <ClCompile Include="src\cmd\EtlEvidenceCmds.cpp" />
+    <ClCompile Include="src\cmd\DebugActionCmds.cpp" />
+    <ClCompile Include="src\engine\DataModel.cpp" />
+    <ClCompile Include="src\cmd\CmdUtil.cpp" />
+        <ClCompile Include="src\cmd\WriteGate.cpp" />
+    <ClCompile Include="src\cmd\CoreCmds.cpp" />
+    <ClCompile Include="src\cmd\MemoryCmds.cpp" />
+    <ClCompile Include="src\cmd\ScannerCmds.cpp" />
+    <ClCompile Include="src\cmd\CallbacksCmds.cpp" />
+    <ClCompile Include="src\cmd\PoolCmds.cpp" />
+    <ClCompile Include="src\cmd\MoreScanners.cpp" />
+    <ClCompile Include="src\cmd\ProcCollect.cpp" />
+    <ClCompile Include="src\cmd\ProcScanCmds.cpp" />
+    <ClCompile Include="src\cmd\DrvobjCmds.cpp" />
+    <ClCompile Include="src\cmd\KernelScanners2.cpp" />
+    <ClCompile Include="src\cmd\UserCollectors.cpp" />
+    <ClCompile Include="src\cmd\DumpCmds.cpp" />
+    <ClCompile Include="src\cmd\ExtraCmds.cpp" />
+    <ClCompile Include="src\engine\LayoutResolver.cpp" />
+    <ClCompile Include="src\engine\PdbMetadata.cpp" />
+    <ClCompile Include="src\engine\ModuleList.cpp" />
+    <ClCompile Include="src\engine\SymbolHealth.cpp" />
+    <ClCompile Include="src\engine\CpuContext.cpp" />
+    <ClCompile Include="src\engine\ObjectDirectory.cpp" />
+    <ClCompile Include="src\engine\EngineCore.cpp" />
+    <ClCompile Include="src\engine\PageWalk.cpp" />
+    <ClCompile Include="src\util\Json.cpp" />
+    <ClCompile Include="src\util\Text.cpp" />
+    <ClCompile Include="src\util\Jsonl.cpp" />
+    <ClCompile Include="src\util\Log.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>
+
+
+

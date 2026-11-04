@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <LinkIncremental>false</LinkIncremental>
+    <KnReleaseLinkOptions>/PDBTHREADS:1 /CGTHREADS:1</KnReleaseLinkOptions>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DebugInformationFormat Condition="'$(Configuration)'=='Release'">OldStyle</DebugInformationFormat>
+      <SDLCheck>true</SDLCheck>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <AdditionalOptions>/MP4 /utf-8 /Brepro /guard:ehcont %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(VSInstallDir)DIA SDK\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>/guard:cf /guard:ehcont /CETCOMPAT /Brepro /PDBALTPATH:%_PDB% $(KnReleaseLinkOptions) %(AdditionalOptions)</AdditionalOptions>
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <LinkTimeCodeGeneration Condition="'$(Configuration)'=='Release'">UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+    </Link>
+  </ItemDefinitionGroup>
+  <Target Name="CopyKnDiaProvider" AfterTargets="Build" Condition="'$(Platform)'=='x64' and Exists('$(VSInstallDir)DIA SDK\bin\amd64\msdia140.dll')">
+    <MakeDir Directories="$(OutDir)runtime\dia" />
+    <Copy SourceFiles="$(VSInstallDir)DIA SDK\bin\amd64\msdia140.dll" DestinationFolder="$(OutDir)runtime\dia" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

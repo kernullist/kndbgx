@@ -1,0 +1,186 @@
+{
+  "schema": "kndbgx.symbol-profile.v1",
+  "machine": "0x8664",
+  "timestamp": "0x90b083da",
+  "imageSize": "0x1450000",
+  "pdbGuid": "11d7fe79-cc24-5612-0555-03ee86bb0e3e",
+  "pdbAge": 1,
+  "imageSha256": "ee04f9e58743d6a6b5bc53c4bfa89ff97cd715b9091b0d67afd72e278bfc5395",
+  "pdbSha256": "e6a8a3c646a41b9a55b5e04975f03fae987d525c4200c0d97ebcbcab880a72d0",
+  "pdbSource": "https://msdl.microsoft.com/download/symbols/ntkrnlmp.pdb/11D7FE79CC245612055503EE86BB0E3E1/ntkrnlmp.pdb",
+  "id": "NT-26100.8655-symbols-PDB-11D7FE79-age1",
+  "support": "Experimental",
+  "scope": "Object type/name tables, VAD protection mapping, host ETW logger inventory, NMI, firmware providers and unloaded-driver ring",
+  "runtimeImplementation": "src/core/KernelSymbolProfile.h; this JSON is review evidence and cannot enable additional kernels",
+  "storage": {
+    "ObTypeIndexTable": {
+      "rva": "0xfc6840",
+      "slots": 256,
+      "stride": 8,
+      "evidence": "ObGetObjectType byte index and scaled pointer load"
+    },
+    "ObpInfoMaskToOffset": {
+      "rva": "0xf0f280",
+      "verifiedPrefixEntries": 4,
+      "stride": 1,
+      "evidence": "ObQueryNameInfo masks the name-info index to 3"
+    },
+    "MmProtectToValue": {
+      "rva": "0x14320",
+      "verifiedEntries": 32,
+      "stride": 4,
+      "evidence": "Exact 128 target bytes and matched PDB five-bit Protection field"
+    },
+    "PspHostSiloGlobals": {
+      "rva": "0xfce940",
+      "type": "_ESERVERSILO_GLOBALS",
+      "evidence": "PsGetServerSiloGlobals host branch and matched _EJOB.ServerSiloGlobals offset"
+    },
+    "NmiNode": {
+      "bytes": 32,
+      "next": 0,
+      "callback": 8,
+      "context": 16
+    },
+    "FirmwareProvider": {
+      "bytes": 40,
+      "signature": 0,
+      "callback": 8,
+      "links": 24
+    },
+    "MmUnloadedDrivers": {
+      "rva": "0xef5250",
+      "storage": "PointerToRing",
+      "capacity": 50,
+      "stride": 40,
+      "name": 0,
+      "start": 16,
+      "end": 24,
+      "time": 32,
+      "nextIndexSymbol": "MmLastUnloadedDriver",
+      "nextIndexRva": "0xef5248",
+      "nextIndexIsNotOccupiedCount": true
+    },
+    "EtwLoggerSlot": {
+      "unusedValue": 1,
+      "evidence": "EtwpFreeLoggerContext writes 1 into the pointer table",
+      "clockValues": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "clockEvidence": "EtwpGetLoggerTimeStamp validates the integer selector at +0x18"
+    }
+  },
+  "windows": [
+    {
+      "symbol": "ObGetObjectType",
+      "rva": "0x9b3340",
+      "offset": "0x0",
+      "bytes": "488d41d00fb649e848c1e8080fb6c04833c10fb60d332b61004833c1488d0ddd346100488b04c1c3"
+    },
+    {
+      "symbol": "ObQueryNameInfo",
+      "rva": "0x9b90e0",
+      "offset": "0x0",
+      "bytes": "488d41d00fb649eaf6c102750433c0c3"
+    },
+    {
+      "symbol": "ObQueryNameInfo",
+      "rva": "0x9b90e0",
+      "offset": "0x11",
+      "bytes": "83e103488d15856155000fb60c11482bc1c3"
+    },
+    {
+      "symbol": "MmProtectToValue",
+      "rva": "0x14320",
+      "offset": "0x0",
+      "bytes": "0100000002000000100000002000000004000000080000004000000080000000010000000202000010020000200200000402000008020000400200008002000001000000020100001001000020010000040100000801000040010000800100000100000002040000100400002004000004040000080400004004000080040000"
+    },
+    {
+      "symbol": "PsGetServerSiloGlobals",
+      "rva": "0x3d1f40",
+      "offset": "0x0",
+      "bytes": "4885c97509488d05f4c9bf00c3"
+    },
+    {
+      "symbol": "PsGetServerSiloGlobals",
+      "rva": "0x3d1f40",
+      "offset": "0xe",
+      "bytes": "488b81e0050000c3"
+    },
+    {
+      "symbol": "EtwpFreeLoggerContext",
+      "rva": "0xa4b660",
+      "offset": "0x289",
+      "bytes": "488b85c802000033d2488bcb4ac704f801000000"
+    },
+    {
+      "symbol": "EtwpGetLoggerTimeStamp",
+      "rva": "0x360f80",
+      "offset": "0x4",
+      "bytes": "488b41184885c0742d4883e8010f840d0100004883e8010f841e0100004883f8010f850d010000"
+    },
+    {
+      "symbol": "KeRegisterNmiCallback",
+      "rva": "0x5ad680",
+      "offset": "0xf",
+      "bytes": "488bfa488bf1ba2000000041b84b4e4d498d4a20e8485a5c00488bd833c0"
+    },
+    {
+      "symbol": "KeRegisterNmiCallback",
+      "rva": "0x5ad680",
+      "offset": "0x39",
+      "bytes": "4889730848897b1048895b18e80680c6ff488b15ff919900488d0df09199004889138ad048891dec919900"
+    },
+    {
+      "symbol": "KiProcessNMI",
+      "rva": "0x5b47c0",
+      "offset": "0x92",
+      "bytes": "488b1d77209900418aff4885db7420488b4308408ad7488b4b10"
+    },
+    {
+      "symbol": "KiProcessNMI",
+      "rva": "0x5b47c0",
+      "offset": "0xb1",
+      "bytes": "488b1b400af84885db75e5"
+    },
+    {
+      "symbol": "MiRememberUnloadedDriver",
+      "rva": "0xab0cbc",
+      "offset": "0x2f",
+      "bytes": "4c8b0d5e4544004d85c97529bad0070000418d4e4041b84d6d4454e8e56c75ff4889053e4544004c8bc84885c00f84a0000000eb0b8b052245440083f8327209418bc6890514454400488d1480498d1cd1"
+    },
+    {
+      "symbol": "MiRememberUnloadedDriver",
+      "rva": "0xab0cbc",
+      "offset": "0x9b",
+      "bytes": "48894308"
+    },
+    {
+      "symbol": "MiRememberUnloadedDriver",
+      "rva": "0xab0cbc",
+      "offset": "0xc6",
+      "bytes": "66890349b90800000080f7ffff0fb7470266894302488d042e4889431848897310"
+    },
+    {
+      "symbol": "MiRememberUnloadedDriver",
+      "rva": "0xab0cbc",
+      "offset": "0xf5",
+      "bytes": "482bca48894b20ff058a444400"
+    },
+    {
+      "symbol": "ExpRegisterFirmwareTableInformationHandler",
+      "rva": "0x7b5d40",
+      "offset": "0xde",
+      "bytes": "ba28000000b90001000041b841524654e8bdd23b00488bc84885c0744e"
+    },
+    {
+      "symbol": "ExpRegisterFirmwareTableInformationHandler",
+      "rva": "0x7b5d40",
+      "offset": "0xfb",
+      "bytes": "8b06488d79188901488b460848894108488b46104889411048897f0848893f488b4910e87df3b7ff488b052e8e7400483928751348892f4889470848893848893d188e7400"
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "machine": "0x8664",
+  "timestamp": "0x90b083da",
+  "imageSize": "0x1450000",
+  "pdbGuid": "11d7fe79-cc24-5612-0555-03ee86bb0e3e",
+  "pdbAge": 1,
+  "imageSha256": "ee04f9e58743d6a6b5bc53c4bfa89ff97cd715b9091b0d67afd72e278bfc5395",
+  "pdbSha256": "e6a8a3c646a41b9a55b5e04975f03fae987d525c4200c0d97ebcbcab880a72d0",
+  "pdbSource": "https://msdl.microsoft.com/download/symbols/ntkrnlmp.pdb/11D7FE79CC245612055503EE86BB0E3E1/ntkrnlmp.pdb",
+  "schema": "kndbgx.callback-profile.v1",
+  "id": "NT-26100.8655-callbacks-PDB-11D7FE79-age1",
+  "support": "Experimental",
+  "scope": "Process/thread/image notify arrays, process/thread/desktop object entries, and registry callback registrations",
+  "notify": {
+    "slotCount": 64,
+    "slotBytes": 8,
+    "referenceBitsSource": "Matched PDB _EX_FAST_REF.RefCnt",
+    "blockBytes": 24,
+    "functionOffset": 8,
+    "contextOffset": 16,
+    "tables": {
+      "PspCreateProcessNotifyRoutine": "0xf05440",
+      "PspCreateThreadNotifyRoutine": "0xf05240",
+      "PspLoadImageNotifyRoutine": "0xf05640"
+    }
+  },
+  "objectEntry": {
+    "bytes": 64,
+    "CallbackList": 0,
+    "Operations": 16,
+    "Active": 20,
+    "ObjectType": 32,
+    "PreOperation": 40,
+    "PostOperation": 48
+  },
+  "verification": "Match public PDB GUID/age and image identity, resolve code/table symbols to exact RVAs, and compare all required code windows in target memory before using a fallback. Notify/object typed PDB metadata takes precedence; contradictory metadata is rejected. Registry decoding requires this verified profile. Missing/modified code refuses the fallback. This does not establish whole-image integrity.",
+  "codeWindows": [
+    {
+      "symbol": "ExAllocateCallBack",
+      "symbolRva": "0xa86500",
+      "offset": "0x10",
+      "bytes": "ba18000000"
+    },
+    {
+      "symbol": "ExAllocateCallBack",
+      "symbolRva": "0xa86500",
+      "offset": "0x28",
+      "bytes": "488320004889780848895810"
+    },
+    {
+      "symbol": "PspSetCreateProcessNotifyRoutine",
+      "symbolRva": "0xa8cf1c",
+      "offset": "0x38",
+      "bytes": "4c8d2de584470083c8ff660185e4010000904533f64183fe4073384e8d24f5000000004d03e5498bcce89ec681ff488bf84885c0741883e3fe4c397808"
+    },
+    {
+      "symbol": "PspSetCreateThreadNotifyRoutine",
+      "symbolRva": "0x77a578",
+      "offset": "0x22",
+      "bytes": "83fb40735e488d0d9aac78004533c0488d0cd9488bd7"
+    },
+    {
+      "symbol": "PsSetLoadImageNotifyRoutineEx",
+      "symbolRva": "0xa863c0",
+      "offset": "0x31",
+      "bytes": "83ff4073658bc7488d0d41f247004533c0488bd6488d0cc1"
+    },
+    {
+      "symbol": "ObRegisterCallbacks",
+      "symbolRva": "0x9cf0a0",
+      "offset": "0x145",
+      "bytes": "8bd548c1e2064883c2204803d74889520848891248895a388b460889421048897a18488b06488b0848894a20488b461048894228488b461848894230"
+    },
+    {
+      "symbol": "ObRegisterCallbacks",
+      "symbolRva": "0x9cf0a0",
+      "offset": "0x102",
+      "bytes": "8bc34103dc48c1e0064409643834"
+    },
+    {
+      "symbol": "CmpRegisterCallbackInternal",
+      "symbolRva": "0x96e90c",
+      "offset": "0x23",
+      "bytes": "4c8bf1498943e8498d4bd8418af1498bf8488beae81853a8ffba5000000041b8434d6362b900010000e893472000"
+    },
+    {
+      "symbol": "CmpRegisterCallbackInternal",
+      "symbolRva": "0x96e90c",
+      "offset": "0x67",
+      "bytes": "4889400841b8434d63614889004883c040488940084889008b431433d083e201c743100000000033d048896b208953144c8973280fb70766894332668943300fb717e836472000488943384885c0745c440fb707488bc8488b5708e86df9d4ff"
+    },
+    {
+      "symbol": "CmpInsertCallbackInListByAltitude",
+      "symbolRva": "0x96ea44",
+      "offset": "0x25",
+      "bytes": "488b05588e58004c8d3d698e580048ffc0488905478e580048894618488b3d548e5800"
+    },
+    {
+      "symbol": "CmpInsertCallbackInListByAltitude",
+      "symbolRva": "0x96ea44",
+      "offset": "0x76",
+      "bytes": "48890e4889460848897108488930f0ff05bd0e5800"
+    },
+    {
+      "symbol": "CmpEnumerateCallback",
+      "symbolRva": "0x7d2080",
+      "offset": "0x54",
+      "bytes": "493bc974178b411085c07905488b09ebeff0ff4110488b792848890e"
+    }
+  ],
+  "registryEntry": {
+    "bytes": 80,
+    "CallbackList": 0,
+    "References": 16,
+    "Flags": 20,
+    "unregisteringMask": "0x80000000",
+    "Cookie": 24,
+    "Context": 32,
+    "Function": 40,
+    "Altitude": 48,
+    "listHeadRva": "0xef78e0",
+    "countRva": "0xeef98c"
+  }
+}

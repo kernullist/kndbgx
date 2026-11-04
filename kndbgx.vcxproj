@@ -1,0 +1,180 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{D5A3B7E1-4C62-49B8-9E2F-7A1D3C5B9E10}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>kndbgx</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="tools\BuildSettings.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(ProjectDir)x64\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)x64\$(Configuration)\obj\</IntDir>
+    <TargetName>kndbgx</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(ProjectDir)x64\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)x64\$(Configuration)\obj\</IntDir>
+    <TargetName>kndbgx</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;_CRT_SECURE_NO_WARNINGS;_DEBUG;KNDBGX_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(VSInstallDir)DIA SDK\include;$(ProjectDir)src;$(ProjectDir)deps\webview2\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <TreatWarningAsError>false</TreatWarningAsError>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
+      <AdditionalDependencies>advapi32.lib;tdh.lib;wintrust.lib;oleaut32.lib;dbgeng.lib;ole32.lib;bcrypt.lib;rpcrt4.lib;WebView2LoaderStatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)deps\webview2\build\native\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;UNICODE;_UNICODE;_CRT_SECURE_NO_WARNINGS;NDEBUG;KNDBGX_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(VSInstallDir)DIA SDK\include;$(ProjectDir)src;$(ProjectDir)deps\webview2\build\native\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
+      <AdditionalDependencies>advapi32.lib;tdh.lib;wintrust.lib;oleaut32.lib;dbgeng.lib;ole32.lib;bcrypt.lib;rpcrt4.lib;WebView2LoaderStatic.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)deps\webview2\build\native\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\ext\Extension.cpp" />
+    <ClCompile Include="src\engine\EngineCore.cpp" />
+    <ClCompile Include="src\engine\PageWalk.cpp" />
+    <ClCompile Include="src\engine\LayoutResolver.cpp" />
+    <ClCompile Include="src\engine\PdbMetadata.cpp" />
+    <ClCompile Include="src\engine\ModuleList.cpp" />
+    <ClCompile Include="src\engine\SymbolHealth.cpp" />
+    <ClCompile Include="src\engine\CpuContext.cpp" />
+    <ClCompile Include="src\engine\ObjectDirectory.cpp" />
+    <ClCompile Include="src\catalog\Catalog.cpp" />
+    <ClCompile Include="src\cmd\CmdUtil.cpp" />
+    <ClCompile Include="src\cmd\CoreCmds.cpp" />
+    <ClCompile Include="src\cmd\Dispatcher.cpp" />
+    <ClCompile Include="src\cmd\CommandSpec.cpp" />
+    <ClCompile Include="src\cmd\Jobs.cpp" />
+    <ClCompile Include="src\cmd\MutationService.cpp" />
+    <ClCompile Include="src\cmd\BuiltinCmds.cpp" />
+    <ClCompile Include="src\cmd\DebuggerCmds.cpp" />
+    <ClCompile Include="src\cmd\KernelAnalysisCmds.cpp" />
+    <ClCompile Include="src\cmd\DriverEvidenceCmds.cpp" />
+    <ClCompile Include="src\cmd\EtlEvidenceCmds.cpp" />
+    <ClCompile Include="src\cmd\DebugActionCmds.cpp" />
+    <ClCompile Include="src\engine\DataModel.cpp" />
+    <ClCompile Include="src\cmd\MemoryCmds.cpp" />
+    <ClCompile Include="src\cmd\ScannerCmds.cpp" />
+    <ClCompile Include="src\cmd\CallbacksCmds.cpp" />
+    <ClCompile Include="src\cmd\PoolCmds.cpp" />
+    <ClCompile Include="src\cmd\MoreScanners.cpp" />
+    <ClCompile Include="src\cmd\ProcCollect.cpp" />
+    <ClCompile Include="src\cmd\ProcScanCmds.cpp" />
+    <ClCompile Include="src\cmd\DrvobjCmds.cpp" />
+    <ClCompile Include="src\cmd\KernelScanners2.cpp" />
+    <ClCompile Include="src\cmd\UserCollectors.cpp" />
+    <ClCompile Include="src\cmd\DumpCmds.cpp" />
+    <ClCompile Include="src\cmd\ExtraCmds.cpp" />
+    <ClCompile Include="src\cmd\WriteGate.cpp" />
+    <ClCompile Include="src\util\Jsonl.cpp" />
+    <ClCompile Include="src\util\Log.cpp" />
+    <ClCompile Include="src\ui\Bridge.cpp" />
+    <ClCompile Include="src\ui\UiApp.cpp" />
+    <ClCompile Include="src\util\Json.cpp" />
+    <ClCompile Include="src\util\Text.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\ext\ExtDefs.h" />
+    <ClInclude Include="src\engine\EngineCore.h" />
+    <ClInclude Include="src\engine\PageWalk.h" />
+    <ClInclude Include="src\engine\LayoutResolver.h" />
+    <ClInclude Include="src\engine\ModuleList.h" />
+    <ClInclude Include="src\engine\CpuContext.h" />
+    <ClInclude Include="src\engine\ObjectDirectory.h" />
+    <ClInclude Include="src\catalog\Catalog.h" />
+    <ClInclude Include="src\cmd\CmdTypes.h" />
+    <ClInclude Include="src\cmd\CmdUtil.h" />
+    <ClInclude Include="src\cmd\Dispatcher.h" />
+    <ClInclude Include="src\cmd\ProcCollect.h" />
+    <ClInclude Include="src\cmd\WriteGate.h" />
+    <ClInclude Include="src\util\Jsonl.h" />
+    <ClInclude Include="src\ui\Bridge.h" />
+    <ClInclude Include="src\ui\UiApp.h" />
+    <ClInclude Include="src\util\Json.h" />
+    <ClInclude Include="src\util\Log.h" />
+    <ClInclude Include="src\util\Text.h" />
+    <ClInclude Include="res\resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="res\kndbgx.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\kndbgx.ico" />
+    <None Include="res\kndbgx.svg" />
+    <None Include="ui\index.html" />
+    <None Include="ui\app.css" />
+    <None Include="ui\app.js" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
+
+
+
+
+

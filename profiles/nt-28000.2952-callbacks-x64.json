@@ -1,0 +1,124 @@
+{
+  "machine": "0x8664",
+  "timestamp": "0xe1a9f520",
+  "imageSize": "0x1459000",
+  "pdbGuid": "4660396c-2030-4c03-9af4-5fc6b15adf98",
+  "pdbAge": 1,
+  "pdbSha256": "98ed63ec79d0bae9f275843fabfd68346832114a77050f725393a85e4b6e5a90",
+  "pdbSource": "https://msdl.microsoft.com/download/symbols/ntkrnlmp.pdb/4660396C20304C039AF45FC6B15ADF981/ntkrnlmp.pdb",
+  "schema": "kndbgx.callback-profile.v1",
+  "id": "NT-28000.2952-callbacks-PDB-4660396C-age1",
+  "support": "Experimental",
+  "scope": "Process/thread/image notify arrays, process/thread/desktop object entries, and registry callback registrations",
+  "notify": {
+    "slotCount": 64,
+    "slotBytes": 8,
+    "referenceBitsSource": "Matched PDB _EX_FAST_REF.RefCnt",
+    "blockBytes": 24,
+    "functionOffset": 8,
+    "contextOffset": 16,
+    "tables": {
+      "PspCreateProcessNotifyRoutine": "0xf0a380",
+      "PspCreateThreadNotifyRoutine": "0xf0a580",
+      "PspLoadImageNotifyRoutine": "0xf0a180"
+    }
+  },
+  "objectEntry": {
+    "bytes": 64,
+    "CallbackList": 0,
+    "Operations": 16,
+    "Active": 20,
+    "ObjectType": 32,
+    "PreOperation": 40,
+    "PostOperation": 48
+  },
+  "verification": "Match public PDB GUID/age and image identity, resolve code/table symbols to exact RVAs, and compare all required code windows in target memory before using a fallback. Notify/object typed PDB metadata takes precedence; contradictory metadata is rejected. Registry decoding requires this verified profile. Missing/modified code refuses the fallback. This does not establish whole-image integrity.",
+  "codeWindows": [
+    {
+      "symbol": "ExAllocateCallBack",
+      "symbolRva": "0xb47a04",
+      "offset": "0x10",
+      "bytes": "ba18000000"
+    },
+    {
+      "symbol": "ExAllocateCallBack",
+      "symbolRva": "0xb47a04",
+      "offset": "0x28",
+      "bytes": "488978084889581048c70000000000"
+    },
+    {
+      "symbol": "PspSetCreateProcessNotifyRoutine",
+      "symbolRva": "0xb41da0",
+      "offset": "0x38",
+      "bytes": "4c8d2da1853c0083c8ff660185e4010000904533ff4183ff40733a4e8d24fd000000004d03e5498bcc"
+    },
+    {
+      "symbol": "PspSetCreateThreadNotifyRoutine",
+      "symbolRva": "0x806978",
+      "offset": "0x22",
+      "bytes": "83fb40735e488d0dda3b70004533c0488d0cd9488bd7"
+    },
+    {
+      "symbol": "PsSetLoadImageNotifyRoutineEx",
+      "symbolRva": "0xb478d0",
+      "offset": "0x31",
+      "bytes": "83ff4073658bc7488d0d71283c004533c0488bd6488d0cc1"
+    },
+    {
+      "symbol": "ObRegisterCallbacks",
+      "symbolRva": "0xa808c0",
+      "offset": "0x15a",
+      "bytes": "458bc7488d572049c1e0064903d0498954382848891249895c38588b442e08418944383049897c3838488b042e488b0849894c3840488b442e104989443848488b442e184989443850"
+    },
+    {
+      "symbol": "ObRegisterCallbacks",
+      "symbolRva": "0xa808c0",
+      "offset": "0x1d4",
+      "bytes": "8bc34103dd48c1e00644096c3834"
+    },
+    {
+      "symbol": "CmpRegisterCallbackInternal",
+      "symbolRva": "0x9f8adc",
+      "offset": "0x3c",
+      "bytes": "ba5000000041b8434d6362b900010000"
+    },
+    {
+      "symbol": "CmpRegisterCallbackInternal",
+      "symbolRva": "0x9f8adc",
+      "offset": "0x67",
+      "bytes": "4889400841b8434d63614889004883c040488940084889008b431433d083e201c743100000000033d048896b208953144c8973280fb7076689433266894330"
+    },
+    {
+      "symbol": "CmpInsertCallbackInListByAltitude",
+      "symbolRva": "0x9f8c14",
+      "offset": "0x25",
+      "bytes": "488b05f83750004c8d3d0938500048ffc0488905e737500048894618488b3df4375000"
+    },
+    {
+      "symbol": "CmpInsertCallbackInListByAltitude",
+      "symbolRva": "0x9f8c14",
+      "offset": "0x76",
+      "bytes": "48890e4889460848897108488930f0ff05b5714f00"
+    },
+    {
+      "symbol": "CmpEnumerateCallback",
+      "symbolRva": "0x9f8cf0",
+      "offset": "0x48",
+      "bytes": "483bca74178b411085c07905488b09ebeff0ff4110488b792848890e"
+    }
+  ],
+  "registryEntry": {
+    "bytes": 80,
+    "CallbackList": 0,
+    "References": 16,
+    "Flags": 20,
+    "unregisteringMask": "0x80000000",
+    "Cookie": 24,
+    "Context": 32,
+    "Function": 40,
+    "Altitude": 48,
+    "listHeadRva": "0xefc450",
+    "countRva": "0xeefe54"
+  },
+  "evidence": "Reviewed registration and enumeration disassembly in the stopped VMware 28000.2952 target; matched public PDB. No whole-image integrity claim."
+}

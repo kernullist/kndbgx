@@ -1,0 +1,93 @@
+{
+  "schema": "kndbgx.dependency-lock.v1",
+  "package": "Microsoft.Web.WebView2",
+  "version": "1.0.2792.45",
+  "source": "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.2792.45/microsoft.web.webview2.1.0.2792.45.nupkg",
+  "packageSha256": "02ffd77440c09b5ff60f5f06defdc3fb07fb5630077c7cf6115bf6be793f91e3",
+  "files": [
+    {
+      "path": "deps/webview2/build/Common.targets",
+      "sha256": "1935076257832c863b37bed339b5d38acfcb995ecd0395e37aee9fab8a8ee780",
+      "upstreamSha256": "1935076257832c863b37bed339b5d38acfcb995ecd0395e37aee9fab8a8ee780",
+      "verification": "identical",
+      "normalizedSha256": "fbd19c1fd02c95328b2cd6989bd0d2c2d9e553cb1a7230d109de285bd26174ec"
+    },
+    {
+      "path": "deps/webview2/build/Microsoft.Web.WebView2.targets",
+      "sha256": "0d28368d81b7a8a9adafb2718092768876ddf1e19e4a50fe5e8cb5fcb1a15e07",
+      "upstreamSha256": "d1e080b342db8a8c1412edb9f93c9ab6da4fe271eefa480d24e90cecdc736428",
+      "verification": "line-endings-only",
+      "normalizedSha256": "d1e080b342db8a8c1412edb9f93c9ab6da4fe271eefa480d24e90cecdc736428"
+    },
+    {
+      "path": "deps/webview2/build/native/include/WebView2.h",
+      "sha256": "78a70f7ff050bfecfc7a46e242195fc1bcf36551c9b7873881218c729dba97f0",
+      "upstreamSha256": "78a70f7ff050bfecfc7a46e242195fc1bcf36551c9b7873881218c729dba97f0",
+      "verification": "identical",
+      "normalizedSha256": "71b13695270f5ea9f592402831c4bdaeb5e7cd8cae9085cb12b4b10e7c9b439f"
+    },
+    {
+      "path": "deps/webview2/build/native/include/WebView2EnvironmentOptions.h",
+      "sha256": "67457286dc5002634b3936e371b8cff358336a52c4ec30cbd4a691a7e2905415",
+      "upstreamSha256": "67457286dc5002634b3936e371b8cff358336a52c4ec30cbd4a691a7e2905415",
+      "verification": "identical",
+      "normalizedSha256": "119b8044caf78fa60c51d409bb0f9f4b5c2dd9828082677350c34b7b3093d7e9"
+    },
+    {
+      "path": "deps/webview2/build/native/Microsoft.Web.WebView2.targets",
+      "sha256": "5e7d1d69c12dfecc12df368e8e6396c71b69b92998606ae0843db610e1c5cc0e",
+      "upstreamSha256": "99518d3944a848e7c8ca17e41bdd32bfad3f0b2f9df5623def43283e146da762",
+      "verification": "line-endings-only",
+      "normalizedSha256": "99518d3944a848e7c8ca17e41bdd32bfad3f0b2f9df5623def43283e146da762"
+    },
+    {
+      "path": "deps/webview2/build/native/x64/WebView2Loader.dll",
+      "sha256": "9468470d6a4d11179ec179183d130465a380e0dedfdbe1fc2ab404c86c45a85e",
+      "upstreamSha256": "9468470d6a4d11179ec179183d130465a380e0dedfdbe1fc2ab404c86c45a85e",
+      "verification": "identical",
+      "normalizedSha256": "9468470d6a4d11179ec179183d130465a380e0dedfdbe1fc2ab404c86c45a85e"
+    },
+    {
+      "path": "deps/webview2/build/native/x64/WebView2Loader.dll.lib",
+      "sha256": "bfc8ccaaa056be95243a5b66a827e5849d2bb39676fca4dcc2053796d8e15c6d",
+      "upstreamSha256": "bfc8ccaaa056be95243a5b66a827e5849d2bb39676fca4dcc2053796d8e15c6d",
+      "verification": "identical",
+      "normalizedSha256": "bfc8ccaaa056be95243a5b66a827e5849d2bb39676fca4dcc2053796d8e15c6d"
+    },
+    {
+      "path": "deps/webview2/build/native/x64/WebView2LoaderStatic.lib",
+      "sha256": "50eb6c715858f03f789ffaca92101a584122c2385c91f93b16017c884681a2ac",
+      "upstreamSha256": "50eb6c715858f03f789ffaca92101a584122c2385c91f93b16017c884681a2ac",
+      "verification": "identical",
+      "normalizedSha256": "6a1a259173296e6c64a1344e283844460ada9e1102d47a51de7f734c7c8060b2"
+    },
+    {
+      "path": "deps/webview2/build/WebView2Rules.Project.xml",
+      "sha256": "9b2fda4725c7d4e49ecedfe8482c673f79b39d7b03d1ffc096764e557d2ef80b",
+      "upstreamSha256": "17fac8199dac77eb23ac22574d9c362529597ff0130b4a15ec74f9bb2a62b18f",
+      "verification": "line-endings-only",
+      "normalizedSha256": "17fac8199dac77eb23ac22574d9c362529597ff0130b4a15ec74f9bb2a62b18f"
+    },
+    {
+      "path": "deps/webview2/build/wv2winrt.targets",
+      "sha256": "76b9e12abfff129cc4ecd285f185c1ed78beef4bace88c72f0bc7475c40666ee",
+      "upstreamSha256": "76b9e12abfff129cc4ecd285f185c1ed78beef4bace88c72f0bc7475c40666ee",
+      "verification": "identical",
+      "normalizedSha256": "ac87451753c36d3454f53bd4a83a8cfe840825f04a8de48cc28762c68f24d747"
+    },
+    {
+      "path": "deps/webview2/LICENSE.txt",
+      "sha256": "24deadea987f1c7682753a8cef4e70bde8a13cc65684e06cab9a965469362075",
+      "upstreamSha256": "0af8f1b807512aae39c2ac1aa4d0cae65cabecb6fd554b8439a5162a0d6eca55",
+      "verification": "line-endings-only",
+      "normalizedSha256": "0af8f1b807512aae39c2ac1aa4d0cae65cabecb6fd554b8439a5162a0d6eca55"
+    },
+    {
+      "path": "deps/webview2/runtimes/win-x64/native/WebView2Loader.dll",
+      "sha256": "9468470d6a4d11179ec179183d130465a380e0dedfdbe1fc2ab404c86c45a85e",
+      "upstreamSha256": "9468470d6a4d11179ec179183d130465a380e0dedfdbe1fc2ab404c86c45a85e",
+      "verification": "identical",
+      "normalizedSha256": "9468470d6a4d11179ec179183d130465a380e0dedfdbe1fc2ab404c86c45a85e"
+    }
+  ]
+}

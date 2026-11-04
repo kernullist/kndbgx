@@ -1,0 +1,1658 @@
+[
+  {
+    "name": "ioctl",
+    "group": "Kernel Analysis",
+    "summary": "decode CTL_CODE fields without issuing an IOCTL",
+    "grammar": "ioctl <hex-code>",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "ntstatus",
+    "group": "Kernel Analysis",
+    "summary": "decode NTSTATUS severity, facility and code",
+    "grammar": "ntstatus <hex-code>",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "bugcheck-decode",
+    "group": "Kernel Analysis",
+    "summary": "decode bugcheck parameters including KASAN",
+    "grammar": "bugcheck-decode <hex-code> <p1> <p2> <p3> <p4>",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "diag-catalog",
+    "group": "Kernel Analysis",
+    "summary": "list read-only kernel and WDF diagnostic recipes",
+    "grammar": "diag-catalog",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "bugcheck",
+    "group": "Kernel Analysis",
+    "summary": "read typed target bugcheck data",
+    "grammar": "bugcheck",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "irp",
+    "group": "Kernel Analysis",
+    "summary": "inspect an IRP using matched target PDB layouts",
+    "grammar": "irp <hex-address>",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 65,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "diagnose",
+    "group": "Kernel Analysis",
+    "summary": "run an allowlisted host diagnostic with context restoration",
+    "grammar": "diagnose <recipe> [hex-address|module]",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 67,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "triage",
+    "group": "Kernel Analysis",
+    "summary": "run a kernel diagnostic checklist within configured limits",
+    "grammar": "triage crash|hang|io|power|memory|wdf|network|devices [module]",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 67,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "driver-audit",
+    "group": "Files",
+    "summary": "inspect driver PE headers, imports and security settings",
+    "grammar": "driver-audit <path>",
+    "support": "Experimental",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 16,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "sarif-import",
+    "group": "Files",
+    "summary": "import SARIF static-analysis results with size limits",
+    "grammar": "sarif-import <path>",
+    "support": "Experimental",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 16,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "etl-import",
+    "group": "Files",
+    "summary": "import ETL event headers and provider metadata with size limits",
+    "grammar": "etl-import <path> [decimal-limit]",
+    "support": "Experimental",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 16,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "help",
+    "group": "Session",
+    "summary": "show command syntax, aliases, options or workspace help",
+    "grammar": "help [command|ui]",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "status",
+    "group": "Session",
+    "summary": "session summary via kndbgx status",
+    "grammar": "status",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "cls",
+    "group": "Session",
+    "summary": "clear the KNDbgX output console",
+    "grammar": "cls",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "procctx",
+    "group": "Session",
+    "summary": "show or set process DTB for vtop/!address",
+    "grammar": "procctx [show|reset|pid:<id>|eprocess:<address>]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 2,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "debug-plan",
+    "group": "Debugger",
+    "summary": "prepare a session-bound breakpoint or execution action",
+    "grammar": "debug-plan <operation> [operand]",
+    "support": "Experimental",
+    "capability": "StoppedTarget",
+    "targetModes": "LiveKernel",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "debug-approve",
+    "group": "Debugger",
+    "summary": "consume a debugger action plan once",
+    "grammar": "debug-approve <plan-id> <approval-token>",
+    "support": "Experimental",
+    "capability": "StoppedTarget",
+    "targetModes": "LiveKernel",
+    "effectMask": 8,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "stack",
+    "group": "Debugger",
+    "summary": "typed stack frames with context and source links",
+    "grammar": "stack [decimal-frame-count]",
+    "support": "Stable",
+    "capability": "StoppedTarget",
+    "targetModes": "DumpAndLive",
+    "effectMask": 65,
+    "aliases": [
+      "k"
+    ],
+    "options": []
+  },
+  {
+    "name": "registers",
+    "group": "Debugger",
+    "summary": "typed register values",
+    "grammar": "registers [name]",
+    "support": "Stable",
+    "capability": "StoppedTarget",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [
+      "r"
+    ],
+    "options": []
+  },
+  {
+    "name": "breakpoints",
+    "group": "Debugger",
+    "summary": "list breakpoints in this session",
+    "grammar": "breakpoints",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [
+      "bl"
+    ],
+    "options": []
+  },
+  {
+    "name": "event",
+    "group": "Debugger",
+    "summary": "last debugger event and exception",
+    "grammar": "event",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "navigate",
+    "group": "Debugger",
+    "summary": "observe an explicitly scoped address",
+    "grammar": "navigate va|pa <address>",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 65,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "source",
+    "group": "Debugger",
+    "summary": "source at selected address or current instruction",
+    "grammar": "source [address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 19,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "history",
+    "group": "Debugger",
+    "summary": "show address history",
+    "grammar": "history",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "back",
+    "group": "Debugger",
+    "summary": "show the previous result in address history",
+    "grammar": "back",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "forward",
+    "group": "Debugger",
+    "summary": "show the next result in address history",
+    "grammar": "forward",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "bookmark",
+    "group": "Debugger",
+    "summary": "bookmark the current address result",
+    "grammar": "bookmark [quoted-note]",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "bookmarks",
+    "group": "Debugger",
+    "summary": "list bookmarked results for export",
+    "grammar": "bookmarks",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "results",
+    "group": "Results",
+    "summary": "list stored results shared by WinDbg and the UI",
+    "grammar": "results",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "result-export",
+    "group": "Results",
+    "summary": "save a complete result with checksums using an atomic write",
+    "grammar": "result-export <id> <path>",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 32,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "result-read",
+    "group": "Results",
+    "summary": "read a page of a stored result",
+    "grammar": "result-read <id> [row-offset] [finding-offset]",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "model",
+    "group": "Results",
+    "summary": "optional host Data Model publication",
+    "grammar": "model [publish <result-id> [row-offset] [finding-offset]]",
+    "support": "Experimental",
+    "capability": "Engine",
+    "targetModes": "Any",
+    "effectMask": 2,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "lm",
+    "group": "Symbols",
+    "summary": "list loaded modules",
+    "grammar": "lm",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 65,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "x",
+    "group": "Symbols",
+    "summary": "examine symbols",
+    "grammar": "x <symbol-pattern>",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 65,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "ln",
+    "group": "Symbols",
+    "summary": "list nearest symbol; default to current instruction",
+    "grammar": "ln [address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 65,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": ".reload",
+    "group": "Symbols",
+    "summary": "reload modules and symbols",
+    "grammar": ".reload [module]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 66,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": ".sympath",
+    "group": "Symbols",
+    "summary": "show or set symbol path",
+    "grammar": ".sympath [path]",
+    "support": "Stable",
+    "capability": "Engine",
+    "targetModes": "Any",
+    "effectMask": 66,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "dt",
+    "group": "Symbols",
+    "summary": "display type layout or value",
+    "grammar": "dt <type> [address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 65,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "setfield",
+    "group": "Symbols",
+    "summary": "write a typed field (approved plan)",
+    "grammar": "setfield <address> <type> <field> <value>",
+    "support": "Experimental",
+    "capability": "StoppedTarget",
+    "targetModes": "LiveKernel",
+    "effectMask": 68,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "db",
+    "group": "Memory",
+    "summary": "display bytes",
+    "grammar": "db [address] [L<elements>|end-address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [
+      "d"
+    ],
+    "options": []
+  },
+  {
+    "name": "dw",
+    "group": "Memory",
+    "summary": "display words",
+    "grammar": "dw [address] [L<elements>|end-address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "dd",
+    "group": "Memory",
+    "summary": "display dwords",
+    "grammar": "dd [address] [L<elements>|end-address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "dq",
+    "group": "Memory",
+    "summary": "display qwords",
+    "grammar": "dq [address] [L<elements>|end-address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [
+      "dp"
+    ],
+    "options": []
+  },
+  {
+    "name": "dc",
+    "group": "Memory",
+    "summary": "display dwords + ascii",
+    "grammar": "dc [address] [L<elements>|end-address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "dds",
+    "group": "Memory",
+    "summary": "display dwords with symbols",
+    "grammar": "dds [address] [L<elements>|end-address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "dqs",
+    "group": "Memory",
+    "summary": "display qwords with symbols",
+    "grammar": "dqs [address] [L<elements>|end-address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [
+      "dps"
+    ],
+    "options": []
+  },
+  {
+    "name": "da",
+    "group": "Memory",
+    "summary": "display ascii string",
+    "grammar": "da [address] [L<count>]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "du",
+    "group": "Memory",
+    "summary": "display utf-16 string",
+    "grammar": "du [address] [L<count>]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "s",
+    "group": "Memory",
+    "summary": "search memory",
+    "grammar": "s <address> L<bytes> <byte...>",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "f",
+    "group": "Memory",
+    "summary": "fill memory (approved plan)",
+    "grammar": "f <address> L<bytes> <byte...|quoted-ascii>",
+    "support": "Stable",
+    "capability": "StoppedTarget",
+    "targetModes": "LiveKernel",
+    "effectMask": 4,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "eb",
+    "group": "Memory",
+    "summary": "enter bytes (approved plan)",
+    "grammar": "eb <address> <value...>",
+    "support": "Stable",
+    "capability": "StoppedTarget",
+    "targetModes": "LiveKernel",
+    "effectMask": 4,
+    "aliases": [
+      "e"
+    ],
+    "options": []
+  },
+  {
+    "name": "ew",
+    "group": "Memory",
+    "summary": "enter words (approved plan)",
+    "grammar": "ew <address> <value...>",
+    "support": "Stable",
+    "capability": "StoppedTarget",
+    "targetModes": "LiveKernel",
+    "effectMask": 4,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "ed",
+    "group": "Memory",
+    "summary": "enter dwords (approved plan)",
+    "grammar": "ed <address> <value...>",
+    "support": "Stable",
+    "capability": "StoppedTarget",
+    "targetModes": "LiveKernel",
+    "effectMask": 4,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "eq",
+    "group": "Memory",
+    "summary": "enter qwords (approved plan)",
+    "grammar": "eq <address> <value...>",
+    "support": "Stable",
+    "capability": "StoppedTarget",
+    "targetModes": "LiveKernel",
+    "effectMask": 4,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!db",
+    "group": "Memory",
+    "summary": "display physical bytes",
+    "grammar": "!db [physical-address] [L<elements>|end-address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [
+      "phys",
+      "pdb"
+    ],
+    "options": []
+  },
+  {
+    "name": "!dw",
+    "group": "Memory",
+    "summary": "display physical words",
+    "grammar": "!dw [physical-address] [L<elements>|end-address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [
+      "pdw"
+    ],
+    "options": []
+  },
+  {
+    "name": "!dd",
+    "group": "Memory",
+    "summary": "display physical dwords",
+    "grammar": "!dd [physical-address] [L<elements>|end-address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [
+      "pdd"
+    ],
+    "options": []
+  },
+  {
+    "name": "!dq",
+    "group": "Memory",
+    "summary": "display physical qwords",
+    "grammar": "!dq [physical-address] [L<elements>|end-address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [
+      "pdq"
+    ],
+    "options": []
+  },
+  {
+    "name": "!eb",
+    "group": "Memory",
+    "summary": "write physical bytes (approved plan)",
+    "grammar": "!eb <address> <value...>",
+    "support": "Unsupported",
+    "capability": "StoppedTarget",
+    "targetModes": "LiveKernel",
+    "effectMask": 4,
+    "aliases": [
+      "peb"
+    ],
+    "options": []
+  },
+  {
+    "name": "!ew",
+    "group": "Memory",
+    "summary": "write physical words (approved plan)",
+    "grammar": "!ew <address> <value...>",
+    "support": "Unsupported",
+    "capability": "StoppedTarget",
+    "targetModes": "LiveKernel",
+    "effectMask": 4,
+    "aliases": [
+      "pew"
+    ],
+    "options": []
+  },
+  {
+    "name": "!ed",
+    "group": "Memory",
+    "summary": "write physical dwords (approved plan)",
+    "grammar": "!ed <address> <value...>",
+    "support": "Unsupported",
+    "capability": "StoppedTarget",
+    "targetModes": "LiveKernel",
+    "effectMask": 4,
+    "aliases": [
+      "ped"
+    ],
+    "options": []
+  },
+  {
+    "name": "!eq",
+    "group": "Memory",
+    "summary": "write physical qwords (approved plan)",
+    "grammar": "!eq <address> <value...>",
+    "support": "Unsupported",
+    "capability": "StoppedTarget",
+    "targetModes": "LiveKernel",
+    "effectMask": 4,
+    "aliases": [
+      "peq"
+    ],
+    "options": []
+  },
+  {
+    "name": "vtop",
+    "group": "Kernel",
+    "summary": "annotated PML4/PML5 page walk",
+    "grammar": "vtop <virtual-address> [dtb]",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "query",
+    "group": "Kernel",
+    "summary": "readability probe",
+    "grammar": "query <address> [length]",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!address",
+    "group": "Kernel",
+    "summary": "page-walk + permission + owner",
+    "grammar": "!address <address>",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!kpage",
+    "group": "Kernel",
+    "summary": "page-walk a VA range",
+    "grammar": "!kpage <address> [L<count>]",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "u",
+    "group": "Code",
+    "summary": "unassemble instructions; continue previous display or start at current instruction",
+    "grammar": "u [address] [L<count>]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 65,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "uf",
+    "group": "Code",
+    "summary": "unassemble function; default to current instruction; native coverage is unverified",
+    "grammar": "uf [address]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 65,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!dml_proc",
+    "group": "Kernel",
+    "summary": "list all processes with PID, name, EPROCESS and DTB; optionally select one",
+    "grammar": "!dml_proc [pid:PID|image:NAME|eprocess:ADDRESS] [/json path]",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 33,
+    "aliases": [
+      "!processes"
+    ],
+    "options": [
+      {
+        "name": "/json",
+        "takesValue": true
+      }
+    ]
+  },
+  {
+    "name": "!vad",
+    "group": "Kernel",
+    "summary": "VAD tree of selected or current process; /exec /hiddenpte /limit",
+    "grammar": "!vad [process] [/exec] [/hiddenpte] [/limit count] [/json path]",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 33,
+    "aliases": [],
+    "options": [
+      {
+        "name": "/exec",
+        "takesValue": false
+      },
+      {
+        "name": "/hiddenpte",
+        "takesValue": false
+      },
+      {
+        "name": "/limit",
+        "takesValue": true
+      },
+      {
+        "name": "/json",
+        "takesValue": true
+      }
+    ]
+  },
+  {
+    "name": "!threads",
+    "group": "Kernel",
+    "summary": "current thread, selected ETHREAD, or all threads of an explicit process",
+    "grammar": "!threads [process|ethread:ADDRESS]",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!hiddenproc",
+    "group": "Kernel",
+    "summary": "kernel list vs user view (local KD)",
+    "grammar": "!hiddenproc",
+    "support": "Experimental",
+    "capability": "LocalKernelX64",
+    "targetModes": "LiveKernelLocal",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!handles",
+    "group": "Kernel",
+    "summary": "VM-access handle triage (local KD)",
+    "grammar": "!handles [/owner-pid PID] [/target-pid PID] [/json path]",
+    "support": "Experimental",
+    "capability": "LocalKernelX64",
+    "targetModes": "LiveKernelLocal",
+    "effectMask": 33,
+    "aliases": [],
+    "options": [
+      {
+        "name": "/target",
+        "takesValue": true
+      },
+      {
+        "name": "/owner",
+        "takesValue": true
+      },
+      {
+        "name": "/target-pid",
+        "takesValue": true
+      },
+      {
+        "name": "/owner-pid",
+        "takesValue": true
+      },
+      {
+        "name": "/json",
+        "takesValue": true
+      }
+    ]
+  },
+  {
+    "name": "!token",
+    "group": "Kernel",
+    "summary": "current thread effective token or selected process primary token",
+    "grammar": "!token [process]",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!callbacks",
+    "group": "Kernel",
+    "summary": "list notify, object and registry callbacks with their modules",
+    "grammar": "!callbacks",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!ssdt",
+    "group": "Kernel",
+    "summary": "list native SSDT handlers using a matched profile; report shadow-table limits",
+    "grammar": "!ssdt",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!idt",
+    "group": "Kernel",
+    "summary": "list IDT handlers and their modules",
+    "grammar": "!idt",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!msrcheck",
+    "group": "Kernel",
+    "summary": "read the selected CPU's SYSCALL MSRs; mark other CPUs unknown",
+    "grammar": "!msrcheck",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!cr",
+    "group": "Kernel",
+    "summary": "read each CPU's saved CR0/CR4/CR8 values",
+    "grammar": "!cr",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!dpc",
+    "group": "Kernel",
+    "summary": "per-CPU DPC queue audit",
+    "grammar": "!dpc",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!timer",
+    "group": "Kernel",
+    "summary": "per-CPU timer-table audit",
+    "grammar": "!timer",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!pool",
+    "group": "Kernel",
+    "summary": "list big-pool allocations from the local host or remote target table",
+    "grammar": "!pool [big|find|summary] [/tag TAG] [/min hex] [/max hex] [/addr VA] [/wx] [/full] [/limit count] [/json path]",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "LiveKernel",
+    "effectMask": 33,
+    "aliases": [],
+    "options": [
+      {
+        "name": "/full",
+        "takesValue": false
+      },
+      {
+        "name": "/tag",
+        "takesValue": true
+      },
+      {
+        "name": "/t",
+        "takesValue": true
+      },
+      {
+        "name": "/min",
+        "takesValue": true
+      },
+      {
+        "name": "/max",
+        "takesValue": true
+      },
+      {
+        "name": "/addr",
+        "takesValue": true
+      },
+      {
+        "name": "/wx",
+        "takesValue": false
+      },
+      {
+        "name": "/limit",
+        "takesValue": true
+      },
+      {
+        "name": "/json",
+        "takesValue": true
+      }
+    ]
+  },
+  {
+    "name": "!nmi",
+    "group": "Kernel",
+    "summary": "NMI callback chain",
+    "grammar": "!nmi",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!hal",
+    "group": "Kernel",
+    "summary": "list HAL dispatch routines and their modules",
+    "grammar": "!hal",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!etw",
+    "group": "Kernel",
+    "summary": "ETW logger contexts / InfinityHook",
+    "grammar": "!etw",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!wnf",
+    "group": "Kernel",
+    "summary": "WNF state-name decoder",
+    "grammar": "!wnf <state-name>",
+    "support": "Experimental",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!hive",
+    "group": "Kernel",
+    "summary": "list registry hive GetCellRoutine addresses and their modules",
+    "grammar": "!hive",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!alpc",
+    "group": "Kernel",
+    "summary": "ALPC port namespace walk",
+    "grammar": "!alpc",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!fwtable",
+    "group": "Kernel",
+    "summary": "firmware table provider list",
+    "grammar": "!fwtable",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!drvobj",
+    "group": "Kernel",
+    "summary": "list DRIVER_OBJECT IRP dispatch routines and their modules",
+    "grammar": "!drvobj <name|address>",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!devstack",
+    "group": "Kernel",
+    "summary": "attached device stack",
+    "grammar": "!devstack <device-address>",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!driver",
+    "group": "Kernel",
+    "summary": "list \\Driver objects",
+    "grammar": "!driver",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!module",
+    "group": "Kernel",
+    "summary": "PE header/section integrity; /disk local",
+    "grammar": "!module [module] [/disk]",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 17,
+    "aliases": [],
+    "options": [
+      {
+        "name": "/disk",
+        "takesValue": false
+      }
+    ]
+  },
+  {
+    "name": "!minifilter",
+    "group": "Kernel",
+    "summary": "list minifilter callbacks without modifying them",
+    "grammar": "!minifilter",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [
+      "!fltmgr"
+    ],
+    "options": []
+  },
+  {
+    "name": "!unloaded",
+    "group": "Kernel",
+    "summary": "MmUnloadedDrivers triage",
+    "grammar": "!unloaded",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!piddb",
+    "group": "Kernel",
+    "summary": "PiDDBCacheTable walk",
+    "grammar": "!piddb",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!cihash",
+    "group": "Kernel",
+    "summary": "CI kernel hash bucket list",
+    "grammar": "!cihash",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!mapper",
+    "group": "Kernel",
+    "summary": "!unloaded + !piddb + !cihash",
+    "grammar": "!mapper",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!payload",
+    "group": "Kernel",
+    "summary": "W+X big-pool outside modules",
+    "grammar": "!payload",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "LiveKernel",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!byovd",
+    "group": "Kernel",
+    "summary": "SHA256 catalog match (local KD)",
+    "grammar": "!byovd",
+    "support": "Experimental",
+    "capability": "LocalKernelX64",
+    "targetModes": "LiveKernelLocal",
+    "effectMask": 17,
+    "aliases": [],
+    "options": [
+      {
+        "name": "/status",
+        "takesValue": false
+      }
+    ]
+  },
+  {
+    "name": "!wfp",
+    "group": "Kernel",
+    "summary": "WFP BFE enumeration (local KD)",
+    "grammar": "!wfp",
+    "support": "Experimental",
+    "capability": "LocalKernelX64",
+    "targetModes": "LiveKernelLocal",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!ci",
+    "group": "Kernel",
+    "summary": "public CI/HVCI options (local KD; /host explicitly queries the debugger host)",
+    "grammar": "!ci [/host]",
+    "support": "Experimental",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": [
+      {
+        "name": "/host",
+        "takesValue": false
+      }
+    ]
+  },
+  {
+    "name": "!hv",
+    "group": "Kernel",
+    "summary": "hypervisor posture; CPUID is host-local",
+    "grammar": "!hv",
+    "support": "Experimental",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!dma",
+    "group": "Kernel",
+    "summary": "DMAR/IVRS firmware tables (local KD)",
+    "grammar": "!dma",
+    "support": "Experimental",
+    "capability": "LocalKernelX64",
+    "targetModes": "LiveKernelLocal",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!snapshot",
+    "group": "Kernel",
+    "summary": "export snapshot v2 bundle to a new directory",
+    "grammar": "!snapshot <new-directory>",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 33,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!diff",
+    "group": "Kernel",
+    "summary": "compare structured snapshots with Unknown coverage",
+    "grammar": "!diff <before-directory> <after-directory> [/cross-session]",
+    "support": "Experimental",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 16,
+    "aliases": [],
+    "options": [
+      {
+        "name": "/cross-session",
+        "takesValue": false
+      }
+    ]
+  },
+  {
+    "name": "!snapshot-import",
+    "group": "Kernel",
+    "summary": "import legacy text within size limits; collection coverage stays Unknown",
+    "grammar": "!snapshot-import <text-file> <new-directory>",
+    "support": "Experimental",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 48,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "!process",
+    "group": "Kernel",
+    "summary": "current process, explicit process selector, or 0 for all processes",
+    "grammar": "!process [process|0]",
+    "support": "Experimental",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": ".dump",
+    "group": "Dumps",
+    "summary": "write a dump via the host engine",
+    "grammar": ".dump <path>",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 33,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "dump-analyze",
+    "group": "Dumps",
+    "summary": "offline dump header analysis",
+    "grammar": "dump-analyze <path>",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 16,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "dump-live",
+    "group": "Dumps",
+    "summary": "disabled privileged host operation",
+    "grammar": "dump-live [path]",
+    "support": "Unsupported",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 256,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "dump-raw",
+    "group": "Dumps",
+    "summary": "write a VA/PA range to a file",
+    "grammar": "dump-raw <address> <length> <path> [/phys]",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 33,
+    "aliases": [],
+    "options": [
+      {
+        "name": "/phys",
+        "takesValue": false
+      }
+    ]
+  },
+  {
+    "name": "dump-pe",
+    "group": "Dumps",
+    "summary": "write a loaded module image to a file",
+    "grammar": "dump-pe <module|address> <path>",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 33,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "?",
+    "group": "Session",
+    "summary": "evaluate a complete expression",
+    "grammar": "? <expression>",
+    "support": "Stable",
+    "capability": "Target",
+    "targetModes": "DumpAndLive",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "raw",
+    "group": "Session",
+    "summary": "opaque host command; no read-only guarantee",
+    "grammar": "raw --ack-effects <command>",
+    "support": "Stable",
+    "capability": "Engine",
+    "targetModes": "Any",
+    "effectMask": 128,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "plan",
+    "group": "Session",
+    "summary": "prepare a memory change for review",
+    "grammar": "plan <mutation-command>",
+    "support": "Stable",
+    "capability": "StoppedTarget",
+    "targetModes": "LiveKernel",
+    "effectMask": 1,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "approve",
+    "group": "Session",
+    "summary": "approve and apply a memory change once",
+    "grammar": "approve <plan-id> <approval-token>",
+    "support": "Stable",
+    "capability": "StoppedTarget",
+    "targetModes": "LiveKernel",
+    "effectMask": 4,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "reconnect",
+    "group": "Session",
+    "summary": "rebuild this client after a fault",
+    "grammar": "reconnect",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 2,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "version",
+    "group": "Session",
+    "summary": "show extension version",
+    "grammar": "version",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "features",
+    "group": "Session",
+    "summary": "optional adapter availability",
+    "grammar": "features",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "command-schema",
+    "group": "Session",
+    "summary": "export command definitions as JSON",
+    "grammar": "command-schema",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "policy",
+    "group": "Session",
+    "summary": "legacy global policy removed; changes use per-operation approval",
+    "grammar": "policy [readonly|planned]",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [
+      "gate"
+    ],
+    "options": []
+  },
+  {
+    "name": "submit",
+    "group": "Jobs",
+    "summary": "submit a command as a background job within configured limits",
+    "grammar": "submit <command>",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "jobs",
+    "group": "Jobs",
+    "summary": "list jobs still in history",
+    "grammar": "jobs",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  },
+  {
+    "name": "job",
+    "group": "Jobs",
+    "summary": "show a job and its read-only result",
+    "grammar": "job <id>",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [
+      "result"
+    ],
+    "options": []
+  },
+  {
+    "name": "cancel",
+    "group": "Jobs",
+    "summary": "request cancellation of the specified job",
+    "grammar": "cancel <id>",
+    "support": "Stable",
+    "capability": "None",
+    "targetModes": "Any",
+    "effectMask": 0,
+    "aliases": [],
+    "options": []
+  }
+]

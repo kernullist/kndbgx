@@ -1,0 +1,17 @@
+"unfinished
++1
+01
+.5
+1.
+1e
+1e+
+1e999
+1e-999
+NaN
+Infinity
+[1,]
+{"a":null,"a":1}
+"\ud800"
+"\udc00"
+"\ud800a"
+"\x41"
