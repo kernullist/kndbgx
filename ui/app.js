@@ -258,6 +258,7 @@
     paletteActive: 0,
     paletteComposing: false,
     libraryVisible: null,
+    libraryPinned: false,
     libraryFavorites: [],
     selectedCommand: "",
     commandSelectionRevision: 0,
@@ -7482,10 +7483,11 @@
     state.parameterDraft = null;
     hideSuggest();
     updateInputUI();
-    if (isNarrow())
+    if (els.root.classList.contains("library-overlay"))
     {
       state.libraryVisible = false;
       updateLayout();
+      saveWorkspacePreferences();
     }
     els.prompt.focus();
     updateSuggest();
@@ -9341,7 +9343,8 @@
 
   function updateLayout()
   {
-    var libraryOverlay = isNarrow() || state.memoryPanel.visible && !inspectionFloat.window && (window.innerWidth || 900) < 1500;
+    var libraryOverlay = isNarrow() || !state.libraryPinned && state.memoryPanel.visible &&
+      !inspectionFloat.window && (window.innerWidth || 900) < 1500;
     var library = state.libraryVisible === null ? !libraryOverlay : state.libraryVisible;
     [["sidebar", library, "btn-sidebar"], ["console-wrap", state.consoleVisible, "btn-console"],
       ["inspector", state.inspectorVisible, "btn-inspector"]].forEach(function (panel)
@@ -9356,6 +9359,11 @@
     els.root.classList[library ? "add" : "remove"]("library-open");
     els.root.classList[libraryOverlay ? "add" : "remove"]("library-overlay");
     uiElement("sidebar").style.top = libraryOverlay ? uiElement("toolbar").getBoundingClientRect().bottom + "px" : "";
+    uiElement("btn-library-pin").setAttribute("aria-pressed", String(state.libraryPinned));
+    uiElement("btn-library-pin").title = state.libraryPinned ? "Unpin Library and restore adaptive placement" :
+      "Keep Library beside Results. Narrow windows use an overlay.";
+    uiElement("library-layout-status").textContent = libraryOverlay ? state.libraryPinned ? "Pinned / narrow overlay" : "Overlay" :
+      state.libraryPinned ? "Pinned" : "Docked";
     els.root.classList[state.consoleVisible ? "remove" : "add"]("console-hidden");
     els.root.classList[state.inspectorVisible ? "remove" : "add"]("inspector-hidden");
     uiElement("btn-sidebar").setAttribute("aria-expanded", String(library));
@@ -9390,7 +9398,7 @@
     try
     {
       window.localStorage.setItem("kndbgx.workspace-layout", JSON.stringify({ console: state.consoleVisible,
-        details: state.inspectorVisible, library: state.libraryVisible, density: state.workspaceDensity }));
+        details: state.inspectorVisible, library: state.libraryVisible, libraryPinned: state.libraryPinned, density: state.workspaceDensity }));
     }
     catch (error)
     {
@@ -9515,6 +9523,7 @@
   uiElement("btn-layout-auto").addEventListener("click", function ()
   {
     state.libraryVisible = null;
+    state.libraryPinned = false;
     state.consoleVisible = false;
     state.inspectorVisible = false;
     state.inspectorPanel.width = null;
@@ -11147,6 +11156,13 @@
     }
   });
   uiElement("btn-sidebar").addEventListener("click", toggleLibrary);
+  uiElement("btn-library-pin").addEventListener("click", function ()
+  {
+    state.libraryPinned = !state.libraryPinned;
+    state.libraryVisible = true;
+    updateLayout();
+    saveWorkspacePreferences();
+  });
   uiElement("btn-library-close").addEventListener("click", function ()
   {
     state.libraryVisible = false;
@@ -12112,6 +12128,10 @@
         if (typeof preferences.library === "boolean")
         {
           state.libraryVisible = preferences.library;
+        }
+        if (typeof preferences.libraryPinned === "boolean")
+        {
+          state.libraryPinned = preferences.libraryPinned;
         }
         state.workspaceDensity = preferences.density === "comfortable" ? "comfortable" : "compact";
       }

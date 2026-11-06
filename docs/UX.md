@@ -12,6 +12,8 @@ Results uses the remaining height rather than a fixed 280-pixel table. At ordina
 
 The Inspect drawer follows the current process strip and stays above command input when docking a view or wrapping toolbar/context text changes the layout.
 
+**Library > Pin left** keeps Library in a separate left column, including beside Inspect. The choice persists across reopening and reloads. Narrow windows temporarily use an overlay while retaining the pin preference. Unpin returns to adaptive placement; **Restore adaptive layout** also clears the pin.
+
 **Windows** lists the four inspection views, with Show/Dock actions, **Dock all views** and **Bring windows into view**. Recovery restores minimized windows and clamps them to the main workspace monitor's work area. Existing X behavior remains compatible: the group hides, while an individual view returns to its tab. The menu explains this distinction and the limits of persistence. Compact/Comfortable density preserves virtual-row selection; the menu also contains shortcut help.
 
 The toolbar distinguishes **Capture stack** and **Last event** reads from Results navigation. Recent captures and Open by ID share **Results menu**. **Navigate** exposes address history/bookmarks independently of Row details. **Capture info** describes the selected capture, while **Row details** describes one selected record. Empty workspaces offer supported stopped-context reads and command discovery; none runs merely because the screen opens.
@@ -21,6 +23,8 @@ Tool menus stay within the visible window and scroll when needed, including abov
 ## Find and run commands
 
 Use **Find a command**, **Ctrl+K** or **Ctrl+Shift+P** to search names, aliases, syntax and recent input. Exact command names rank first. Arrow keys select an entry; Enter inserts an editable draft. Library entries and the **Kernel investigation** selector also insert drafts without executing them. Replace required operands, then press Enter or **Run**. IME composition never submits input.
+
+Selecting a command or investigation starting point in the Library overlay closes it and focuses the command input so the draft remains visible. A docked Library stays open. Filtering, folding groups and changing favorites keep the overlay open.
 
 Library group headers fold their commands. **Sort** selects Recommended or Name (A-Z); filtering temporarily reveals matches without replacing saved group choices. **Selected: ...** clears a hiding filter and focuses the current command. Group and sort preferences persist in the WebView profile when storage is available. Star a command to keep it in **Favorites only**. Alias search still inserts the selected alias as a draft. Input hints identify KNDbgX versus WinDbg direct routing and known preview/mode restrictions; they do not assert that an arbitrary engine command is read only.
 

@@ -6702,6 +6702,10 @@ await check("T-UI-LIBRARY malformed or blocked storage keeps local folding and s
     assert.equal(libraryGroup(app, "Kernel").list.classList.contains("hidden"), false);
     assert.equal(app.nodes.get("library-sort").value, "alphabetical");
     assert.equal(app.nodes.get("library-sort").disabled, false);
+    app.nodes.get("btn-library-pin").fire("click");
+    assert.equal(app.nodes.get("btn-library-pin").getAttribute("aria-pressed"), "true");
+    app.nodes.get("btn-library-pin").fire("click");
+    assert.equal(app.nodes.get("btn-library-pin").getAttribute("aria-pressed"), "false");
     assert.equal(app.messages.some(item => ["classify", "execute", "debuggerAction"].includes(item.method)), false);
 });
 

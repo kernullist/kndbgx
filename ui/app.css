@@ -340,6 +340,22 @@ kbd
 {
   padding: 0 12px 10px;
 }
+.library-layout
+{
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--dim);
+  font-size: 11px;
+}
+#btn-library-pin[aria-pressed="true"]
+{
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--selected);
+}
 .library-sort
 {
   display: flex;

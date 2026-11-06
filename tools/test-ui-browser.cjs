@@ -1154,7 +1154,8 @@ async function main()
                 await workspace.locator(".cmd-item").first().click();
                 assert.equal(await workspace.locator("#prompt").inputValue(), "r");
                 assert.match(await workspace.locator("#command-hint").textContent(), /^KNDbgX/);
-                await workspace.locator("#btn-library-close").click();
+                assert.equal(await workspace.locator("#sidebar").isVisible(), false);
+                assert.equal(await workspace.locator("#prompt").evaluate(element => element === document.activeElement), true);
                 await workspace.locator("#prompt").fill(".echo direct");
                 assert.match(await workspace.locator("#command-hint").textContent(), /^WinDbg direct \/ effects not classified/);
                 await workspace.locator("#prompt").fill("eb 0x1000 01");
@@ -1259,6 +1260,117 @@ async function main()
             finally
             {
                 await local.close();
+            }
+        });
+        await check("T-UI-BROWSER library overlay selection reveals the command draft at desktop and narrow widths", async () =>
+        {
+            const { workspace, inspectorContext } = await inspectorWorkspace({ adaptiveLayout: true });
+            try
+            {
+                await workspace.locator("#btn-memory-panel").click();
+                for (const width of [1280, 1024, 800, 360])
+                {
+                    await workspace.setViewportSize({ width, height: 800 });
+                    await workspace.locator("#btn-sidebar").click();
+                    assert.equal(await workspace.locator("#root").evaluate(node => node.classList.contains("library-overlay")), true);
+                    const executions = await workspace.evaluate(() => window.knTestRequests.filter(item => item.method === "execute").length);
+                    await workspace.locator('.command-favorite[aria-label="Favorite stack"]').click();
+                    assert.equal(await workspace.locator("#sidebar").isVisible(), true);
+                    await workspace.locator('.command-favorite[aria-label="Remove favorite stack"]').click();
+                    const command = workspace.locator('.cmd-item[data-command="stack"]');
+                    if (width === 1024)
+                    {
+                        await command.press("Enter");
+                    }
+                    else
+                    {
+                        await command.click();
+                    }
+                    assert.equal(await workspace.locator("#sidebar").isVisible(), false, "Overlay remains open at " + width);
+                    assert.equal(await workspace.locator("#prompt").inputValue(), "stack");
+                    assert.equal(await workspace.evaluate(() => document.activeElement.id), "prompt");
+                    assert.equal(await workspace.locator("#prompt").evaluate(node =>
+                    {
+                        const box = node.getBoundingClientRect();
+                        return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === node;
+                    }), true, "The selected command is obscured at " + width);
+                    await workspace.locator("#btn-sidebar").click();
+                    await workspace.locator(".kernel-workflows > summary").click();
+                    await workspace.locator("#kernel-workflow").selectOption("triage crash");
+                    assert.equal(await workspace.locator("#sidebar").isVisible(), false);
+                    assert.equal(await workspace.locator("#prompt").inputValue(), "triage crash");
+                    assert.equal(await workspace.evaluate(() => document.activeElement.id), "prompt");
+                    assert.equal(await workspace.evaluate(() => window.knTestRequests.filter(item => item.method === "execute").length), executions);
+                    assert.equal(JSON.parse(await workspace.evaluate(() => localStorage.getItem("kndbgx.workspace-layout"))).library, false);
+                    await workspace.locator("#btn-sidebar").click();
+                    await workspace.locator(".kernel-workflows > summary").click();
+                    await workspace.locator("#btn-library-close").click();
+                    if (evidence)
+                    {
+                        await workspace.screenshot({ path: path.join(evidence, "library-draft-visible-" + width + ".png") });
+                    }
+                }
+            }
+            finally
+            {
+                await inspectorContext.close();
+            }
+        });
+        await check("T-UI-BROWSER library pin preserves a left column and restores its preference after narrow layouts", async () =>
+        {
+            const { workspace, inspectorContext } = await inspectorWorkspace({ adaptiveLayout: true });
+            try
+            {
+                await workspace.setViewportSize({ width: 1280, height: 800 });
+                await workspace.locator("#btn-memory-panel").click();
+                await workspace.locator("#btn-sidebar").click();
+                const pin = workspace.locator("#btn-library-pin");
+                await pin.click();
+                assert.equal(await pin.getAttribute("aria-pressed"), "true");
+                assert.equal(await workspace.locator("#root").evaluate(node => node.classList.contains("library-overlay")), false);
+                const sidebar = await workspace.locator("#sidebar").boundingBox();
+                const main = await workspace.locator("#main").boundingBox();
+                assert.ok(main.x >= sidebar.x + sidebar.width - 1, "Pinned Library overlaps the workspace");
+                const executions = await workspace.evaluate(() => window.knTestRequests.filter(item => item.method === "execute").length);
+                await workspace.locator('.cmd-item[data-command="stack"]').click();
+                assert.equal(await workspace.locator("#sidebar").isVisible(), true);
+                assert.equal(await workspace.locator("#prompt").inputValue(), "stack");
+                assert.equal(await workspace.evaluate(() => document.activeElement.id), "prompt");
+                await workspace.keyboard.press("Control+b");
+                assert.equal(await workspace.locator("#sidebar").isVisible(), false);
+                await workspace.keyboard.press("Control+b");
+                assert.equal(await pin.getAttribute("aria-pressed"), "true");
+                await workspace.setViewportSize({ width: 800, height: 650 });
+                await workspace.waitForFunction(() => document.getElementById("root").classList.contains("library-overlay"));
+                assert.equal(await workspace.locator("#root").evaluate(node => node.classList.contains("library-overlay")), true);
+                assert.equal(await pin.getAttribute("aria-pressed"), "true");
+                await workspace.setViewportSize({ width: 1280, height: 800 });
+                await workspace.waitForFunction(() => !document.getElementById("root").classList.contains("library-overlay"));
+                assert.equal(await workspace.locator("#root").evaluate(node => node.classList.contains("library-overlay")), false);
+                assert.equal(await workspace.locator("#prompt").inputValue(), "stack");
+                assert.equal(await workspace.evaluate(() => window.knTestRequests.filter(item => item.method === "execute").length), executions);
+                await workspace.reload();
+                await workspace.waitForFunction(() => !document.getElementById("prompt").disabled);
+                assert.equal(await pin.getAttribute("aria-pressed"), "true");
+                assert.equal(await workspace.locator("#sidebar").isVisible(), true);
+                assert.equal(await workspace.locator("#root").evaluate(node => node.classList.contains("library-overlay")), false);
+                if (evidence)
+                {
+                    await workspace.screenshot({ path: path.join(evidence, "library-pinned-1280.png") });
+                }
+                await pin.click();
+                assert.equal(await workspace.locator("#root").evaluate(node => node.classList.contains("library-overlay")), true);
+                assert.equal(await workspace.locator("#sidebar").isVisible(), true);
+                await pin.click();
+                await workspace.locator("#workspace-layout-toggle").click();
+                await workspace.locator("#btn-layout-auto").click();
+                assert.equal(await pin.getAttribute("aria-pressed"), "false");
+                assert.equal(await workspace.locator("#sidebar").isVisible(), false);
+                assert.equal(JSON.parse(await workspace.evaluate(() => localStorage.getItem("kndbgx.workspace-layout"))).libraryPinned, false);
+            }
+            finally
+            {
+                await inspectorContext.close();
             }
         });
         await check("T-UI-BROWSER workspace UX density keeps virtual row selection and result menus accessible", async () =>
