@@ -8145,6 +8145,189 @@ async function main()
                 await inspectorContext.close();
             }
         });
+        await check("T-UI-BROWSER display audit result menus remain visible above Console and inspection at both densities", async () =>
+        {
+            const { workspace, inspectorContext } = await inspectorWorkspace({ adaptiveLayout: true });
+            try
+            {
+                await hideInspection(workspace);
+                await workspace.locator("#btn-breakpoints").click();
+                for (const density of ["compact", "comfortable"])
+                {
+                    await workspace.setViewportSize({ width: 1280, height: 800 });
+                    await workspace.locator("#workspace-layout-toggle").click();
+                    await workspace.locator("#workspace-density").selectOption(density);
+                    await workspace.locator("#workspace-layout-toggle").press("Escape");
+                    for (const viewport of [{ width: 900, height: 600 }, { width: 360, height: 480 }, { width: 360, height: 280 }])
+                    {
+                        await workspace.setViewportSize(viewport);
+                        for (const id of ["result-open", "result-info", "result-columns", "address-navigation", "breakpoint-create", "workspace-layout"])
+                        {
+                            const menu = workspace.locator("#" + id);
+                            await menu.locator(":scope > summary").click();
+                            const popup = menu.locator(":scope > .tool-popover");
+                            const bounds = await popup.boundingBox();
+                            assert.ok(bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= viewport.width + 1 &&
+                                bounds.y + bounds.height <= viewport.height + 1, id + " leaves the viewport: " + JSON.stringify(bounds));
+                            const controls = popup.locator("button:visible,input:visible,select:visible,summary:visible");
+                            for (const control of await controls.all())
+                            {
+                                await control.scrollIntoViewIfNeeded();
+                                assert.equal(await control.evaluate(node =>
+                                {
+                                    const box = node.getBoundingClientRect();
+                                    const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+                                    return node === hit || node.contains(hit);
+                                }), true, id + " has an obstructed control: " + await control.getAttribute("id"));
+                            }
+                            if (evidence && id === "result-info")
+                            {
+                                await workspace.screenshot({ path: path.join(evidence, "display-menu-" + density + "-" + viewport.height + ".png") });
+                            }
+                            await controls.last().press("Escape");
+                            assert.equal(await menu.evaluate(node => node.open), false);
+                            assert.equal(await menu.locator(":scope > summary").evaluate(node => node === document.activeElement), true);
+                        }
+                    }
+                }
+                await workspace.setViewportSize({ width: 360, height: 280 });
+                await workspace.locator("#result-info-toggle").click();
+                const popup = workspace.locator("#result-info-popover");
+                await popup.evaluate(node => node.scrollTop = node.scrollHeight);
+                const previousScroll = await popup.evaluate(node => node.scrollTop);
+                assert.ok(previousScroll > 0);
+                await workspace.setViewportSize({ width: 360, height: 281 });
+                await workspace.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+                assert.ok(Math.abs(await popup.evaluate(node => node.scrollTop) - previousScroll) <= 2,
+                    "Repositioning jumps away from the capture details being read");
+            }
+            finally
+            {
+                await inspectorContext.close();
+            }
+        });
+        await check("T-UI-BROWSER display audit menus and diagnostics dismiss each other and outside clicks preserve input", async () =>
+        {
+            const { workspace, inspectorContext } = await inspectorWorkspace({ adaptiveLayout: true, diagnostics: true });
+            try
+            {
+                await workspace.setViewportSize({ width: 1600, height: 800 });
+                await hideInspection(workspace);
+                await workspace.locator("#prompt").fill("draft kept");
+                await workspace.locator("#workspace-layout-toggle").click();
+                await workspace.locator("#btn-context").click();
+                assert.equal(await workspace.locator("#workspace-layout").evaluate(node => node.open), false);
+                await workspace.locator("#workspace-layout-toggle").click();
+                assert.equal(await workspace.locator("#context-panel").isHidden(), true);
+                await workspace.locator("#btn-operations").click();
+                assert.equal(await workspace.locator("#workspace-layout").evaluate(node => node.open), false);
+                await workspace.locator("#workspace-layout-toggle").click();
+                assert.equal(await workspace.locator("#operations-panel").isHidden(), true);
+                await workspace.locator("#prompt").click();
+                assert.equal(await workspace.locator("#workspace-layout").evaluate(node => node.open), false);
+                assert.equal(await workspace.locator("#prompt").inputValue(), "draft kept");
+                assert.equal(await workspace.evaluate(() => document.activeElement.id), "prompt");
+                assert.equal(await workspace.evaluate(() => window.knTestRequests.filter(item => item.method === "execute").length), 0);
+            }
+            finally
+            {
+                await inspectorContext.close();
+            }
+        });
+        await check("T-UI-BROWSER display audit keyboard focus leaves menus without obscuring its destination", async () =>
+        {
+            const { workspace, inspectorContext } = await inspectorWorkspace({ adaptiveLayout: true });
+            try
+            {
+                await workspace.setViewportSize({ width: 360, height: 280 });
+                await workspace.locator("#btn-breakpoints").click();
+                await workspace.locator("#prompt").fill("draft kept");
+                const executions = await workspace.evaluate(() => window.knTestRequests.filter(item => item.method === "execute").length);
+                for (const id of ["result-open", "result-info", "result-columns", "address-navigation", "breakpoint-create", "workspace-layout"])
+                {
+                    const menu = workspace.locator("#" + id);
+                    const summary = menu.locator(":scope > summary");
+                    await summary.focus();
+                    await summary.press("Enter");
+                    assert.equal(await menu.evaluate(node => node.open), true);
+                    await workspace.keyboard.press("Control+l");
+                    assert.equal(await workspace.evaluate(() => document.activeElement.id), "prompt");
+                    assert.equal(await menu.evaluate(node => node.open), false, id + " obscures the command input after Ctrl+L");
+                    const inputHit = await workspace.locator("#prompt").evaluate(node =>
+                    {
+                        const box = node.getBoundingClientRect();
+                        const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+                        return { visible: hit === node, hit: hit && (hit.id || hit.tagName), x: box.x, y: box.y, width: box.width, height: box.height };
+                    });
+                    assert.equal(inputHit.visible, true, id + " leaves input obscured: " + JSON.stringify(inputHit));
+                }
+                await workspace.locator("#workspace-layout-toggle").focus();
+                await workspace.keyboard.press("Enter");
+                await workspace.keyboard.press("Control+b");
+                assert.equal(await workspace.evaluate(() => document.activeElement.id), "filter");
+                assert.equal(await workspace.locator("#workspace-layout").evaluate(node => node.open), false);
+                await workspace.keyboard.press("Control+b");
+                await workspace.locator("#result-open-toggle").focus();
+                await workspace.keyboard.press("Enter");
+                await workspace.keyboard.press("Tab");
+                assert.equal(await workspace.locator("#result-open").evaluate(node => node.open), true,
+                    "Tab between controls in the menu must keep it open");
+                await workspace.keyboard.press("Control+l");
+                await workspace.locator("#result-open-toggle").focus();
+                await workspace.keyboard.press("Enter");
+                await workspace.keyboard.press("Shift+Tab");
+                assert.equal(await workspace.locator("#result-open").evaluate(node => node.open), false);
+                assert.equal(await workspace.locator("#prompt").inputValue(), "draft kept");
+                assert.equal(await workspace.evaluate(() => window.knTestRequests.filter(item => item.method === "execute").length), executions);
+            }
+            finally
+            {
+                await inspectorContext.close();
+            }
+        });
+        await check("T-UI-BROWSER display audit inspection overlay follows context reflow and docking without covering input", async () =>
+        {
+            const { local, workspace } = await floatingWorkspace({ adaptiveLayout: true });
+            try
+            {
+                for (const width of [610, 626, 720])
+                {
+                    await workspace.setViewportSize({ width, height: 823 });
+                    if (await workspace.locator("#memory").isHidden())
+                    {
+                        await workspace.locator("#btn-memory-panel").click();
+                    }
+                    const popup = await detachInspectionView(workspace, "registers");
+                    await popup.locator("#btn-float-registers").click();
+                    await workspace.locator("#registers-grid").waitFor();
+                    await workspace.evaluate(() =>
+                    {
+                        window.knTestCurrentProcess.image = "process-with-a-long-observed-image-name.exe";
+                        window.knTestCurrentProcess.eprocess = "0xffff800000001000";
+                    });
+                    await workspace.locator("#btn-refresh-status").click();
+                    await workspace.waitForFunction(() => document.getElementById("current-process-image").textContent.includes("long-observed"));
+                    await workspace.waitForTimeout(60);
+                    const geometry = await workspace.evaluate(() =>
+                    {
+                        const panel = document.getElementById("memory").getBoundingClientRect();
+                        const workspace = document.getElementById("workspace-split").getBoundingClientRect();
+                        const input = document.getElementById("command-area").getBoundingClientRect();
+                        return { top: panel.top, bottom: panel.bottom, workspaceTop: workspace.top, inputTop: input.top };
+                    });
+                    assert.ok(geometry.top >= geometry.workspaceTop - 1 && geometry.bottom <= geometry.inputTop + 1,
+                        "Inspection obscures reflowed context or input at " + width + ": " + JSON.stringify(geometry));
+                    if (evidence)
+                    {
+                        await workspace.screenshot({ path: path.join(evidence, "display-inspection-reflow-" + width + ".png") });
+                    }
+                }
+            }
+            finally
+            {
+                await local.close();
+            }
+        });
         await check("T-UI-BROWSER no unhandled page errors", () => assert.deepEqual(errors, []));
         process.exitCode = failures ? 1 : 0;
     }

@@ -1737,45 +1737,51 @@
     uiElement("column-status").textContent = layout.limited ?
       "Field limit reached. Inspect a row or export for all fields." :
       "Fields from loaded pages. Select a row for its complete record.";
-    positionColumnMenu();
+    positionToolMenus();
   }
 
-  function positionColumnMenu(event)
+  function positionToolMenus(event)
   {
-    var menu = uiElement("result-columns");
-    var popup = uiElement("column-popover");
-    var toggle = uiElement("columns-toggle");
-    if (!menu.open || (event && popup.contains(event.target)))
+    (resultMenus || []).forEach(function (ids)
     {
-      return;
-    }
-    var anchor = toggle.getBoundingClientRect();
-    var margin = 8;
-    var viewportWidth = window.innerWidth;
-    var viewportHeight = window.innerHeight;
-    if (anchor.bottom < 0 || anchor.top > viewportHeight || anchor.right < 0 || anchor.left > viewportWidth)
-    {
-      menu.open = false;
-      if (menu.contains(uiActiveElement()))
+      var menu = uiElement(ids[0]);
+      var popup = uiElement(ids[2]);
+      var toggle = uiElement(ids[1]);
+      if (!menu.open || (event && popup.contains(event.target)))
       {
-        toggle.focus({ preventScroll: true });
+        return;
       }
-      return;
-    }
-    var width = Math.min(320, Math.max(0, viewportWidth - 2 * margin));
-    var below = viewportHeight - margin - anchor.bottom - 6;
-    var above = anchor.top - 6 - margin;
-    var down = below >= Math.min(400, viewportHeight - 2 * margin) || below >= above;
-    var available = Math.max(0, down ? below : above);
-    var floating = available < Math.min(200, viewportHeight - 2 * margin);
-    popup.style.width = width + "px";
-    popup.style.maxHeight = (floating ? viewportHeight - 2 * margin : available) + "px";
-    popup.style.left = Math.max(margin, Math.min(anchor.right - width, viewportWidth - width - margin)) + "px";
-    popup.style.top = (floating ? margin : down ? anchor.bottom + 6 : anchor.top - 6 - popup.offsetHeight) + "px";
+      var anchor = toggle.getBoundingClientRect();
+      var margin = 8;
+      var viewportWidth = window.innerWidth;
+      var viewportHeight = window.innerHeight;
+      if (anchor.bottom < 0 || anchor.top > viewportHeight || anchor.right < 0 || anchor.left > viewportWidth)
+      {
+        menu.open = false;
+        if (menu.contains(uiActiveElement()))
+        {
+          toggle.focus({ preventScroll: true });
+        }
+        return;
+      }
+      var width = Math.min(ids[0] === "result-info" ? 460 : 320, Math.max(0, viewportWidth - 2 * margin));
+      var maximumHeight = Math.max(0, viewportHeight - 2 * margin);
+      popup.style.width = width + "px";
+      var contentHeight = popup.scrollHeight + popup.offsetHeight - popup.clientHeight;
+      var desiredHeight = Math.min(contentHeight || 400, maximumHeight);
+      var below = viewportHeight - margin - anchor.bottom - 6;
+      var above = anchor.top - 6 - margin;
+      var down = below >= desiredHeight || below >= above;
+      var available = Math.max(0, down ? below : above);
+      var floating = available < Math.min(200, desiredHeight);
+      popup.style.maxHeight = (floating ? maximumHeight : available) + "px";
+      var left = ids[0] === "breakpoint-create" ? anchor.left : anchor.right - width;
+      popup.style.left = Math.max(margin, Math.min(left, viewportWidth - width - margin)) + "px";
+      popup.style.top = (floating ? margin : down ? anchor.bottom + 6 : anchor.top - 6 - popup.offsetHeight) + "px";
+    });
   }
 
-  uiElement("result-columns").addEventListener("toggle", positionColumnMenu);
-  listenWindow("scroll", positionColumnMenu, true);
+  listenWindow("scroll", positionToolMenus, true);
 
   uiElement("btn-columns-reset").addEventListener("click", function ()
   {
@@ -3834,6 +3840,10 @@
   });
   listenDocument("pointerdown", function (event)
   {
+    if (!els.root.inert)
+    {
+      closeToolMenus(event.target);
+    }
     if (state.resultTabMenu && !uiElement("result-tab-menu").contains(event.target))
     {
       closeResultTabMenu(false);
@@ -3845,6 +3855,10 @@
   });
   listenDocument("focusin", function (event)
   {
+    if (!els.root.inert)
+    {
+      closeToolMenus(event.target);
+    }
     if (state.resultTabDrag && !state.resultTabDrag.tab.button.contains(event.target))
     {
       endResultTabDrag(true);
@@ -6792,6 +6806,7 @@
     uiElement("btn-context").setAttribute("aria-expanded", String(open));
     if (open)
     {
+      closeToolMenus();
       setOperationsOpen(false);
       renderContextDetails();
       uiElement("btn-context-close").focus();
@@ -7852,7 +7867,7 @@
     state.inspectorPanel.width = width === null ? null : Math.round(Math.max(bounds.minimum, Math.min(bounds.maximum, width)));
     updateInspectorLayout();
     syncTableViewport();
-    positionColumnMenu();
+    positionToolMenus();
     if (remember)
     {
       saveInspectorWidth();
@@ -7878,7 +7893,7 @@
       state.inspectorPanel.width = drag.previousWidth;
       updateInspectorLayout();
       syncTableViewport();
-      positionColumnMenu();
+      positionToolMenus();
     }
     saveInspectorWidth();
   }
@@ -8920,9 +8935,36 @@
     button.classList[panel.visible ? "add" : "remove"]("active");
     button.title = (panel.visible ? "Hide" : "Show") + (floating ? " floating inspection window" : " inspection panel") +
       " (Ctrl+M). Float views from Inspect; drag their title bars to dock.";
+    positionInspectionOverlay();
+    updateInspectorLayout();
+    scheduleWorkspaceGeometry();
+  }
+
+  var workspaceGeometryPending = false;
+  function scheduleWorkspaceGeometry()
+  {
+    if (workspaceGeometryPending || typeof window.requestAnimationFrame !== "function")
+    {
+      return;
+    }
+    workspaceGeometryPending = true;
+    window.requestAnimationFrame(function ()
+    {
+      workspaceGeometryPending = false;
+      positionInspectionOverlay();
+      positionToolMenus();
+    });
+  }
+
+  function positionInspectionOverlay()
+  {
+    var panel = state.memoryPanel;
+    var memory = uiElement("memory");
+    var splitter = uiElement("memory-splitter");
+    var overlay = panel.visible && !inspectionFloat.window && panel.overlay;
     var top = "";
     var bottom = "";
-    if (panel.visible && !floating && bounds.overlay)
+    if (overlay)
     {
       var height = window.innerHeight || 720;
       var bar = uiElement("current-process-bar").getBoundingClientRect();
@@ -8934,9 +8976,8 @@
     }
     memory.style.top = splitter.style.top = top;
     memory.style.bottom = splitter.style.bottom = bottom;
-    splitter.style.right = panel.visible && !floating && bounds.overlay ?
+    splitter.style.right = overlay ?
       "calc(" + panel.effectiveWidth + "px + var(--window-inset))" : "";
-    updateInspectorLayout();
   }
 
   function saveMemoryPanel()
@@ -8959,7 +9000,7 @@
     updateMemoryPanelLayout();
     syncTableViewport();
     syncProcessViewport();
-    positionColumnMenu();
+    positionToolMenus();
     if (remember)
     {
       saveMemoryPanel();
@@ -8986,7 +9027,7 @@
       updateMemoryPanelLayout();
       syncTableViewport();
       syncProcessViewport();
-      positionColumnMenu();
+      positionToolMenus();
     }
     saveMemoryPanel();
   }
@@ -9322,7 +9363,7 @@
     uiElement("btn-inspector").setAttribute("aria-expanded", String(state.inspectorVisible));
     updateMemoryPanelLayout();
     syncProcessViewport();
-    positionColumnMenu();
+    positionToolMenus();
     showRows();
   }
 
@@ -9593,11 +9634,28 @@
       uiElement("result-info-toggle").focus();
     }
   });
-  var resultMenus = [["result-open", "result-open-toggle"], ["result-info", "result-info-toggle"], ["result-columns", "columns-toggle"],
-    ["address-navigation", "address-navigation-toggle"], ["workspace-layout", "workspace-layout-toggle"], ["breakpoint-create", "breakpoint-create-toggle"]];
+  var resultMenus = [["result-open", "result-open-toggle", "result-open-popover"],
+    ["result-info", "result-info-toggle", "result-info-popover"], ["result-columns", "columns-toggle", "column-popover"],
+    ["address-navigation", "address-navigation-toggle", "address-navigation-popover"],
+    ["workspace-layout", "workspace-layout-toggle", "workspace-layout-popover"],
+    ["breakpoint-create", "breakpoint-create-toggle", "breakpoint-create-popover"]];
+
+  function closeToolMenus(inside)
+  {
+    (resultMenus || []).forEach(function (ids)
+    {
+      var menu = uiElement(ids[0]);
+      if (menu.open && (!inside || !menu.contains(inside)))
+      {
+        menu.open = false;
+      }
+    });
+  }
+
   resultMenus.forEach(function (ids)
   {
     var menu = uiElement(ids[0]);
+    menu.addEventListener("toggle", positionToolMenus);
     menu.addEventListener("keydown", function (event)
     {
       if (event.key === "Escape" && menu.open)
@@ -9607,18 +9665,24 @@
         uiElement(ids[1]).focus();
       }
     });
-    uiElement(ids[1]).addEventListener("click", function ()
+    uiElement(ids[1]).addEventListener("click", function (event)
     {
-      if (!menu.open)
+      event.preventDefault();
+      var open = !menu.open;
+      if (open)
       {
-        resultMenus.forEach(function (other)
+        closeToolMenus(menu);
+        if (state.contextView.open)
         {
-          if (other[0] !== ids[0])
-          {
-            uiElement(other[0]).open = false;
-          }
-        });
+          setContextOpen(false);
+        }
+        if (state.operations.open)
+        {
+          setOperationsOpen(false);
+        }
       }
+      menu.open = open;
+      positionToolMenus();
     });
   });
 
@@ -11108,6 +11172,15 @@
     setRowDetails(false);
   });
   listenWindow("resize", updateLayout);
+  if (typeof window.ResizeObserver === "function")
+  {
+    // Native docking and asynchronous context text can reflow without a window resize.
+    var workspaceGeometryObserver = new window.ResizeObserver(scheduleWorkspaceGeometry);
+    ["toolbar", "current-process-bar", "workspace-split", "command-area"].forEach(function (id)
+    {
+      workspaceGeometryObserver.observe(uiElement(id));
+    });
+  }
   els.btnRun.addEventListener("click", executeCurrentInput);
   els.resultHistory.addEventListener("change", function () { loadResult(els.resultHistory.value); });
   uiElement("result-id-input").addEventListener("keydown", function (event)
@@ -11796,6 +11869,7 @@
     uiElement("btn-operations").setAttribute("aria-expanded", String(open));
     if (open)
     {
+      closeToolMenus();
       setContextOpen(false);
       refreshOperations();
       uiElement("btn-operations-close").focus();

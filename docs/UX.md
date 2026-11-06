@@ -10,9 +10,13 @@ The main workspace, floating Inspect group and individual views have an 8-pixel 
 
 Results uses the remaining height rather than a fixed 280-pixel table. At ordinary paired-window widths, Inspect leaves at least 560 pixels for Results and Library opens as a drawer. At smaller widths, Inspect itself becomes a drawer. Console and Row details start collapsed; explicit visibility and density choices persist independently. **Windows > Restore adaptive layout** restores these defaults without changing captures or command drafts.
 
+The Inspect drawer follows the current process strip and stays above command input when docking a view or wrapping toolbar/context text changes the layout.
+
 **Windows** lists the four inspection views, with Show/Dock actions, **Dock all views** and **Bring windows into view**. Recovery restores minimized windows and clamps them to the main workspace monitor's work area. Existing X behavior remains compatible: the group hides, while an individual view returns to its tab. The menu explains this distinction and the limits of persistence. Compact/Comfortable density preserves virtual-row selection; the menu also contains shortcut help.
 
 The toolbar distinguishes **Capture stack** and **Last event** reads from Results navigation. Recent captures and Open by ID share **Results menu**. **Navigate** exposes address history/bookmarks independently of Row details. **Capture info** describes the selected capture, while **Row details** describes one selected record. Empty workspaces offer supported stopped-context reads and command discovery; none runs merely because the screen opens.
+
+Tool menus stay within the visible window and scroll when needed, including above Console and Inspect. Opening another tool menu, **Context details** or **Operations** dismisses the previous surface. Clicking or moving keyboard focus outside a tool menu closes it; **Escape** from within it returns focus to its toggle. Approval dialogs preserve the originating menu so cancellation can restore focus to its control.
 
 ## Find and run commands
 
