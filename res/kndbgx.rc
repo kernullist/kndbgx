@@ -24,6 +24,7 @@ BEGIN
             VALUE "FileDescription", "KNDbgX WinDbg extension"
             VALUE "FileVersion", "0.2.0-preview.7"
             VALUE "InternalName", "kndbgx.dll"
+            VALUE "LegalCopyright", "Copyright (c) kernullist"
             VALUE "OriginalFilename", "kndbgx.dll"
             VALUE "ProductName", "KNDbgX"
             VALUE "ProductVersion", "0.2.0-preview.7"

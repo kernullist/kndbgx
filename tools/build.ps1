@@ -22,9 +22,17 @@ if ($LASTEXITCODE -ne 0)
 }
 
 $outDir = Join-Path $root "x64\$Configuration"
+$extension = Get-Item -LiteralPath (Join-Path $outDir 'kndbgx.dll')
+$copyright = $extension.VersionInfo.LegalCopyright
+$expectedCopyright = 'Copyright (c) kernullist'
+if ($copyright -cne $expectedCopyright)
+{
+    throw "Built kndbgx.dll must use the copyright notice: $expectedCopyright"
+}
 
 Write-Host ""
 Write-Host "Artifacts:"
+Write-Host "  Copyright: $copyright"
 Get-ChildItem $outDir -File |
     Where-Object { $_.Name -in @("kndbgx.dll", "kndbgx-selftest.exe") } |
     ForEach-Object { Write-Host ("  {0}  {1}" -f $_.Name, $_.Length) }
