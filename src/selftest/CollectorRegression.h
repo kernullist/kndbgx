@@ -426,6 +426,19 @@ template <typename Check> void RunCollectorRegression(Check check)
     memory.Put(node + 33, 0, 1);
     memory.Put(node + 48, 0, 4);
     std::vector<uint32_t> protections{1, 2, 0x10, 0x20, 4, 8, 0x40, 0x80};
+    const std::vector<uint32_t> targetProtections = {
+        1, 2, 0x10, 0x20, 4, 8, 0x40, 0x80,
+        1, 0x202, 0x210, 0x220, 0x204, 0x208, 0x240, 0x280,
+        1, 0x102, 0x110, 0x120, 0x104, 0x108, 0x140, 0x180,
+        1, 0x402, 0x410, 0x420, 0x404, 0x408, 0x440, 0x480};
+    check(ValidProtectionTable(targetProtections), "vad.untyped-target-protection-table-validated");
+    check(!ValidProtectionTable(protections), "vad.short-protection-table-refused");
+    auto wrongProtections = targetProtections;
+    wrongProtections[12] = 0x240;
+    check(!ValidProtectionTable(wrongProtections), "vad.unexpected-target-protection-mapping-refused");
+    wrongProtections = targetProtections;
+    wrongProtections[31] |= 0x80000000;
+    check(!ValidProtectionTable(wrongProtections), "vad.unknown-protection-bits-refused");
     auto record = ReadVad(memory, node, vad, protections);
     check(record.Start == 0 && record.End == 0x2fff && record.ProtectionIndex == 0 && ExecutableProtection(record.PageProtection) == false,
           "vad.protection-zero-and-zero-start-retained");

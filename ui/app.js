@@ -905,6 +905,7 @@
     { commands: "x ln", kinds: "", fields: "symbol address displacement type" },
     { commands: "vad", kinds: "Vad", fields: "start end pageProtection executableByVad object process.pid process.image protectionIndex" },
     { commands: "handles", kinds: "ProcessHandle", fields: "ownerPid targetPid handle object typeIndex grantedAccess crossProcess" },
+    { commands: "hiddenproc", kinds: "ProcessCrossView", fields: "pid observation activeList.image cidTable.image activeList.eprocess cidTable.eprocess activeList.createTime cidTable.createTime kernel.image host.image kernel.eprocess kernel.createTime host.createTime" },
     { commands: "drvobj devstack", kinds: "DriverDispatch Driver Device DeviceAttachment", fields: "major handler symbol ownership driverObject device object name start size" },
     { commands: "etw", kinds: "EtwLoggerContext EtwSession", fields: "loggerId name object clockType rawClock clockRepresentation module ownership" },
     { commands: "alpc", kinds: "AlpcPort", fields: "address ownerProcess owner connectionPort depth" },

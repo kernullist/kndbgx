@@ -17,6 +17,7 @@
 #include "PolicyRegression.h"
 #include "LayoutRegression.h"
 #include "CollectorRegression.h"
+#include "HandleTableRegression.h"
 #include "ScannerRegression.h"
 #include "SnapshotRpcRegression.h"
 #include "SnapshotReviewRegression.h"
@@ -691,6 +692,7 @@ int wmain(int argc, wchar_t **argv)
     knself::RunPolicyRegression(Check);
     knself::RunLayoutRegression(Check);
     knself::RunCollectorRegression(Check);
+    knself::RunHandleTableRegression(Check);
     knself::RunScannerRegression(Check);
     knself::RunSnapshotRpcRegression(Check);
     knself::RunSnapshotReviewRegression(Check);

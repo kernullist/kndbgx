@@ -160,10 +160,10 @@ template <typename Check> void RunPolicyRegression(Check check)
               kncmd::TargetModeDisplayName(*kncmd::FindCommand(L"db")) == L"DumpAndLive" &&
               kncmd::TargetModeDisplayName(*kncmd::FindCommand(L"eb")) == L"LiveKernel",
           "policy.mode-display-names");
-    check(kncmd::TargetModeDisplayName(*kncmd::FindCommand(L"!hiddenproc")) == L"LiveKernelLocal" &&
-              kncmd::TargetModeDisplayName(*kncmd::FindCommand(L"!handles")) == L"LiveKernelLocal" &&
+    check(kncmd::TargetModeDisplayName(*kncmd::FindCommand(L"!hiddenproc")) == L"LiveKernel" &&
+              kncmd::TargetModeDisplayName(*kncmd::FindCommand(L"!handles")) == L"LiveKernel" &&
               kncmd::TargetModeDisplayName(*kncmd::FindCommand(L"!pool")) == L"LiveKernel",
-          "policy.mode-display-local-kernel-collectors");
+          "policy.mode-display-target-handle-collectors");
     knengine::DbgSession unconnected;
     const auto commandSchema = kncmd::DispatchCommand(unconnected, L"command-schema");
     const auto legacySchema = kncmd::DispatchCommand(unconnected, L"CoNtRaCt");
@@ -193,7 +193,7 @@ template <typename Check> void RunPolicyRegression(Check check)
         tagged = tagged && has;
     }
     check(tagged, "policy.help-tags-every-command-with-session-availability");
-    const auto localOnly = kncmd::DispatchCommand(unconnected, L"help !hiddenproc");
+    const auto localOnly = kncmd::DispatchCommand(unconnected, L"help !wfp");
     check(localOnly.Output.find(L"[kernel: live only, local KD]") != std::wstring::npos,
           "policy.help-distinguishes-local-kernel-collectors");
     const auto unknownHelp = kncmd::DispatchCommand(unconnected, L"help definitely-not-a-command");

@@ -3,6 +3,7 @@
 #include <dbgeng.h>
 #include "../core/Vad.h"
 #include "../core/ProcessViews.h"
+#include "../core/HandleTable.h"
 #include "../engine/ObjectDirectory.h"
 #include "../engine/PageWalk.h"
 #include <tlhelp32.h>
@@ -22,14 +23,20 @@ std::vector<uint32_t> ProtectionTable(knengine::DbgSession &session, knengine::L
     const auto address = layout.Address(L"nt", L"MmProtectToValue");
     const auto shape = layout.Symbol(L"nt", L"MmProtectToValue");
     std::vector<uint32_t> table;
-    if (address && shape && shape->Kind == kncore::FieldKind::Array && shape->ArrayCount == 32u && shape->ElementSize == 4u &&
-        shape->ValidFor(shape->Size))
+    const bool shaped = shape && shape->Kind == kncore::FieldKind::Array && shape->ArrayCount == 32u &&
+                        shape->ElementSize == 4u && shape->Size == 128 && shape->ValidFor(shape->Size);
+    if (address && (!shape || shaped) && kncore::ValidRange(*address, 128))
     {
-        const auto read = session.Read(kncore::AddressSpace::Virtual, *address, shape->Size);
-        if (kncore::ExactBytes(read, shape->Size))
+        const auto read = session.Read(kncore::AddressSpace::Virtual, *address, 128);
+        if (kncore::ExactBytes(read, 128))
         {
             table.resize(32);
-            std::memcpy(table.data(), read.Bytes.data(), shape->Size);
+            std::memcpy(table.data(), read.Bytes.data(), 128);
+            // Public PDBs can omit the array type. Verify every observed entry.
+            if (!kncore::ValidProtectionTable(table))
+            {
+                table.clear();
+            }
         }
     }
     return table;
@@ -119,6 +126,279 @@ kncore::Result HostProcesses(knengine::DbgSession &session, std::vector<ProcRow>
         result.Error = {L"Win32", error, L"Process32NextW", L"Host process enumeration incomplete"};
     }
     return result;
+}
+
+kncore::HandleTableLayout TargetHandleLayout(knengine::LayoutResolver &layout, bool cid = false)
+{
+    kncore::HandleTableLayout fields;
+    fields.TableCode = layout.Field(L"nt", L"_HANDLE_TABLE", L"TableCode");
+    fields.NextHandle = layout.Field(L"nt", L"_HANDLE_TABLE", L"NextHandleNeedingPool");
+    fields.ObjectBits = layout.Field(L"nt", L"_HANDLE_TABLE_ENTRY", L"ObjectPointerBits");
+    fields.AccessBits = layout.Field(L"nt", L"_HANDLE_TABLE_ENTRY", L"GrantedAccessBits");
+    const auto entry = layout.Describe(L"nt", L"_HANDLE_TABLE_ENTRY");
+    const auto body = layout.Field(L"nt", L"_OBJECT_HEADER", L"Body");
+    fields.EntrySize = entry ? entry->Size : 0;
+    fields.BodyOffset = !cid && body ? body->Offset : 0;
+    fields.CidTable = cid;
+    return fields;
+}
+
+class TargetObjectTypes
+{
+  public:
+    bool Initialize(Ctx &ctx, knengine::LayoutResolver &layout, unsigned processType)
+    {
+        const auto body = layout.Field(L"nt", L"_OBJECT_HEADER", L"Body");
+        const auto index = layout.Field(L"nt", L"_OBJECT_HEADER", L"TypeIndex");
+        const auto cookie = layout.Address(L"nt", L"ObHeaderCookie");
+        const auto system = layout.Address(L"nt", L"PsInitialSystemProcess");
+        uint64_t process = 0;
+        if (!body || !index || index->Size != 1 || index->Offset >= body->Offset || body->Offset > 256 || !cookie || !system ||
+            !ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *cookie, &cookie_) ||
+            !ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *system, &process))
+        {
+            return false;
+        }
+        bodyOffset_ = body->Offset;
+        indexOffset_ = index->Offset;
+        return Read(ctx, process) == processType;
+    }
+
+    unsigned Read(Ctx &ctx, uint64_t body) const
+    {
+        unsigned char raw = 0;
+        if (body < bodyOffset_ || !kncore::ValidRange(body - bodyOffset_, indexOffset_ + 1) ||
+            !ctx.Session.ReadExact(kncore::AddressSpace::Virtual, body - bodyOffset_ + indexOffset_, &raw))
+        {
+            return UINT32_MAX;
+        }
+        return static_cast<unsigned char>(raw ^ cookie_ ^ ((body - bodyOffset_) >> 8));
+    }
+
+  private:
+    uint32_t bodyOffset_ = 0;
+    uint32_t indexOffset_ = 0;
+    unsigned char cookie_ = 0;
+};
+
+kncore::Result TargetCidProcesses(Ctx &ctx, knengine::LayoutResolver &layout, std::vector<ProcRow> &rows)
+{
+    kncore::WalkBudget budget;
+    kncore::TargetArchitecture architecture;
+    if (!BeginCollection(ctx, budget, architecture, L"TargetMemory:PspCidTable"))
+    {
+        return ctx.Out.Details;
+    }
+    const auto symbol = layout.Address(L"nt", L"PspCidTable");
+    uint64_t table = 0;
+    knengine::ObjectDirectoryWalker objects(ctx.Session);
+    unsigned processType = UINT32_MAX;
+    const auto handles = TargetHandleLayout(layout, true);
+    const auto processFields = ResolveProcessLayout(layout);
+    TargetObjectTypes types;
+    if (!symbol || !ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *symbol, &table) ||
+        !handles.Valid() || !objects.ResolveTypeIndex(L"Process", &processType) || !types.Initialize(ctx, layout, processType))
+    {
+        budget.Stop(kncore::Status::Unavailable, L"CidTableLayoutOrProcessTypeUnavailable");
+        return budget.Report;
+    }
+    const auto systemSymbol = layout.Address(L"nt", L"PsInitialSystemProcess");
+    uint64_t systemProcess = 0;
+    if (!systemSymbol || !ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *systemSymbol, &systemProcess) ||
+        !architecture.KernelPointer(systemProcess))
+    {
+        budget.Stop(kncore::Status::Unavailable, L"SystemProcessCorroborationUnavailable");
+        return budget.Report;
+    }
+    bool systemMatched = false;
+    kncore::ProcessRecordReader processReader(ctx.Session, processFields, budget);
+    // Serial KD can require thousands of object-header round trips.
+    budget.StartTraversal(std::chrono::steady_clock::now(), std::chrono::seconds(120));
+    kncore::WalkTargetHandleTable(ctx.Session, table, handles, architecture, budget,
+        [&](const kncore::TargetHandleEntry &entry)
+        {
+            const unsigned type = types.Read(ctx, entry.Object);
+            if (type == UINT32_MAX)
+            {
+                ++budget.Report.Collected.Unknown;
+            }
+            else if (type == processType)
+            {
+                ProcRow process;
+                processReader.Prepare(entry.Object);
+                const bool complete = kncore::ReadProcess(processReader, entry.Object, processFields, process);
+                if (!complete || process.Pid != entry.Handle)
+                {
+                    ++budget.Report.Collected.Unknown;
+                }
+                if (process.PidKnown && process.Pid == entry.Handle)
+                {
+                    rows.push_back(process);
+                    ++budget.Report.Collected.Classified;
+                    systemMatched = systemMatched || (entry.Handle == 4 && entry.Object == systemProcess);
+                }
+            }
+            return !budget.Stopped;
+        });
+    if (!systemMatched && (budget.Report.State == kncore::Status::Success || budget.Report.State == kncore::Status::Partial ||
+                           budget.Report.State == kncore::Status::Unavailable))
+    {
+        rows.clear();
+        budget.Stop(kncore::Status::Unavailable, L"CidSystemProcessCorroborationFailed");
+    }
+    if (!budget.Stopped && budget.Report.Collected.Unknown != 0)
+    {
+        budget.Stop(kncore::Status::Partial, L"CidObjectIdentityUnavailable");
+    }
+    budget.Complete();
+    return budget.Report;
+}
+
+void ScanTargetHandles(Ctx &ctx, std::optional<uint64_t> ownerFilter, std::optional<uint64_t> targetFilter)
+{
+    kncore::WalkBudget budget;
+    kncore::TargetArchitecture architecture;
+    if (!BeginCollection(ctx, budget, architecture, L"TargetMemory:ProcessHandleTables"))
+    {
+        return;
+    }
+    knengine::LayoutResolver layout(ctx.Session);
+    const auto handles = TargetHandleLayout(layout);
+    const auto objectTable = layout.Field(L"nt", L"_EPROCESS", L"ObjectTable");
+    const auto tablePid = layout.Field(L"nt", L"_HANDLE_TABLE", L"UniqueProcessId");
+    knengine::ObjectDirectoryWalker objects(ctx.Session);
+    unsigned processType = UINT32_MAX;
+    TargetObjectTypes types;
+    if (!handles.Valid() || !objectTable || objectTable->Kind != kncore::FieldKind::Pointer || objectTable->Size != 8 ||
+        !tablePid || tablePid->Size != 4 || !objects.ResolveTypeIndex(L"Process", &processType) ||
+        !types.Initialize(ctx, layout, processType))
+    {
+        ctx.Out.Fail(kncore::Status::Unavailable, L"Matched target handle-table layout or Process object type unavailable");
+        return;
+    }
+    std::vector<ProcRow> owners;
+    CmdText inventory;
+    CollectProcesses(ctx.Session, layout, &owners, inventory);
+    if (inventory.Details.State != kncore::Status::Success && inventory.Details.State != kncore::Status::Partial)
+    {
+        ReportProcessSelectionFailure(inventory, ctx.Out);
+        return;
+    }
+    if (!inventory.Details.Collected.Complete)
+    {
+        UnknownScope(ctx, budget, L"HandleOwners", L"The active process inventory is incomplete");
+    }
+    const auto processFields = ResolveProcessLayout(layout);
+    struct ObjectIdentity
+    {
+        unsigned Type = UINT32_MAX;
+        ProcRow Process;
+    };
+    std::map<uint64_t, ObjectIdentity> targets;
+    budget.MaxNodes = 1024 * 1024;
+    budget.StartTraversal(std::chrono::steady_clock::now(), std::chrono::seconds(30));
+    bool ownerFound = false;
+    for (const auto &owner : owners)
+    {
+        if (ownerFilter && (!owner.PidKnown || owner.Pid != *ownerFilter))
+        {
+            continue;
+        }
+        ownerFound = true;
+        if (!CheckCollection(ctx, budget))
+        {
+            break;
+        }
+        const auto table = kncore::ReadField(ctx.Session, owner.Eprocess, objectTable);
+        const auto pid = table && architecture.KernelPointer(*table) ? kncore::ReadField(ctx.Session, *table, tablePid) : std::nullopt;
+        if (!owner.PidKnown || !pid || *pid != owner.Pid)
+        {
+            UnknownScope(ctx, budget, L"HandleTable", L"Process handle table or owner identity unavailable");
+            continue;
+        }
+        kncore::WalkTargetHandleTable(ctx.Session, *table, handles, architecture, budget,
+            [&](const kncore::TargetHandleEntry &entry)
+            {
+                if ((entry.Access & 0x38) == 0)
+                {
+                    return true;
+                }
+                auto found = targets.find(entry.Object);
+                if (found == targets.end())
+                {
+                    ObjectIdentity identity;
+                    identity.Type = types.Read(ctx, entry.Object);
+                    if (identity.Type == processType)
+                    {
+                        kncore::ProcessRecordReader reader(ctx.Session, processFields, budget);
+                        reader.Prepare(entry.Object);
+                        kncore::ReadProcess(reader, entry.Object, processFields, identity.Process);
+                    }
+                    found = targets.emplace(entry.Object, identity).first;
+                }
+                const auto &identity = found->second;
+                if (identity.Type == UINT32_MAX)
+                {
+                    ++budget.Report.Collected.Unknown;
+                    return true;
+                }
+                if (identity.Type != processType)
+                {
+                    return true;
+                }
+                const auto &target = identity.Process;
+                const auto targetPid = target.PidKnown ? std::optional<uint64_t>(target.Pid) : std::nullopt;
+                if (!targetPid || !target.CreateTimeKnown)
+                {
+                    ++budget.Report.Collected.Unknown;
+                }
+                const kncore::HandleEntry observed{entry.Object, owner.Pid, entry.Handle, entry.Access, static_cast<uint16_t>(processType)};
+                if (!kncore::HandleMatches(observed, targetPid, ownerFilter, targetFilter))
+                {
+                    return true;
+                }
+                if (budget.Report.Rows.Items().size() >= 65536)
+                {
+                    return budget.Stop(kncore::Status::Partial, L"HandleResultBudget");
+                }
+                auto row = knjson::Value::MakeObject();
+                row.Set(L"kind", knjson::Value(L"ProcessHandle"));
+                row.Set(L"ownerPid", knjson::Value(std::to_wstring(owner.Pid)));
+                row.Set(L"targetPid", kncore::OptionalNumber(targetPid));
+                row.Set(L"targetCreateTime", target.CreateTimeKnown ? knjson::Value(std::to_wstring(target.CreateTime)) : knjson::Value());
+                row.Set(L"handle", knjson::Value(kncore::Hex(entry.Handle)));
+                row.Set(L"object", knjson::Value(kncore::Hex(entry.Object)));
+                row.Set(L"typeIndex", knjson::Value(std::to_wstring(processType)));
+                row.Set(L"grantedAccess", knjson::Value(kncore::Hex(entry.Access)));
+                row.Set(L"crossProcess", targetPid ? knjson::Value(*targetPid != owner.Pid) : knjson::Value());
+                EmitRow(ctx, budget, row, 50);
+                ++budget.Report.Collected.Classified;
+                return !budget.Stopped;
+            });
+        if (budget.Stopped)
+        {
+            if ((budget.Report.State != kncore::Status::Partial && budget.Report.State != kncore::Status::Unavailable) ||
+                budget.Report.Collected.StopReason == L"HandleTableBudget" ||
+                budget.Report.Collected.StopReason == L"GlobalWalkBudget" ||
+                budget.Report.Collected.StopReason == L"HandleResultBudget")
+            {
+                break;
+            }
+            const auto reason = budget.Report.Collected.StopReason;
+            budget.Stopped = false;
+            budget.Report.State = kncore::Status::Success;
+            UnknownScope(ctx, budget, L"HandleTable", L"PID " + std::to_wstring(owner.Pid) + L": " + reason);
+        }
+    }
+    if (ownerFilter && !ownerFound)
+    {
+        budget.Stop(kncore::Status::Unavailable, L"RequestedHandleOwnerNotObserved");
+    }
+    budget.Report.Limitations.Push(knjson::Value(L"Target handle tables are observed through matched x64 layouts and verified object "
+                                                L"types. VM access alone does not prove injection. Unreadable or incomplete tables "
+                                                L"remain coverage gaps. Display capped at 50; export contains collected rows."));
+    FinishCollection(ctx, budget);
+    ExportCollected(ctx);
 }
 } // namespace
 
@@ -412,11 +692,6 @@ void ScanThreads(Ctx &ctx)
 
 void ScanHandles(Ctx &ctx)
 {
-    if (!SessionIsLocalLiveKernel(ctx.Session))
-    {
-        ctx.Out.Fail(kncore::Status::Unsupported, HostCollectorRefusal(L"handles"));
-        return;
-    }
     std::optional<uint64_t> ownerFilter;
     std::optional<uint64_t> targetFilter;
     for (size_t i = 1; i < ctx.Args.size(); ++i)
@@ -443,6 +718,11 @@ void ScanHandles(Ctx &ctx)
                 targetFilter = pid;
             }
         }
+    }
+    if (!SessionIsLocalLiveKernel(ctx.Session))
+    {
+        ScanTargetHandles(ctx, ownerFilter, targetFilter);
+        return;
     }
     kncore::WalkBudget budget;
     kncore::TargetArchitecture architecture;
@@ -535,11 +815,6 @@ void ScanHandles(Ctx &ctx)
 
 void ScanHiddenProc(Ctx &ctx)
 {
-    if (!SessionIsLocalLiveKernel(ctx.Session))
-    {
-        ctx.Out.Fail(kncore::Status::Unsupported, HostCollectorRefusal(L"hiddenproc"));
-        return;
-    }
     const auto stamp = ctx.Session.RefreshStamp();
     const auto started = GetTickCount64();
     knengine::LayoutResolver layout(ctx.Session);
@@ -548,11 +823,13 @@ void ScanHiddenProc(Ctx &ctx)
     CollectProcesses(ctx.Session, layout, &kernel, kernelOutput);
     const auto hostStarted = GetTickCount64();
     std::vector<ProcRow> host;
-    const auto hostResult = HostProcesses(ctx.Session, host);
-    ctx.Out.Details = kncore::CompareProcessViews(kernel, kernelOutput.Details, host, hostResult);
+    const bool local = SessionIsLocalLiveKernel(ctx.Session);
+    const auto hostResult = local ? HostProcesses(ctx.Session, host) : TargetCidProcesses(ctx, layout, host);
+    ctx.Out.Details = local ? kncore::CompareProcessViews(kernel, kernelOutput.Details, host, hostResult)
+                           : kncore::CompareTargetProcessViews(kernel, kernelOutput.Details, host, hostResult);
     ctx.Out.Details.Stamp = stamp;
     ctx.Out.Details.Limitations.Push(knjson::Value(L"Collection offsets in milliseconds: kernel=" + std::to_wstring(hostStarted - started) +
-                                                   L", host=" + std::to_wstring(GetTickCount64() - hostStarted)));
+                                                   (local ? L", host=" : L", cid=") + std::to_wstring(GetTickCount64() - hostStarted)));
     if (!(stamp == ctx.Session.RefreshStamp()))
     {
         ctx.Out.Fail(kncore::Status::StaleContext, L"Cross-view target changed");

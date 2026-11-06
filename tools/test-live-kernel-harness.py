@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import re
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
@@ -17,6 +18,51 @@ spec.loader.exec_module(live)
 
 
 class HarnessTests(unittest.TestCase):
+    def test_submission_receipt_does_not_wait_for_an_engine_echo(self):
+        session = live.Session.__new__(live.Session)
+        session.sequence = 0
+        session.read = Mock(return_value="old output\n")
+        session.send = Mock()
+        receipt = "1: kd> [job] " + "a" * 32 + "\n"
+        session.wait = lambda predicate, timeout: predicate("old output\n" + receipt)
+        self.assertEqual(session.run("submit diagnose analyze"), receipt)
+        self.assertIsNone(session.run("help submit"))
+        self.assertFalse(live.has_submission_receipt("submit diagnose analyze", '!kndbgx submit raw .echo "[job] ' + 'a' * 32 + '"'))
+        self.assertFalse(live.has_submission_receipt("submit diagnose analyze", "[job] short\n"))
+
+    def test_context_rows_allow_only_bounded_prefix_differences(self):
+        bounded = {"state": "Partial", "result": {"coverage": {"complete": False, "stopReason": "GlobalWalkBudget"}}}
+        complete = {"state": "Success", "result": {"coverage": {"complete": True}}}
+        rows = [{"object": "1"}, {"object": "2"}]
+        self.assertTrue(live.equivalent_bounded_rows(rows[:1], bounded, rows, complete))
+        self.assertTrue(live.equivalent_bounded_rows(rows, complete, rows[:1], bounded))
+        self.assertFalse(live.equivalent_bounded_rows(rows[:1], complete, rows, complete))
+        self.assertFalse(live.equivalent_bounded_rows([], bounded, rows, complete))
+        self.assertFalse(live.equivalent_bounded_rows([{"object": "3"}], bounded, rows, complete))
+        unreadable = {"state": "Partial", "result": {"coverage": {"complete": False, "stopReason": "Unreadable"}}}
+        self.assertFalse(live.equivalent_bounded_rows(rows[:1], unreadable, rows, complete))
+
+    def test_contract_uses_registry_names_instead_of_a_fixed_count(self):
+        expected = json.loads((source.resolve().parents[1] / "docs/command-contract.json").read_text(encoding="utf-8"))
+        session = Mock()
+        self.harness.only = re.compile("^contract-json$")
+        session.run.return_value = json.dumps(expected)
+        self.harness.phase_session(session)
+        self.assertTrue(self.harness.checks["contract-json"]["ok"])
+        expected[-1]["name"] = "unexpected-command"
+        session.run.return_value = json.dumps(expected)
+        self.harness.phase_session(session)
+        self.assertFalse(self.harness.checks["contract-json"]["ok"])
+
+    def test_remote_process_collection_requires_target_provenance(self):
+        session = Mock()
+        self.harness.only = re.compile("^target-backed:hiddenproc")
+        for provenance, expected in (("HostToolhelp", False), ("TargetMemory:PspCidTable", True)):
+            with self.subTest(provenance=provenance):
+                session.job.return_value = ("", {"state": "Success", "result": {"provenance": {"source": provenance}}})
+                self.harness.phase_host_collectors_remote(session)
+                self.assertEqual(self.harness.checks["target-backed:hiddenproc-provenance"]["ok"], expected)
+
     def test_context_defaults_reject_empty_success_rows(self):
         session = Mock()
         session.native.return_value = ("Evaluate expression: 1 = ffff8000`00001000\n"

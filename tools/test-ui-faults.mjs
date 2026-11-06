@@ -2838,6 +2838,17 @@ await check("T-UI-COLUMNS command-specific fields replace fixed summaries for de
     }
 });
 
+await check("T-UI-COLUMNS remote process comparisons expose both target identities and the observation", async () =>
+{
+    const app = harness();
+    await app.boot();
+    const process = { image: "System", eprocess: "0xffff800000001000", createTime: "123" };
+    await openTable(app, "!hiddenproc", [{ kind: "ProcessCrossView", pid: "4", observation: "SameObservedIdentity",
+        activeList: process, cidTable: process }]);
+    assert.deepEqual(headers(app).slice(0, 9), ["#", "PID", "Observation", "Active List / Image", "Cid Table / Image",
+        "Active List / EPROCESS", "Cid Table / EPROCESS", "Active List / Create Time", "Cid Table / Create Time"]);
+});
+
 await check("T-UI-COLUMNS pointer and routine symbols use the same explicit columns", async () =>
 {
     const app = harness();

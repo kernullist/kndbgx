@@ -130,4 +130,105 @@ inline Result CompareProcessViews(const std::vector<ProcessRow> &kernel, const R
     result.Limitations.Push(knjson::Value(L"Non-atomic differences are re-observation candidates, not proof of a hidden process."));
     return result;
 }
+
+inline Result CompareTargetProcessViews(const std::vector<ProcessRow> &active, const Result &activeResult,
+                                        const std::vector<ProcessRow> &cid, const Result &cidResult)
+{
+    Result result;
+    result.Source = L"TargetMemory:PsActiveProcessHead+PspCidTable";
+    result.LayoutProfile = activeResult.LayoutProfile;
+    result.Consistency = activeResult.Consistency == L"stopped" && cidResult.Consistency == L"stopped" ? L"stopped" : L"cross-view-nonatomic";
+    const bool activeComplete = activeResult.State == Status::Success && activeResult.Collected.Complete;
+    const bool cidComplete = cidResult.State == Status::Success && cidResult.Collected.Complete;
+    auto inputs = knjson::Value::MakeObject();
+    inputs.Set(L"activeListStatus", knjson::Value(StatusName(activeResult.State)));
+    inputs.Set(L"activeListCoverage", activeResult.Collected.ToJson());
+    inputs.Set(L"cidTableStatus", knjson::Value(StatusName(cidResult.State)));
+    inputs.Set(L"cidTableCoverage", cidResult.Collected.ToJson());
+    result.Limitations.Push(inputs);
+    const auto finish = [&]()
+    {
+        for (const auto *input : {&activeResult, &cidResult})
+        {
+            if (input->State == Status::InternalFault || input->State == Status::EngineError ||
+                input->State == Status::StaleContext || input->State == Status::Cancelled)
+            {
+                result.State = input->State;
+                result.Error = input->Error;
+                result.Collected.Complete = false;
+                result.Collected.StopReason = L"TargetCrossViewFailed";
+                break;
+            }
+        }
+        return result;
+    };
+    std::map<uint64_t, std::pair<const ProcessRow *, const ProcessRow *>> views;
+    for (const auto &row : active)
+    {
+        if (!row.PidKnown || views[row.Pid].first != nullptr)
+        {
+            result.State = Status::Unavailable;
+            result.Collected.StopReason = L"ActiveProcessIdentityUnavailableOrDuplicated";
+            return finish();
+        }
+        views[row.Pid].first = &row;
+    }
+    for (const auto &row : cid)
+    {
+        if (!row.PidKnown || views[row.Pid].second != nullptr)
+        {
+            result.State = Status::Unavailable;
+            result.Collected.StopReason = L"CidProcessIdentityUnavailableOrDuplicated";
+            return finish();
+        }
+        views[row.Pid].second = &row;
+    }
+    for (const auto &[pid, pair] : views)
+    {
+        const auto *a = pair.first;
+        const auto *b = pair.second;
+        auto row = knjson::Value::MakeObject();
+        row.Set(L"kind", knjson::Value(L"ProcessCrossView"));
+        row.Set(L"pid", knjson::Value(std::to_wstring(pid)));
+        row.Set(L"activeList", a != nullptr ? a->ToJson() : knjson::Value());
+        row.Set(L"cidTable", b != nullptr ? b->ToJson() : knjson::Value());
+        std::wstring observation;
+        if ((a && !a->CreateTimeKnown) || (b && !b->CreateTimeKnown))
+        {
+            observation = L"IdentityUnknown";
+            ++result.Collected.Unknown;
+        }
+        else if (a && b)
+        {
+            observation = a->Eprocess == b->Eprocess && a->CreateTime == b->CreateTime ? L"SameObservedIdentity"
+                                                                                    : L"PidReusedOrViewsChanged";
+        }
+        else if (a && cidComplete)
+        {
+            observation = L"ActiveListOnlyReobserveCandidate";
+        }
+        else if (b && activeComplete)
+        {
+            observation = L"CidOnlyReobserveCandidate";
+        }
+        else
+        {
+            observation = L"OtherViewIncomplete";
+            ++result.Collected.Unknown;
+        }
+        row.Set(L"observation", knjson::Value(observation));
+        result.Rows.Push(row);
+        ++result.Collected.Visited;
+    }
+    result.Collected.Expected = result.Collected.Visited;
+    result.Collected.Decoded = result.Collected.Visited;
+    result.Collected.Classified = result.Collected.Visited - result.Collected.Unknown;
+    result.Collected.Complete = activeComplete && cidComplete && result.Collected.Unknown == 0;
+    result.State = result.Collected.Complete ? Status::Success : views.empty() ? Status::Unavailable : Status::Partial;
+    result.Collected.StopReason = result.Collected.Complete ? L"ComparedTargetProcessViews" : L"TargetCrossViewIncomplete";
+    result.Limitations.Push(knjson::Value(L"Active-list/CID differences are re-observation candidates, not proof of a hidden process. "
+                                          L"Processes retained during creation or teardown may appear in only one view. "
+                                          L"A process removed from both views cannot be found by this comparison."));
+    return finish();
+}
 } // namespace kncore

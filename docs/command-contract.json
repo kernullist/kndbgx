@@ -909,11 +909,11 @@
   {
     "name": "!hiddenproc",
     "group": "Kernel",
-    "summary": "kernel list vs user view (local KD)",
+    "summary": "process cross-view: target CID table remotely, Toolhelp in local KD",
     "grammar": "!hiddenproc",
     "support": "Experimental",
-    "capability": "LocalKernelX64",
-    "targetModes": "LiveKernelLocal",
+    "capability": "KernelX64",
+    "targetModes": "LiveKernel",
     "effectMask": 1,
     "aliases": [],
     "options": []
@@ -921,11 +921,11 @@
   {
     "name": "!handles",
     "group": "Kernel",
-    "summary": "VM-access handle triage (local KD)",
+    "summary": "VM-access handle triage using target tables or a verified local host snapshot",
     "grammar": "!handles [/owner-pid PID] [/target-pid PID] [/json path]",
     "support": "Experimental",
-    "capability": "LocalKernelX64",
-    "targetModes": "LiveKernelLocal",
+    "capability": "KernelX64",
+    "targetModes": "LiveKernel",
     "effectMask": 33,
     "aliases": [],
     "options": [

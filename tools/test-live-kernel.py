@@ -47,7 +47,7 @@ MODE_REFUSAL = "Unsupported in the current session mode"
 # LocalKernelX64 commands are refused by the dispatcher's capability gate; the
 # handler-level text only appears if that gate is bypassed.
 HOST_REFUSAL = "Host-local collection requires verified local kernel context"
-EVIDENCE_VERSION = 8
+EVIDENCE_VERSION = 9
 
 NATIVE_CONTEXT_PROBE = "? @$thread; ? @$proc; r rip"
 
@@ -72,6 +72,23 @@ def native_context_signature(output):
     if any(value < (1 << 64) - (1 << 56) or value % 8 for value in values[:2]):
         return None
     return tuple(values)
+
+
+def equivalent_bounded_rows(left, left_job, right, right_job):
+    if left == right:
+        return True
+    common = min(len(left), len(right))
+    if common == 0 or left[:common] != right[:common]:
+        return False
+    shorter = left_job if len(left) < len(right) else right_job
+    coverage = (shorter.get("result") or {}).get("coverage") or {}
+    return (shorter.get("state") == "Partial" and coverage.get("complete") is False and
+            coverage.get("stopReason") == "GlobalWalkBudget")
+
+
+def has_submission_receipt(command, output):
+    return command.startswith("submit ") and re.search(
+        r"(?m)^(?:[^\n>]*>\s*)?\[job\] [0-9a-f]{32}\s*$", output) is not None
 
 
 VMRUN = r"C:\Program Files\VMware\VMware Workstation\vmrun.exe"
@@ -295,6 +312,10 @@ class Session:
             if len(text) < base:
                 return None
             segment = text[base:]
+            # A host diagnostic can acquire the engine before our queued echo.
+            # The receipt confirms submission; only poll() confirms completion.
+            if has_submission_receipt(command, segment):
+                return segment
             end = segment.find(marker)
             return segment[:end] if end >= 0 else None
 
@@ -577,7 +598,11 @@ class Harness:
                     parsed = json.loads(text[start:end + 2])
                 except json.JSONDecodeError:
                     parsed = None
-            self.record("contract-json", parsed is not None and len(parsed) == 125,
+            expected = json.loads((pathlib.Path(__file__).resolve().parents[1] / "docs/command-contract.json").read_text(encoding="utf-8"))
+            matches = isinstance(parsed, list) and len(parsed) == len(expected) and all(
+                isinstance(row, dict) and isinstance(row.get("name"), str) for row in parsed)
+            matches = matches and sorted(row.get("name", "") for row in parsed) == sorted(row["name"] for row in expected)
+            self.record("contract-json", matches,
                         f"parsed={parsed is not None} count={len(parsed) if parsed else 0}")
         if self.wanted("help-matrix"):
             text = s.run("help", timeout=120)
@@ -645,6 +670,7 @@ class Harness:
             self.record("current-context-defaults", False, "Native context unavailable")
             return
         observed = {}
+        jobs = {}
         for command in ("!threads", "!threads ethread:" + format(before[0], "x"), "!process",
                         "!process eprocess:" + format(before[1], "x"), "!token", "!vad /limit 1", "!vad /limit 1 eprocess:" + format(before[1], "x")):
             text, job = session.job(command)
@@ -652,6 +678,7 @@ class Harness:
                 self.record("current-context-defaults", False, f"{command}: missing readable result: {text}")
                 return
             observed[command] = session.rows(job)
+            jobs[command] = job
         threads = observed["!threads"]
         processes = observed["!process"]
         tokens = observed["!token"]
@@ -664,7 +691,9 @@ class Harness:
               processes == observed["!process eprocess:" + format(before[1], "x")] and
               len(tokens) == 1 and tokens[0].get("selection") == "CurrentThreadEffectiveToken" and
               address_matches(tokens[0], "ethread", before[0]) and
-              observed["!vad /limit 1"] == observed["!vad /limit 1 eprocess:" + format(before[1], "x")] and
+              equivalent_bounded_rows(observed["!vad /limit 1"], jobs["!vad /limit 1"],
+                                      observed["!vad /limit 1 eprocess:" + format(before[1], "x")],
+                                      jobs["!vad /limit 1 eprocess:" + format(before[1], "x")]) and
               native_context_signature(session.native(NATIVE_CONTEXT_PROBE)) == before)
         self.record("current-context-defaults", ok, "Current identity, explicit selection, option-only VAD and unchanged context")
 
@@ -759,9 +788,16 @@ class Harness:
                                 output[-200:])
 
     def phase_host_collectors_remote(self, session):
-        """Host-machine collectors must refuse cleanly on a remote target."""
+        """Target-backed collectors run remotely; remaining host collectors refuse."""
         s = session
-        for command in ("!hiddenproc", "!handles", "!wfp", "!dma", "!byovd"):
+        for command in ("!hiddenproc", "!handles"):
+            name = "target-backed:" + command.lstrip("!")
+            if self.wanted(name):
+                job = self.job_check(s, name, command, states=("Success", "Partial"))
+                provenance = (job or {}).get("result", {}).get("provenance", {})
+                self.record(name + "-provenance", provenance.get("source", "").startswith("TargetMemory:"),
+                            "Remote observations must come from target memory")
+        for command in ("!wfp", "!dma", "!byovd"):
             name = "host-local-refused:" + command.lstrip("!")
             if not self.wanted(name):
                 continue

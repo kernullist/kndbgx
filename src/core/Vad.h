@@ -26,6 +26,25 @@ struct VadRow
     std::optional<uint64_t> PageProtection;
 };
 
+inline bool ValidProtectionTable(std::span<const uint32_t> table)
+{
+    constexpr uint32_t base[] = {1, 2, 0x10, 0x20, 4, 8, 0x40, 0x80};
+    constexpr uint32_t modifiers[] = {0, 0x200, 0x100, 0x400};
+    if (table.size() != 32)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < table.size(); ++i)
+    {
+        const uint32_t expected = (i & 7) == 0 ? 1 : base[i & 7] | modifiers[i >> 3];
+        if (table[i] != expected)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 inline std::optional<bool> ExecutableProtection(std::optional<uint64_t> pageProtection)
 {
     if (!pageProtection)
