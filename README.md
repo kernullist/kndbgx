@@ -28,9 +28,9 @@ Run `!minifilter` (alias `!fltmgr`) to inspect filter identities, altitudes and 
 
 Find `!hiddenproc` in **Library / Ctrl+K** and run it on a stopped, supported kernel target. Remote KD compares the active process list with the target's CID table, keeping both identities and the comparison outcome in one table. **Row details** shows the original fields; **Export** saves the retained comparison.
 
-![All compared processes, including matching active-list and CID identities](docs/screenshots/process-cross-view.jpg)
+![Process cross-view summary: 88 total, 88 matched, 0 mismatch candidates and 0 indeterminate](docs/screenshots/process-cross-view.jpg)
 
-*Process cross-view: 190 total comparison rows, including matching processes. The visible rows show `SameObservedIdentity`; this is not a count of hidden processes.*
+*This capture shows Total 88 / Matched 88 / Mismatch candidates 0 / Indeterminate 0. Total includes matching processes; all 88 collected rows report the same observed identity in both views.*
 
 ### More investigation workflows
 

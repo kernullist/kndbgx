@@ -35,11 +35,12 @@ A null optional callback is different from an unreadable callback. Missing layou
 
 1. Stop a supported x64 kernel target and find `!hiddenproc` in the command palette.
 2. Select **Run**. On remote live KD, KNDbgX compares the target's active process list with its CID table.
-3. Compare **Observation**, the two image names, EPROCESS values and creation times. Select a row and open **Row details** for its complete records; **Export** preserves the full comparison.
+3. Read **Total**, **Matched**, **Mismatch candidates** and **Indeterminate** in the result header before inspecting individual rows.
+4. Compare **Observation**, the two image names, EPROCESS values and creation times. Select a row and open **Row details** for its complete records; **Export** preserves the full comparison.
 
-![Active process list and target CID table compared in Results](screenshots/process-cross-view.jpg)
+![Process cross-view with separate total, matched, mismatch candidate and indeterminate counts](screenshots/process-cross-view.jpg)
 
-This screenshot contains 190 total comparison rows, including matching processes; it does not show 190 hidden processes. The visible rows report **SameObservedIdentity**.
+This live VMware capture completed with **Total 88 / Matched 88 / Mismatch candidates 0 / Indeterminate 0**. All 88 rows report **SameObservedIdentity**; the active-list and CID entries agree on EPROCESS and creation time. Total includes matching processes and is not a hidden-process count.
 
 The result header separates **Total**, **Matched**, **Mismatch candidates** and **Indeterminate** for the complete retained comparison, independently of table paging or sorting. Matches have the same observed identity in both views. Candidates include one-view-only observations with known identities and differing identities for the same PID; they require re-observation and do not confirm hiding. Missing identities, incomplete opposing views and unknown observation types are indeterminate. Older captures without a count breakdown display **Unavailable**, not zero.
 
