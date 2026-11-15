@@ -106,6 +106,7 @@ async function main()
                 return JSON.parse(JSON.stringify(stamp));
             };
             const fixtures = {
+                "!hiddenproc": options.processComparisonRows || [],
                 "address-menus": [{ kind: "Module", name: "second", base: "0xffff800000003000" },
                     { kind: "Module", name: "first", base: "0xffff800000001000" }],
                 "mixed-address-menu": [{ kind: "PageTranslation", va: "0xffff800000004000", pa: "0x0000000000000000",
@@ -493,6 +494,14 @@ async function main()
                         {
                             result.data.analysis = { stackContext: options.stackContext };
                         }
+                        if (canonical === "!hiddenproc" && options.processComparison)
+                        {
+                            result.data.analysis = { processComparison: options.processComparison };
+                            result.data.status = "Partial";
+                            result.data.coverage.complete = false;
+                            result.data.coverage.unknownEntries = options.processComparison.indeterminate;
+                            result.data.coverage.stopReason = "TargetCrossViewIncomplete";
+                        }
                         if (forwardedExecution)
                         {
                             result.currentTarget = JSON.parse(JSON.stringify(stamp));
@@ -690,6 +699,61 @@ async function main()
                 }
             }
         }
+        await check("T-UI-BROWSER crossview summary keeps all counts and interpretation visible at narrow widths", async () =>
+        {
+            const local = await browser.newContext({ viewport: { width: 1280, height: 850 } });
+            const workspace = await local.newPage();
+            workspace.on("pageerror", error => errors.push(error.message));
+            try
+            {
+                await workspace.addInitScript(fixtureInit, { adaptiveLayout: true,
+                    processComparison: { total: "3", matched: "1", mismatchCandidates: "1", indeterminate: "1" },
+                    processComparisonRows: ["SameObservedIdentity", "CidOnlyReobserveCandidate", "IdentityUnknown"].map((observation, index) =>
+                        ({ kind: "ProcessCrossView", pid: String(index + 4), observation,
+                            activeList: { image: "fixture.exe" }, cidTable: { image: "fixture.exe" } })) });
+                await workspace.goto(`http://127.0.0.1:${server.address().port}/`);
+                await workspace.waitForFunction(() => !document.getElementById("prompt").disabled);
+                if (await workspace.locator("#memory").isVisible())
+                {
+                    await workspace.locator("#btn-memory-close").click();
+                }
+                await workspace.locator("#prompt").fill("!hiddenproc");
+                await workspace.locator("#prompt").press("Enter");
+                await workspace.waitForFunction(() => document.getElementById("result-count").textContent.startsWith("Total 3 /"));
+                for (const width of [1280, 900, 640])
+                {
+                    await workspace.setViewportSize({ width, height: 850 });
+                    assert.equal(await workspace.locator("#result-count").textContent(),
+                        "Total 3 / Matched 1 / Mismatch candidates 1 / Indeterminate 1");
+                    assert.match(await workspace.locator("#process-comparison-note").textContent(),
+                        /including matches.*not confirmed hidden processes.*incomplete.*cannot establish absence/);
+                    for (const selector of ["#result-count", "#process-comparison-note", "#btn-save"])
+                    {
+                        await workspace.waitForFunction(selector =>
+                        {
+                            const element = document.querySelector(selector);
+                            const rect = element.getBoundingClientRect();
+                            const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+                            return rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight &&
+                                element.scrollWidth <= element.clientWidth + 1 && element.scrollHeight <= element.clientHeight + 1 &&
+                                (hit === element || element.contains(hit));
+                        }, selector, { timeout: 3000 });
+                    }
+                    if (evidence)
+                    {
+                        await workspace.screenshot({ path: path.join(evidence, "crossview-summary-" + width + ".png") });
+                    }
+                }
+                await workspace.locator("#prompt").fill("registers");
+                await workspace.locator("#prompt").press("Enter");
+                await workspace.waitForFunction(() => document.getElementById("process-comparison-note").classList.contains("hidden"));
+                assert.equal(await workspace.locator("#result-count").textContent(), "1 rows / 0 findings");
+            }
+            finally
+            {
+                await local.close();
+            }
+        });
         async function reachableLastChoice()
         {
             return page.locator("#column-list").evaluate(list =>

@@ -8,10 +8,28 @@ Start with [KNDbgX kernel and driver workflows](#kernel-and-driver-workflows), t
 
 These workflows add cross-view collection, structured evidence and saved-state comparison to the debugger workspace. They run from **Library** or **Ctrl+K** and keep their results in tabs. Review **Capture info**, the result status and the original fields before drawing a conclusion.
 
+- **Callbacks and drivers:** [kernel callbacks](#inspect-kernel-callbacks), [minifilters](#follow-minifilter-registrations), [dispatch and loaded images](#inspect-driver-dispatch-and-loaded-image-metadata), [file audit](#audit-a-driver-file).
 - **Processes and saved evidence:** [cross-view](#compare-two-process-inventories), [handles](#inspect-process-handle-access), [snapshots](#save-and-compare-kernel-snapshots).
-- **Drivers and registrations:** [file audit](#audit-a-driver-file), [minifilters](#follow-minifilter-registrations), [dispatch and loaded images](#inspect-driver-dispatch-and-loaded-image-metadata).
 - **Memory permissions:** [VAD samples](#compare-vad-protection-with-page-samples), [page translations](#inspect-page-permissions-for-a-chosen-range), [big-pool samples](#inspect-big-pool-allocations-and-wx-samples).
 - **Kernel state and diagnostics:** [CPU state](#review-per-cpu-idt-and-control-state), [ETW coverage](#inspect-etw-logger-metadata), [diagnostic checklists](#run-a-diagnostic-checklist).
+
+### Inspect kernel callbacks
+
+Run `!callbacks` from **Library / Ctrl+K** on a stopped, supported kernel target. Compare **Callback type**, **Routine / Pre**, **Post callback** and their symbol or module fields. Use **Columns** to expose the fields needed for the investigation and **Row details** to inspect the full record. Follow a selected Routine, Pre or Post address into **Memory** or **Disassembly**.
+
+![Kernel callback registrations beside the selected routine's disassembly](screenshots/workspace.jpg)
+
+This capture retains 29 callback rows. The collector covers declared notify, object and registry families, including both Pre/Post routines for object callbacks. It does not enumerate every Windows callback mechanism. Missing layouts, unreadable pages and unresolved ownership remain coverage gaps; a registration or owning module alone does not establish a hook or malicious code.
+
+### Follow minifilter registrations
+
+Run `!minifilter` from **Library / Ctrl+K**. The result combines filter identity and altitude with separate PreOperation and PostOperation records. Compare **filter**, **majorName**, **family**, **routine** and ownership fields; use **Row details** when a field is hidden from the table.
+
+![Minifilter altitude, named Pre/Post callbacks and routine ownership in one result](screenshots/minifilter-callbacks.jpg)
+
+This completed capture contains 469 rows, including filter records and operation callbacks. It is not a count of 469 filters. If symbol resolution takes time, check **Operations** and wait for a confirmed completion or cancellation before starting another collection.
+
+A null optional callback is different from an unreadable callback. Missing layouts, incomplete operation arrays and unreadable pages remain coverage gaps. A routine inside a loaded module is an ownership observation, not proof that its code is unchanged.
 
 ### Compare two process inventories
 
@@ -21,7 +39,11 @@ These workflows add cross-view collection, structured evidence and saved-state c
 
 ![Active process list and target CID table compared in Results](screenshots/process-cross-view.jpg)
 
-This run completed with 190 rows. The visible rows report **SameObservedIdentity**. A one-view-only row is a candidate for re-observation: process creation, teardown or PID reuse can also explain a difference. Incomplete inputs cannot establish absence, and a process missing from both views cannot be found by this comparison. Verified local KD uses a host Toolhelp comparison instead; this screenshot is from remote KD.
+This screenshot contains 190 total comparison rows, including matching processes; it does not show 190 hidden processes. The visible rows report **SameObservedIdentity**.
+
+The result header separates **Total**, **Matched**, **Mismatch candidates** and **Indeterminate** for the complete retained comparison, independently of table paging or sorting. Matches have the same observed identity in both views. Candidates include one-view-only observations with known identities and differing identities for the same PID; they require re-observation and do not confirm hiding. Missing identities, incomplete opposing views and unknown observation types are indeterminate. Older captures without a count breakdown display **Unavailable**, not zero.
+
+Counts describe collected rows. Incomplete inputs cannot establish absence, and a process missing from both views cannot be found by this comparison. Process creation, teardown or PID reuse can explain differences. Verified local KD uses a host Toolhelp comparison instead; this screenshot is from remote KD.
 
 ### Inspect process-handle access
 
@@ -107,16 +129,6 @@ Select the **EmbeddedSignature** row and inspect **interpretation**, **scope**, 
 ![Embedded-signature result with the host policy and unchecked scopes visible](screenshots/driver-signature.jpg)
 
 </details>
-
-### Follow minifilter registrations
-
-Run `!minifilter` from **Library / Ctrl+K**. The result combines filter identity and altitude with separate PreOperation and PostOperation records. Compare **filter**, **majorName**, **family**, **routine** and ownership fields; use **Row details** when a field is hidden from the table.
-
-![Minifilter altitude, named Pre/Post callbacks and routine ownership in one result](screenshots/minifilter-callbacks.jpg)
-
-This completed capture contains 469 rows, including filter records and operation callbacks. It is not a count of 469 filters. If symbol resolution takes time, check **Operations** and wait for a confirmed completion or cancellation before starting another collection.
-
-A null optional callback is different from an unreadable callback. Missing layouts, incomplete operation arrays and unreadable pages remain coverage gaps. A routine inside a loaded module is an ownership observation, not proof that its code is unchanged.
 
 ### Inspect driver dispatch and loaded-image metadata
 
@@ -223,7 +235,7 @@ Drag the Row details divider to widen the text. Long field previews may end with
 Find these entries in **Library** or **Ctrl+K**, review the inserted draft, then select **Run**. Commands that need an object address or host file leave that operand for you to supply.
 
 - **Process objects:** `!process 0`, `!threads` and `!token` provide object-level details alongside the cross-view, handle and VAD workflows above.
-- **Callbacks and device stacks:** `!callbacks` retains both Pre/Post routines for object callbacks; `!devstack` follows an observed device stack. Missing layouts or pages reduce coverage; `module+RVA` is the fallback when a verified symbol name is unavailable.
+- **Device stacks:** `!devstack` follows an observed device stack. Missing layouts or pages reduce coverage; `module+RVA` is the fallback when a verified symbol name is unavailable.
 - **Crash and I/O records:** `bugcheck` reads target bugcheck data, `irp <address>` inspects an observed IRP, and `ioctl <code>` / `ntstatus <code>` decode supplied values.
 - **Recorded evidence:** `sarif-import` and `etl-import` read existing host files. Match artifact identity to the target before correlation. ETL import does not start tracing, and imported analyzer results are not independently confirmed defects.
 - **Memory export:** `dump-raw` exports a bounded range; `dump-pe` exports a mapped PE with sections at virtual offsets, not a reconstruction of the original disk file. Unreadable requested bytes prevent publication of the output file.
@@ -231,8 +243,6 @@ Find these entries in **Library** or **Ctrl+K**, review the inserted draft, then
 Use `help <command>` for operands; `jobs`, `job <id>` and `cancel <id>` provide command-based job inspection and cancellation too.
 
 ## Find and run commands
-
-![Library, retained result tabs and Disassembly in one workspace](screenshots/workspace.jpg)
 
 1. Open **Library** or **Find a command / Ctrl+K**. Search by name, alias or purpose; the example below searches for `callback`.
 2. Choose an entry to insert an editable draft. Fill any required operands. **Tab** completes registered syntax and loaded symbols without executing anything.

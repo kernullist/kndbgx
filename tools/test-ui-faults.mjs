@@ -2849,6 +2849,63 @@ await check("T-UI-COLUMNS remote process comparisons expose both target identiti
         "Active List / EPROCESS", "Cid Table / EPROCESS", "Active List / Create Time", "Cid Table / Create Time"]);
 });
 
+await check("T-UI-CROSSVIEW counts cover the retained comparison beyond loaded rows and the display limit", async () =>
+{
+    const app = harness();
+    await app.boot();
+    const summary = { total: "100100", matched: "100000", mismatchCandidates: "99", indeterminate: "1" };
+    await openTable(app, "!hiddenproc", [{ kind: "ProcessCrossView", pid: "4", observation: "SameObservedIdentity" }],
+        { total: 100100, metadata: { status: "Partial", coverage: { complete: false }, analysis: { processComparison: summary } } });
+    assert.equal(app.nodes.get("result-count").textContent, "Total 100,100 / Matched 100,000 / Mismatch candidates 99 / Indeterminate 1");
+    assert.match(app.nodes.get("process-comparison-note").textContent, /including matches.*not confirmed hidden processes/);
+    assert.match(app.nodes.get("process-comparison-note").textContent, /incomplete.*collected rows only/);
+    assert.equal(app.nodes.get("process-comparison-note").classList.contains("hidden"), false);
+    await openTable(app, "registers", [{ name: "rax" }]);
+    assert.equal(app.nodes.get("process-comparison-note").classList.contains("hidden"), true);
+    assert.equal(app.nodes.get("process-comparison-note").textContent, "");
+    assert.equal(app.nodes.get("result-count").textContent, "1 rows / 0 findings");
+});
+
+await check("T-UI-CROSSVIEW sorting and historical context preserve captured counts", async () =>
+{
+    const app = harness();
+    await app.boot();
+    const rows = ["SameObservedIdentity", "CidOnlyReobserveCandidate", "IdentityUnknown"].map((observation, index) =>
+        ({ kind: "ProcessCrossView", pid: String(index + 4), observation }));
+    const metadata = { status: "Success", coverage: { complete: true },
+        analysis: { processComparison: { total: "3", matched: "1", mismatchCandidates: "1", indeterminate: "1" } } };
+    await openTable(app, "!hiddenproc", rows, { metadata });
+    const count = "Total 3 / Matched 1 / Mismatch candidates 1 / Indeterminate 1";
+    sortHeader(app, "Observation");
+    await settle();
+    assert.equal(app.nodes.get("result-count").textContent, count);
+    app.nodes.get("btn-refresh-status").fire("click");
+    await processStatus(app, { ...stamp, contextGeneration: "99" });
+    assert.equal(app.nodes.get("result-count").textContent, count);
+    assert.match(app.nodes.get("result-summary").textContent, /Historical/);
+});
+
+await check("T-UI-CROSSVIEW missing and malformed summaries never invent zero matches or candidates", async () =>
+{
+    const app = harness();
+    await app.boot();
+    const valid = { total: "1", matched: "1", mismatchCandidates: "0", indeterminate: "0" };
+    for (const summary of [undefined, { ...valid, total: "2" }, { ...valid, matched: "0" },
+        { ...valid, matched: null }, { ...valid, matched: true }, { ...valid, matched: "0x1" },
+        { ...valid, matched: -1 }, { ...valid, matched: 1.5 }, { ...valid, matched: "9007199254740992" }])
+    {
+        await openTable(app, "!hiddenproc", [{ kind: "ProcessCrossView", observation: "SameObservedIdentity" }],
+            { metadata: { status: "Success", analysis: { processComparison: summary } } });
+        assert.equal(app.nodes.get("result-count").textContent,
+            "Total 1 / Matched Unavailable / Mismatch candidates Unavailable / Indeterminate Unavailable");
+        assert.match(app.nodes.get("process-comparison-note").textContent, /no valid count breakdown/);
+    }
+    await openTable(app, "!hiddenproc", [], { metadata: { status: "Unavailable", coverage: { complete: false },
+        analysis: { processComparison: { total: "0", matched: "0", mismatchCandidates: "0", indeterminate: "0" } } } });
+    assert.equal(app.nodes.get("result-count").textContent, "Total 0 / Matched 0 / Mismatch candidates 0 / Indeterminate 0");
+    assert.match(app.nodes.get("process-comparison-note").textContent, /incomplete.*cannot establish absence/);
+});
+
 await check("T-UI-COLUMNS pointer and routine symbols use the same explicit columns", async () =>
 {
     const app = harness();

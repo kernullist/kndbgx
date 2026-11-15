@@ -827,6 +827,8 @@ void ScanHiddenProc(Ctx &ctx)
     const auto hostResult = local ? HostProcesses(ctx.Session, host) : TargetCidProcesses(ctx, layout, host);
     ctx.Out.Details = local ? kncore::CompareProcessViews(kernel, kernelOutput.Details, host, hostResult)
                            : kncore::CompareTargetProcessViews(kernel, kernelOutput.Details, host, hostResult);
+    ctx.Out.Details.Analysis = knjson::Value::MakeObject();
+    ctx.Out.Details.Analysis.Set(L"processComparison", kncore::ProcessComparisonSummary(ctx.Out.Details));
     ctx.Out.Details.Stamp = stamp;
     ctx.Out.Details.Limitations.Push(knjson::Value(L"Collection offsets in milliseconds: kernel=" + std::to_wstring(hostStarted - started) +
                                                    (local ? L", host=" : L", cid=") + std::to_wstring(GetTickCount64() - hostStarted)));

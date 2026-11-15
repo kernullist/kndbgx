@@ -2,20 +2,42 @@
 
 English · [한국어](README.ko.md)
 
-KNDbgX brings a visual investigation workspace to x64 WinDbg. Compare process inventories, inspect VM-access handles, save and compare kernel snapshots, and review driver-file evidence in retained result tabs. Memory, disassembly and registers stay beside the results or in floating windows. The extension does not install a kernel driver.
+KNDbgX brings a visual investigation workspace to x64 WinDbg. Inspect kernel callbacks and minifilter registrations, compare process inventories and snapshots, and review driver-file evidence in retained result tabs. Memory, disassembly and registers stay beside the results or in floating windows. The extension does not install a kernel driver.
 
 These are captures of **0.2.0-preview.7** running in WinDbg against a live Windows 11 x64 VMware guest. Kernel collectors and Data Model integration remain experimental; see [supported sessions and limits](docs/SUPPORT.md).
 
 ## Investigate with KNDbgX collectors
 
+### Kernel callbacks: `!callbacks`
+
+Find `!callbacks` in **Library / Ctrl+K** and run it on a stopped, supported kernel target. Inspect notify, object and registry callback registrations, their routine addresses and owning modules. Choose the fields in **Columns**, open **Row details** for the full record, and follow a Routine, Pre or Post address into **Memory** or **Disassembly**. [Callback workflow](docs/UX.md#inspect-kernel-callbacks)
+
+![Kernel callback registrations beside the selected routine's disassembly](docs/screenshots/workspace.jpg)
+
+*Registered callbacks are investigation evidence. A callback's presence or module ownership alone does not establish a hook or malicious code.*
+
+### Minifilter callbacks: `!minifilter`
+
+Run `!minifilter` (alias `!fltmgr`) to inspect filter identities, altitudes and separate PreOperation/PostOperation callbacks. Compare the operation, routine and ownership fields, then use **Row details** or **Export** to retain the full record. [Minifilter workflow](docs/UX.md#follow-minifilter-registrations)
+
+![Minifilter identities, altitudes and Pre/Post callback ownership](docs/screenshots/minifilter-callbacks.jpg)
+
+*The capture contains 469 rows covering filter records and operation callbacks; this is not a count of 469 filters.*
+
+### Process cross-view: `!hiddenproc`
+
 Find `!hiddenproc` in **Library / Ctrl+K** and run it on a stopped, supported kernel target. Remote KD compares the active process list with the target's CID table, keeping both identities and the comparison outcome in one table. **Row details** shows the original fields; **Export** saves the retained comparison.
 
-![Cross-view process comparison with both observed identities](docs/screenshots/process-cross-view.jpg)
+![All compared processes, including matching active-list and CID identities](docs/screenshots/process-cross-view.jpg)
+
+*Process cross-view: 190 total comparison rows, including matching processes. The visible rows show `SameObservedIdentity`; this is not a count of hidden processes.*
+
+### More investigation workflows
 
 - **Process-handle access:** run `!handles /owner-pid 4` to inspect the System process's VM-access handles, or filter by an observed target PID. Compare owner, destination, access mask and cross-process status. [Handle workflow](docs/UX.md#inspect-process-handle-access)
 - **Snapshot comparison:** save two `!snapshot` bundles into new directories, then open `!diff` in Results. Check collection coverage and identity before interpreting Added, Removed, Changed or Unknown. [Save and compare](docs/UX.md#save-and-compare-kernel-snapshots)
 - **Driver-file evidence:** `driver-audit` turns a supplied host PE file into rows for identity, mitigations, sections, imports and embedded-signature policy. [Driver audit workflow](docs/UX.md#audit-a-driver-file)
-- **Registrations and dispatch:** inspect minifilter Pre/Post callbacks and driver dispatch ownership, with loaded-image metadata beside the results. [Minifilters](docs/UX.md#follow-minifilter-registrations) · [Driver dispatch](docs/UX.md#inspect-driver-dispatch-and-loaded-image-metadata)
+- **Driver dispatch:** use `!driver`, `!drvobj` and `!module` to inspect driver objects, dispatch ownership and loaded-image metadata. [Driver dispatch workflow](docs/UX.md#inspect-driver-dispatch-and-loaded-image-metadata)
 - **Memory permissions:** compare VAD protection with page samples, inspect translations for a chosen range, and examine big-pool W+X observations with explicit sampling limits. [VAD samples](docs/UX.md#compare-vad-protection-with-page-samples) · [Page permissions](docs/UX.md#inspect-page-permissions-for-a-chosen-range) · [Big pool](docs/UX.md#inspect-big-pool-allocations-and-wx-samples)
 - **Kernel state and diagnostics:** retain per-CPU IDT/control state and ETW logger metadata, or run a fixed diagnostic checklist with each step's saved output. [CPU state](docs/UX.md#review-per-cpu-idt-and-control-state) · [ETW](docs/UX.md#inspect-etw-logger-metadata) · [Diagnostic recipes](docs/UX.md#run-a-diagnostic-checklist)
 - **Coverage:** **Capture info** and **View output** retain unreadable ranges, missing layouts and other gaps. Zero rows with Partial coverage do not establish absence. [Coverage example](docs/UX.md#read-a-collectors-coverage-limits)
@@ -23,8 +45,6 @@ Find `!hiddenproc` in **Library / Ctrl+K** and run it on a stopped, supported ke
 Cross-view differences and handle access rights are investigation evidence, not automatic hiding or injection verdicts. [Process comparison and its limits](docs/UX.md#compare-two-process-inventories)
 
 ## Open the workspace
-
-![KNDbgX workspace connected to a live VMware kernel target](docs/screenshots/workspace.jpg)
 
 Use x64 WinDbg, the Microsoft VC++ x64 runtime and WebView2 Evergreen Runtime. Extract the complete release ZIP, keeping `runtime\dia\msdia140.dll` beside the extension at that relative path. Connect WinDbg to your target and stop it before inspecting memory.
 

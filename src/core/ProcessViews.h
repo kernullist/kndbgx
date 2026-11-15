@@ -52,6 +52,37 @@ inline bool HandleMatches(const HandleEntry &entry, std::optional<uint64_t> targ
     return (!ownerFilter || entry.OwnerPid == *ownerFilter) && (!targetFilter || (targetPid && *targetPid == *targetFilter));
 }
 
+inline knjson::Value ProcessComparisonSummary(const Result &result)
+{
+    size_t matched = 0;
+    size_t candidates = 0;
+    size_t indeterminate = 0;
+    for (const auto &row : result.Rows.Items())
+    {
+        const auto observation = row.Get(L"observation").AsString(L"");
+        if (observation == L"SameObservedIdentity")
+        {
+            ++matched;
+        }
+        else if (observation == L"HostOnlyReobserveCandidate" || observation == L"KernelOnlyReobserveCandidate" ||
+                 observation == L"ActiveListOnlyReobserveCandidate" || observation == L"CidOnlyReobserveCandidate" ||
+                 observation == L"PidReusedOrViewsChanged")
+        {
+            ++candidates;
+        }
+        else
+        {
+            ++indeterminate;
+        }
+    }
+    auto summary = knjson::Value::MakeObject();
+    summary.Set(L"total", knjson::Value(std::to_wstring(result.Rows.Items().size())));
+    summary.Set(L"matched", knjson::Value(std::to_wstring(matched)));
+    summary.Set(L"mismatchCandidates", knjson::Value(std::to_wstring(candidates)));
+    summary.Set(L"indeterminate", knjson::Value(std::to_wstring(indeterminate)));
+    return summary;
+}
+
 inline Result CompareProcessViews(const std::vector<ProcessRow> &kernel, const Result &kernelResult, const std::vector<ProcessRow> &host,
                                   const Result &hostResult)
 {
@@ -103,8 +134,15 @@ inline Result CompareProcessViews(const std::vector<ProcessRow> &kernel, const R
         std::wstring observation;
         if (a == nullptr || b == nullptr)
         {
-            observation = a == nullptr ? L"HostOnlyReobserveCandidate" : L"KernelOnlyReobserveCandidate";
-            result.Collected.Unknown += !(a != nullptr ? a : b)->CreateTimeKnown ? 1 : 0;
+            if (!(a != nullptr ? a : b)->CreateTimeKnown)
+            {
+                observation = L"IdentityUnknown";
+                ++result.Collected.Unknown;
+            }
+            else
+            {
+                observation = a == nullptr ? L"HostOnlyReobserveCandidate" : L"KernelOnlyReobserveCandidate";
+            }
         }
         else if (!a->CreateTimeKnown || !b->CreateTimeKnown)
         {

@@ -216,6 +216,50 @@ template <typename Check> void RunHandleTableRegression(Check check)
           "crossview.pointer-identity-disagreement-is-not-a-match");
     check(CompareTargetProcessViews({active, active}, complete, {active}, complete).State == Status::Unavailable,
           "crossview.duplicate-pids-refuse-comparison");
+    auto activeOnly = active;
+    activeOnly.Pid = 8;
+    auto cidOnly = active;
+    cidOnly.Pid = 12;
+    auto reusedPid = active;
+    reusedPid.Pid = 16;
+    auto changedIdentity = reusedPid;
+    ++changedIdentity.CreateTime;
+    auto unknown = active;
+    unknown.Pid = 20;
+    unknown.CreateTimeKnown = false;
+    const std::vector<ProcessRow> activeRows = {active, activeOnly, reusedPid, unknown};
+    const std::vector<ProcessRow> cidRows = {active, cidOnly, changedIdentity, unknown};
+    for (const auto &comparison : {CompareTargetProcessViews(activeRows, complete, cidRows, complete),
+                                   CompareProcessViews(activeRows, complete, cidRows, complete)})
+    {
+        const auto summary = ProcessComparisonSummary(comparison);
+        check(summary.Get(L"total").AsString(L"") == L"5" && summary.Get(L"matched").AsString(L"") == L"1" &&
+                  summary.Get(L"mismatchCandidates").AsString(L"") == L"3" && summary.Get(L"indeterminate").AsString(L"") == L"1",
+              "crossview.summary-partitions-matches-one-sided-pid-reuse-and-unknown-identities");
+    }
+    const auto unknownOneSide = CompareProcessViews({}, complete, {unknown}, complete);
+    check(unknownOneSide.Rows.Items()[0].Get(L"observation").AsString(L"") == L"IdentityUnknown" &&
+              ProcessComparisonSummary(unknownOneSide).Get(L"mismatchCandidates").AsString(L"") == L"0" &&
+              ProcessComparisonSummary(unknownOneSide).Get(L"indeterminate").AsString(L"") == L"1",
+          "crossview.one-sided-unknown-identity-is-not-a-mismatch-candidate");
+    const auto incompleteSummary = ProcessComparisonSummary(missing);
+    check(incompleteSummary.Get(L"total").AsString(L"") == L"1" &&
+              incompleteSummary.Get(L"mismatchCandidates").AsString(L"") == L"0" &&
+              incompleteSummary.Get(L"indeterminate").AsString(L"") == L"1",
+          "crossview.summary-keeps-incomplete-opposing-view-indeterminate");
+    auto futureObservation = matching;
+    auto unknownRow = knjson::Value::MakeObject();
+    unknownRow.Set(L"observation", knjson::Value(L"FutureObservation"));
+    futureObservation.Rows.Push(unknownRow);
+    const auto futureSummary = ProcessComparisonSummary(futureObservation);
+    check(futureSummary.Get(L"total").AsString(L"") == L"2" && futureSummary.Get(L"matched").AsString(L"") == L"1" &&
+              futureSummary.Get(L"indeterminate").AsString(L"") == L"1" && matching.Rows.Items().size() == 1,
+          "crossview.summary-keeps-unknown-observations-and-original-capture");
+    const auto emptySummary = ProcessComparisonSummary(Result{});
+    check(emptySummary.Get(L"total").AsString(L"") == L"0" && emptySummary.Get(L"matched").AsString(L"") == L"0" &&
+              emptySummary.Get(L"mismatchCandidates").AsString(L"") == L"0" &&
+              emptySummary.Get(L"indeterminate").AsString(L"") == L"0",
+          "crossview.empty-summary-has-four-explicit-counts");
     for (const auto failure : {Status::InternalFault, Status::EngineError, Status::Cancelled, Status::StaleContext})
     {
         incomplete.State = failure;

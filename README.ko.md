@@ -2,20 +2,42 @@
 
 [English](README.md) · 한국어
 
-KNDbgX는 x64 WinDbg에 시각적인 분석 작업 화면을 제공한다. 프로세스 목록 교차 조회, VM 접근 핸들 조사, 커널 스냅샷 저장·비교, 드라이버 파일 분석 결과를 탭으로 보관한다. 결과 옆이나 별도 창에서 메모리·디스어셈블리·레지스터를 확인한다. 확장 자체는 커널 드라이버를 설치하지 않는다.
+KNDbgX는 x64 WinDbg에 시각적인 분석 작업 화면을 제공한다. 커널 콜백과 미니필터 등록 정보, 프로세스 목록 교차 조회, 커널 스냅샷 비교, 드라이버 파일 분석 결과를 탭으로 보관한다. 결과 옆이나 별도 창에서 메모리·디스어셈블리·레지스터를 확인한다. 확장 자체는 커널 드라이버를 설치하지 않는다.
 
 아래 이미지는 **0.2.0-preview.7**을 WinDbg에 로드하고 실제 Windows 11 x64 VMware 게스트에서 촬영한 화면이다. 커널 수집기와 Data Model 연동은 실험적 기능이다. [지원 환경과 제약](docs/SUPPORT.md)을 참고한다.
 
 ## KNDbgX 수집기로 조사하기
 
+### 커널 콜백: `!callbacks`
+
+지원되는 커널 대상을 중단하고 **Library / Ctrl+K**에서 `!callbacks`를 찾아 실행한다. notify·object·registry 콜백의 등록 정보, 함수 주소와 소유 모듈을 확인한다. **Columns**로 표시할 필드를 고르고, **Row details**로 전체 레코드를 열거나 Routine·Pre·Post 주소를 따라 **Memory**와 **Disassembly**로 이동한다. [콜백 조사 절차](docs/UX.md#inspect-kernel-callbacks)
+
+![커널 콜백 등록 목록과 선택한 함수의 디스어셈블리](docs/screenshots/workspace.jpg)
+
+*등록된 콜백은 조사 자료다. 콜백의 존재나 소유 모듈만으로 후킹 또는 악성 코드라고 판정하지 않는다.*
+
+### 미니필터 콜백: `!minifilter`
+
+`!minifilter`(별칭 `!fltmgr`)로 필터 식별 정보·altitude와 개별 PreOperation/PostOperation 콜백을 확인한다. 연산 종류, 함수 주소, 소유 모듈을 비교하고 **Row details**나 **Export**로 전체 레코드를 확인·보관한다. [미니필터 조사 절차](docs/UX.md#follow-minifilter-registrations)
+
+![미니필터 식별 정보와 altitude, Pre/Post 콜백의 소유 모듈](docs/screenshots/minifilter-callbacks.jpg)
+
+*캡처의 469행은 필터 레코드와 연산별 콜백을 합친 결과이며, 필터 469개를 뜻하지 않는다.*
+
+### 프로세스 교차 비교: `!hiddenproc`
+
 지원되는 커널 대상을 중단하고 **Library / Ctrl+K**에서 `!hiddenproc`를 찾아 실행한다. 원격 KD에서는 활성 프로세스 목록과 대상의 CID 테이블을 비교한다. 양쪽에서 관측한 식별 정보와 비교 결과를 한 표에서 확인하고, **Row details**로 원본 필드를 열거나 **Export**로 비교 결과를 저장한다.
 
-![두 목록의 프로세스 식별 정보를 나란히 비교한 결과](docs/screenshots/process-cross-view.jpg)
+![일치하는 프로세스를 포함한 활성 목록과 CID 테이블의 전체 비교 결과](docs/screenshots/process-cross-view.jpg)
+
+*프로세스 교차 비교: 일치하는 프로세스를 포함한 전체 비교 결과 190개다. 화면에 보이는 행은 `SameObservedIdentity`이며, 은닉 프로세스 190개를 뜻하지 않는다.*
+
+### 다른 조사 기능
 
 - **프로세스 핸들 접근 권한:** `!handles /owner-pid 4`로 System 프로세스의 VM 접근 핸들을 조사하거나, 현재 대상에서 확인한 PID로 목적지를 좁힌다. 소유자·목적지·접근 마스크·다른 프로세스 여부를 함께 확인한다. [핸들 조사 절차](docs/UX.md#inspect-process-handle-access)
 - **스냅샷 비교:** 서로 다른 새 디렉터리에 `!snapshot`을 저장한 뒤 `!diff` 결과를 연다. Added·Removed·Changed·Unknown을 해석하기 전에 수집 범위와 식별 정보부터 확인한다. [저장과 비교](docs/UX.md#save-and-compare-kernel-snapshots)
 - **드라이버 파일 분석:** `driver-audit`로 지정한 호스트 PE 파일의 식별 정보·완화 설정·섹션·임포트·내장 서명 정책 결과를 행 단위로 확인한다. [드라이버 분석 절차](docs/UX.md#audit-a-driver-file)
-- **등록 함수와 디스패치:** 미니필터의 Pre/Post 콜백과 드라이버 디스패치 함수의 소유 모듈을 확인하고, 로드된 이미지의 PE 정보와 함께 조사한다. [미니필터](docs/UX.md#follow-minifilter-registrations) · [드라이버 디스패치](docs/UX.md#inspect-driver-dispatch-and-loaded-image-metadata)
+- **드라이버 디스패치:** `!driver`, `!drvobj`, `!module`로 드라이버 객체, 디스패치 함수의 소유 모듈, 로드된 이미지의 PE 정보를 조사한다. [드라이버 디스패치 절차](docs/UX.md#inspect-driver-dispatch-and-loaded-image-metadata)
 - **메모리 권한:** VAD 보호 속성과 페이지 표본을 비교하고, 지정 범위의 주소 변환과 big-pool의 W+X 관측 결과를 확인한다. 표본·누락·미검사 페이지를 구분한다. [VAD 표본](docs/UX.md#compare-vad-protection-with-page-samples) · [페이지 권한](docs/UX.md#inspect-page-permissions-for-a-chosen-range) · [Big pool](docs/UX.md#inspect-big-pool-allocations-and-wx-samples)
 - **커널 상태와 진단:** CPU별 IDT·제어 상태, ETW 로거 메타데이터를 보관하고, 정해진 진단 체크리스트를 실행해 단계별 원본 출력을 확인한다. [CPU 상태](docs/UX.md#review-per-cpu-idt-and-control-state) · [ETW](docs/UX.md#inspect-etw-logger-metadata) · [진단 레시피](docs/UX.md#run-a-diagnostic-checklist)
 - **수집 범위 확인:** **Capture info**와 **View output**에 읽지 못한 범위, 없는 레이아웃 등의 제약이 남는다. Partial인 결과의 0행은 객체 부재를 뜻하지 않는다. [수집 한계 예시](docs/UX.md#read-a-collectors-coverage-limits)
@@ -23,8 +45,6 @@ KNDbgX는 x64 WinDbg에 시각적인 분석 작업 화면을 제공한다. 프�
 목록 간 차이나 핸들의 접근 권한만으로 은닉·인젝션을 판정하지 않는다. [프로세스 교차 조회와 해석 범위](docs/UX.md#compare-two-process-inventories)
 
 ## 작업 화면 열기
-
-![실행 중인 VMware 커널 대상에 연결된 KNDbgX 작업 화면](docs/screenshots/workspace.jpg)
 
 x64 WinDbg, Microsoft VC++ x64 런타임, WebView2 Evergreen Runtime이 필요하다. 배포 ZIP 전체를 풀고 `runtime\dia\msdia140.dll`을 확장 기준의 같은 상대 경로에 유지한다. WinDbg를 대상에 연결하고 메모리를 조사하기 전에 대상을 중단한다.
 

@@ -3173,6 +3173,45 @@
     return source || "Source unspecified";
   }
 
+  function updateProcessComparisonSummary(incomplete)
+  {
+    var isComparison = state.resultMeta.commandId === "!hiddenproc";
+    var note = uiElement("process-comparison-note");
+    uiElement("result-count").classList[isComparison ? "add" : "remove"]("process-comparison-count");
+    setHidden(note, !isComparison);
+    note.textContent = "";
+    if (!isComparison)
+    {
+      return;
+    }
+    var summary = state.resultMeta.analysis && state.resultMeta.analysis.processComparison;
+    var keys = ["total", "matched", "mismatchCandidates", "indeterminate"];
+    var valid = summary && keys.every(function (key)
+    {
+      var value = summary[key];
+      return (typeof value === "string" && /^\d+$/.test(value) || typeof value === "number") &&
+        Number.isSafeInteger(Number(value)) && Number(value) >= 0;
+    });
+    valid = valid && Number(summary.total) === state.observationCount &&
+      Number(summary.matched) + Number(summary.mismatchCandidates) + Number(summary.indeterminate) === Number(summary.total);
+    var labels = ["Total", "Matched", "Mismatch candidates", "Indeterminate"];
+    uiElement("result-count").textContent = labels.map(function (label, index)
+    {
+      var count = index === 0 ? state.observationCount.toLocaleString() :
+        valid ? Number(summary[keys[index]]).toLocaleString() : "Unavailable";
+      return label + " " + count;
+    }).join(" / ");
+    note.textContent = "All compared processes, including matches. Mismatch candidates need re-observation; they are not confirmed hidden processes.";
+    if (!valid)
+    {
+      note.textContent += " This capture has no valid count breakdown; run !hiddenproc again to collect one.";
+    }
+    if (incomplete || state.resultMeta.status !== "Success")
+    {
+      note.textContent += " Collection is incomplete or unavailable; counts cover collected rows only and cannot establish absence.";
+    }
+  }
+
   function updateEvidenceSummary()
   {
     var stamp = state.resultTarget || {};
@@ -3191,6 +3230,7 @@
     els.resultSummary.className = historical ? "historical" : incomplete || (status && status !== "Success") ? "partial" : "";
     uiElement("result-count").textContent = state.rowBase ? (state.observationCount - state.rowBase).toLocaleString() + " breakpoint settings / 1 last stop" :
       (state.observationCount || 0).toLocaleString() + " rows / " + (state.findingCount || 0).toLocaleString() + " findings";
+    updateProcessComparisonSummary(incomplete);
     uiElement("result-rows-option").textContent = (state.rowBase ? "Breakpoints" : "Rows") + " (" +
       Math.max(0, (state.observationCount || 0) - state.rowBase).toLocaleString() + ")";
     uiElement("result-findings-option").textContent = "Findings (" + (state.findingCount || 0).toLocaleString() + ")";
