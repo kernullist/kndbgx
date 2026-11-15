@@ -2,76 +2,91 @@
 
 English · [한국어](README.ko.md)
 
-KNDbgX is an x64 WinDbg extension for debugger navigation and Windows security inspection. Its CLI, embedded WebView2 workspace and optional Data Model views share structured results, debugger context and coverage information. The extension itself installs no kernel driver.
+KNDbgX brings a visual investigation workspace to x64 WinDbg. Compare process inventories, inspect VM-access handles, save and compare kernel snapshots, and review driver-file evidence in retained result tabs. Memory, disassembly and registers stay beside the results or in floating windows. The extension does not install a kernel driver.
 
-**Context details** explains the current debugger context and selected-module symbol health. **Operations** shows operation stages, waits and retained outcomes. **Memory > Read details** shows saved read ranges, transferred bytes and native errors without rereading the target. See the [diagnostic workflow](docs/CONTEXT_DIAGNOSTICS.md) and [workspace guide](docs/UX.md).
+These are captures of **0.2.0-preview.7** running in WinDbg against a live Windows 11 x64 VMware guest. Kernel collectors and Data Model integration remain experimental; see [supported sessions and limits](docs/SUPPORT.md).
 
-Kernel collectors and Data Model integration remain **Experimental**. Missing layouts, unreadable pages and collection limits remain explicit; a partial inventory is not proof of object absence or system integrity. Compatibility is bounded by the [support matrix](docs/SUPPORT.md).
+## Investigate with KNDbgX collectors
 
-## Build and load
+Find `!hiddenproc` in **Library / Ctrl+K** and run it on a stopped, supported kernel target. Remote KD compares the active process list with the target's CID table, keeping both identities and the comparison outcome in one table. **Row details** shows the original fields; **Export** saves the retained comparison.
 
-Building the extension requires Visual Studio 2022 C++ tools (v143) and a Windows 10/11 SDK. Scripts discover Visual Studio through `vswhere`. Node.js is required for frontend tests; Python 3.11 or later is required for release tooling. WDK is needed only for the separate snapshot-driver sample. The UI requires WebView2 Evergreen Runtime, and the binary requires the Microsoft VC++ x64 runtime. CLI remains available if UI initialization fails.
+![Cross-view process comparison with both observed identities](docs/screenshots/process-cross-view.jpg)
 
-```powershell
-.\tools\build.ps1 -Configuration Release -RunTests
-.\tools\run-engine-test.ps1 -Configuration Release -EvidenceDirectory artifacts\engine-check
-```
+- **Process-handle access:** run `!handles /owner-pid 4` to inspect the System process's VM-access handles, or filter by an observed target PID. Compare owner, destination, access mask and cross-process status. [Handle workflow](docs/UX.md#inspect-process-handle-access)
+- **Snapshot comparison:** save two `!snapshot` bundles into new directories, then open `!diff` in Results. Check collection coverage and identity before interpreting Added, Removed, Changed or Unknown. [Save and compare](docs/UX.md#save-and-compare-kernel-snapshots)
+- **Driver-file evidence:** `driver-audit` turns a supplied host PE file into rows for identity, mitigations, sections, imports and embedded-signature policy. [Driver audit workflow](docs/UX.md#audit-a-driver-file)
+- **Registrations and dispatch:** inspect minifilter Pre/Post callbacks and driver dispatch ownership, with loaded-image metadata beside the results. [Minifilters](docs/UX.md#follow-minifilter-registrations) · [Driver dispatch](docs/UX.md#inspect-driver-dispatch-and-loaded-image-metadata)
+- **Memory permissions:** compare VAD protection with page samples, inspect translations for a chosen range, and examine big-pool W+X observations with explicit sampling limits. [VAD samples](docs/UX.md#compare-vad-protection-with-page-samples) · [Page permissions](docs/UX.md#inspect-page-permissions-for-a-chosen-range) · [Big pool](docs/UX.md#inspect-big-pool-allocations-and-wx-samples)
+- **Kernel state and diagnostics:** retain per-CPU IDT/control state and ETW logger metadata, or run a fixed diagnostic checklist with each step's saved output. [CPU state](docs/UX.md#review-per-cpu-idt-and-control-state) · [ETW](docs/UX.md#inspect-etw-logger-metadata) · [Diagnostic recipes](docs/UX.md#run-a-diagnostic-checklist)
+- **Coverage:** **Capture info** and **View output** retain unreadable ranges, missing layouts and other gaps. Zero rows with Partial coverage do not establish absence. [Coverage example](docs/UX.md#read-a-collectors-coverage-limits)
 
-The engine test starts its own user-mode process and creates test dumps using an installed WinDbg runtime. Keep the generated `runtime/dia/msdia140.dll` directory beside `kndbgx.dll` when copying the build.
+Cross-view differences and handle access rights are investigation evidence, not automatic hiding or injection verdicts. [Process comparison and its limits](docs/UX.md#compare-two-process-inventories)
 
-Release ZIPs exclude PDBs and raw session data. Keep full build output, dumps and exported results local; see the [publication boundary](docs/VALIDATION.md#publication-boundary) before sharing artifacts.
+## Open the workspace
 
-Load it in x64 WinDbg:
+![KNDbgX workspace connected to a live VMware kernel target](docs/screenshots/workspace.jpg)
+
+Use x64 WinDbg, the Microsoft VC++ x64 runtime and WebView2 Evergreen Runtime. Extract the complete release ZIP, keeping `runtime\dia\msdia140.dll` beside the extension at that relative path. Connect WinDbg to your target and stop it before inspecting memory.
+
+Load the extension and open its window once:
 
 ```text
 .load C:\path\to\kndbgx.dll
-!kndbgx version
-!kndbgx status
-!kndbgx help
 !kndbgx
 ```
 
-The last command opens the workspace. Use `!kndbgx <command>` in WinDbg and `<command>` in KNDbgX. `help ui` explains the workspace; `help <command-or-alias>` shows syntax and session requirements. The [command reference](docs/COMMANDS.md) is generated from the compiled registry.
+Continue in the **KNDbgX window**. **Library** finds commands, **Results** keeps captures, and **Inspect** opens the four inspection views. **Windows** controls layout and detached windows. Closing the window keeps the workspace in the loaded extension; `!kndbgx` reopens it.
 
-## Work with the debugger
+## Choose a task, then run it
 
-- **Find a command / Ctrl+K** inserts an editable draft. Tab completes registered syntax and loaded symbols; it never executes a command. Up/Down recalls history and restores unfinished input when returning past the newest entry.
-- **Inspect / Ctrl+M** opens Processes, Memory, Disassembly and Registers beside Results. Each view's **Float** opens its own window, including from a floating group, so all four can remain visible together. **Dock** or the individual window's close button returns that view; **Dock all** restores all four. Drag the native title bar onto a workspace or group drop guide to dock. Inputs, captured data, selection and scrolling are retained. **Float group** detaches the whole tab group while individual windows stay open. **Row details** is the selected-result detail pane and has its own visibility and width controls.
-- **Inspect > Registers** refreshes on a new stopped context while visible, shows changed values and raw vector bytes, and supports name filtering and copying. Running, unreadable or failed captures retain the previous values with an explicit notice. This view uses the debugger's current thread/CPU context; selecting a process does not switch register context. `registers` / `r` create separate command-result snapshots.
-- **Windows** restores the adaptive layout, selects Compact/Comfortable density and brings detached windows into view. **Operations** shows retained outcomes, opens retained results and recovers completion status after UI recreation without replaying commands, even with Output Off.
-- Right-click a recognized result address to open Memory or Disassembly. Callback rows let you choose Routine, Pre or Post. Actions retain the source context and address space; stale results and mismatched process ownership refuse target reads.
-- **Continue / Break** controls a live target from the header. F5 continues; F10/F11 step with Disassembly active. **Follow IP** follows new stops, while manual code browsing pauses it. **Cancel operation** requests cancellation of a workspace operation and is separate from Break.
-- Results stay in tabs with independent names, ordering, columns, sorting and selection. Closing the window retains the workspace in the loaded extension; bare `!kndbgx` reopens it. Explicit `!kndbgx shutdown`, unload or document recreation releases that workspace.
+Open **Library** or press **Ctrl+K**. Search by purpose, such as `callback`, choose an entry and press Enter to insert its draft. Fill any required arguments and select **Run**. **Tab** completes syntax and loaded symbols. Selection and completion do not execute the command.
 
-Target reads wait for valid stopped status. Existing captures remain visible through Busy and context changes, with historical actions disabled. See the [workspace guide](docs/UX.md) for controls, recovery and limits.
+![Finding callback-related tasks in the command palette](docs/screenshots/command-palette.jpg)
 
-## Changes, collection and export
+**Pin left** keeps Library beside Results; stars, filters and folded groups keep frequently used commands nearby. Expand **Investigation starting points > Kernel investigation** for tasks such as crash, I/O or driver analysis. [Command discovery](docs/UX.md#find-and-run-commands)
 
-Registered memory changes require a complete preview and one-use approval. There is no global write switch; legacy `policy` / `gate` only report its removal. UI breakpoint Add/Delete uses preview approval; Enable/Disable and execution controls apply context-bound actions on click. Dump and local-kernel sessions cannot apply these changes.
+## Start from a process
 
-Unregistered **manual UI input** is forwarded directly to WinDbg and can change the target or host under WinDbg's own semantics. Registered names retain KNDbgX validation. CLI and jobs require `raw --ack-effects <command>` for opaque execution.
+Open **Inspect > Processes**, select a process, then choose **Open details**, **Threads**, **Memory (VADs)** or **Token**. The result opens in its own tab while the process list remains available. Double-click a result tab to give it a useful name.
 
-```text
-!kndbgx plan eb <address> 41 42
-!kndbgx approve <plan-id> <approval-token>
-!kndbgx !snapshot "C:\captures\before"
-!kndbgx !snapshot "C:\captures\after"
-!kndbgx !diff "C:\captures\before" "C:\captures\after"
-!kndbgx results
-!kndbgx result-export <result-id> "C:\captures\result.json"
+![Inspecting a selected process and opening its threads in Results](docs/screenshots/processes.jpg)
+
+Selecting a row does not switch the debugger's address space. **Attach address space** is a separate verified action; register thread/CPU context is separate too. [Process inspection](docs/UX.md#processes-tab)
+
+## Follow an address into Memory or Disassembly
+
+Right-click a recognized result address and choose **Open Memory** or **Open Disassembly**. Callback rows let you choose Routine, Pre or Post. The action checks the source capture and process context before reading.
+
+![Memory bytes and ASCII beside the source callback result](docs/screenshots/memory.jpg)
+
+**Memory** provides byte/word/dword/qword views, ASCII and saved **Read details**. **Disassembly** provides Current IP, Next instructions, Follow IP and breakpoint markers. **Registers** shows pinned and changed values, including raw vector bytes. Each view can **Float** independently, or **Float group** detaches the Inspect tabs. [Inspection and floating windows](docs/UX.md#floating-inspection-windows)
+
+## Keep results, control execution and recover work
+
+- **Results:** switch captures without rerunning them, choose columns, sort, copy values and open **Row details**. **Capture info** explains status and coverage; **Export** saves the full retained result, including rows outside the viewport. [Results and export](docs/UX.md#export-and-recovery)
+- **Execution:** use **Continue / Break**, F5 and Disassembly's F10/F11 controls on supported live targets. **Breakpoints** manages settings; Add/Delete and registered memory writes require preview approval. [Execution and changes](docs/UX.md#execution-and-changes)
+- **Context and symbols:** open **Context details > Symbols** to inspect a selected module's PDB identity and type availability. [Symbol inspection](docs/UX.md#context-symbols-and-waits)
+- **Long operations:** **Operations** shows stages and retained outcomes. **Cancel operation** requests cancellation; a pending native symbol or memory call can delay completion. Refresh outcomes checks existing work without replaying it. [Operations and coverage](docs/UX.md#context-symbols-and-waits)
+
+The [illustrated workspace guide](docs/UX.md) covers these controls, keyboard shortcuts and snapshot comparison. The generated [command reference](docs/COMMANDS.md) supplies exact syntax when needed; CLI commands remain available if the UI cannot start.
+
+## Build from source
+
+Install Visual Studio 2022 C++ tools (v143) and a Windows 10/11 SDK, then run from the repository root in PowerShell:
+
+```powershell
+.\tools\build.ps1 -Configuration Release -RunTests
 ```
 
-Replace placeholders before use and wait for each snapshot job to finish. `jobs`, `job <id>` and `cancel <id>` expose asynchronous work. Cancellation acceptance does not prove a pending engine call has ended. Snapshots require new directories; different sessions require `/cross-session`, and incomplete inputs remain Partial.
+The script finds Visual Studio with `vswhere` and writes the extension to `x64\Release`. `-RunTests` requires Node.js for frontend regressions; omit the switch for a build only. Release tooling requires Python 3.11+. WDK is needed only for `samples/snapshot-demo`. See [build verification and release packaging](docs/VALIDATION.md).
 
-**Export** saves the full retained result, including rows outside the viewport. Failures identify the destination and Win32 error; a retained result can be exported to another writable path. **Operations > Refresh outcomes** queries retained operation records without repeating commands or saves. **Open result** opens retained content; **Copy saved path** copies a confirmed export path. Operation records can expire or be evicted and do not survive DLL unload. Result content has its own retention budget: 64 MiB shared by at most 16 unpinned recent entries and 128 protected UI-tab entries. Save important data before eviction or unload.
+## Interpretation and command routing
 
-## Documentation
+Missing symbols, unreadable pages and collection limits remain **Partial** or **Unavailable**. A missing row does not establish absence. Results retain their captured context; historical data cannot authorize current target actions. Export important results before eviction or DLL unload.
 
-- [Workspace guide](docs/UX.md): commands, inspection, execution, result tabs and recovery.
-- [Command reference](docs/COMMANDS.md): generated grammar, aliases, effects, defaults and session requirements.
-- [Kernel and driver analysis](docs/KERNEL_ANALYSIS.md) and [symbol support](docs/SYMBOL_SUPPORT.md): collectors, diagnostics, profiles and interpretation.
-- [Support matrix](docs/SUPPORT.md): target requirements, unsupported features and resource limits.
-- [Validation](docs/VALIDATION.md): build checks, test procedures and publication requirements.
-- [Design](DESIGN.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
+Unregistered commands entered manually in the UI run directly in WinDbg and may change the target or host. Registered names keep KNDbgX validation and approval rules. CLI and jobs require `raw --ack-effects <command>` for opaque execution. Dumps and local KD do not support target writes or execution controls. [Support and limits](docs/SUPPORT.md)
 
-The repository also contains the independent `samples/snapshot-demo` driver lab; its Korean README documents build, signing and guest test requirements. It is not part of the extension package. Release validation and packaging commands are in [VALIDATION.md](docs/VALIDATION.md#release-validation).
+## License
+
+KNDbgX is licensed under the [MIT License](LICENSE). Copyright (c) 2026 kernullist.
+Third-party components retain their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

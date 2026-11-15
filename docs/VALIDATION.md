@@ -1,22 +1,18 @@
-# Validation
+# Build verification and release packaging
 
-Run these procedures against the source and binaries you intend to use. Record the source revision, DLL SHA-256, compiler/SDK versions, debugger/runtime versions and target image/PDB identity with each result. A version string alone does not identify a build. Store logs, dumps and receipts under ignored `artifacts/`; test output is not a user guide or a compatibility certificate.
+Run checks against the source and binaries intended for release. Keep the source revision, DLL hash, tool versions and target image/PDB identity with the results under ignored `artifacts/`. Packaging validates its inputs; it does not establish that every test was run.
 
 ## Prerequisites
 
 - Visual Studio 2022 C++ tools (v143), a Windows 10/11 SDK and PowerShell.
-- Node.js for frontend tests and Python 3.11+ for release tooling.
-- Installed x64 WinDbg for DbgEng integration; WebView2 Evergreen and the Microsoft VC++ x64 runtime for UI/native tests.
-- Microsoft Edge and `playwright` resolvable by Node for the separate browser fixture suite.
-- WDK only for the independent snapshot-driver sample.
+- Node.js for frontend regressions and Python 3.11+ for release tooling.
+- Installed x64 WinDbg for engine integration; WebView2 Evergreen and the Microsoft VC++ x64 runtime for UI/native execution.
+- Microsoft Edge and Node-resolvable `playwright` for the separate browser fixture suite.
+- WDK only for `samples/snapshot-demo`.
 
-Use a separate checkout/output for release rebuilds when another debugger has the canonical DLL loaded. A generated package does not prove that the test suites were run.
+Use a separate checkout/output when a debugger has the canonical DLL loaded. Run commands from the repository root and check each exit status before continuing.
 
-## Reproduce
-
-Run from the repository root and use new output directories under `artifacts/`. Check each command's exit status before continuing.
-
-Build and run native/frontend regressions:
+## Build and quick checks
 
 ```powershell
 .\tools\build.ps1 -Configuration Release -RunTests
@@ -24,27 +20,11 @@ python tools\release.py check-docs
 python tools\release.py check-deps
 ```
 
-Exercise installed DbgEng/WebView2 with an owned process and generated dump:
-
-```powershell
-.\tools\run-engine-test.ps1 -Configuration Release -EvidenceDirectory artifacts\engine-release
-.\tools\run-engine-test.ps1 -Configuration Release -WithoutAppLocalDia -EvidenceDirectory artifacts\engine-no-dia
-.\tools\build.ps1 -Configuration Debug -RunTests
-.\tools\run-engine-test.ps1 -Configuration Debug -EvidenceDirectory artifacts\engine-debug
-```
-
-Run the independent browser fixtures and live-harness unit tests:
-
-```powershell
-node tools\test-ui-browser.cjs artifacts\ui-browser-check
-python tools\test-live-kernel-harness.py
-```
-
-The harness unit tests do not connect to a kernel. The normal `test-live-kernel.py` lifecycle can start, reset or resume a guest; it is not a substitute for read-only inspection of an existing debugger session.
+`check-docs` compares `docs/COMMANDS.md` and `docs/command-contract.json` with the compiled command registry. After a command change, rebuild and regenerate with `python tools\release.py docs`; do not edit generated output manually. `docs/acceptance-map.json` is test input consumed by `tools/check-acceptance.py`, not a release guide.
 
 ## Release validation
 
-The acceptance map is an executable test input: [acceptance-map.json](acceptance-map.json) binds product paths to assertions consumed by `tools/check-acceptance.py`. Keep it with the test suite. Generated [command metadata](command-contract.json) and [command documentation](COMMANDS.md) must match the compiled registry.
+Use a new evidence directory and ZIP path for each run:
 
 ```powershell
 New-Item -ItemType Directory -Path artifacts\release-check -ErrorAction Stop
@@ -53,39 +33,41 @@ New-Item -ItemType Directory -Path artifacts\release-check -ErrorAction Stop
 python tools\check-acceptance.py artifacts\release-check\validation.log artifacts\release-check\engine.log
 python tools\release.py check-docs
 python tools\release.py check-deps
-python tools\test-release-privacy.py
-python tools\release.py check-privacy --private-terms-file .publication-terms.local.json
-python tools\release.py package --private-terms-file .publication-terms.local.json --output artifacts\KNDbgX-local-check.zip
+python tools\release.py check-privacy
+python tools\release.py package --output artifacts\KNDbgX-local-check.zip
 ```
 
-Create the local private-term policy described below before running the explicit policy commands. `-SkipEngine` without the separate engine run, or `-ReleaseOnly`, is a reduced gate. Packaging rejects stale generated documentation, private inputs and existing output paths; it checks binary/dependency metadata and verifies the archive, but does not run the full test suite. Fixed inputs produce a deterministic ZIP.
+The validation script rebuilds Debug/Release solution and direct projects, runs native/frontend regressions and privacy tests, checks reproducible Release artifacts, and tests an invalid SDK configuration. `-SkipEngine` requires the separate engine run above for the full procedure; `-ReleaseOnly` is a reduced gate. The engine harness owns its test process and creates test dumps using the installed WinDbg runtime.
 
-`tools/review-evidence.py` can produce a source/artifact/assertion receipt for a caller-supplied review map. Its `create` command requires an explicit `--mapping` file and the corresponding executed logs; use `create --help` for required inputs. Keep run-specific maps and receipts local.
+The packager accepts Release only. It checks generated docs, dependency hashes, binary hardening, matching local PDB identity and publication policy, then verifies the archive. Existing output paths are refused. The ZIP contains the DLL, DIA runtime, MIT license, user guides and their selected screenshots, command metadata, profile descriptions, third-party notices, a release manifest and an SBOM. PDBs and raw session exports remain local. The source manifest hashes current tracked bytes and records a dirty worktree; it does not attest to test completion or include untracked source files.
 
-## Target-specific validation
+## Additional and target-specific checks
 
-Fixture tests, owned user processes, dumps and live kernels establish different scopes. Record the exact target and operation; distinguish Success, Partial, Unavailable, Refused, CancelRequested and unconfirmed outcomes. An accepted command or cancellation request does not establish completion.
+```powershell
+.\tools\run-engine-test.ps1 -Configuration Release -WithoutAppLocalDia -EvidenceDirectory artifacts\engine-no-dia
+.\tools\run-engine-test.ps1 -Configuration Debug -EvidenceDirectory artifacts\engine-debug
+node tools\test-ui-browser.cjs artifacts\ui-browser-check
+python tools\test-live-kernel-harness.py
+```
 
-- Compare context-bound reads with native WinDbg values before and after a process/thread change, continue/break and reconnect. Retained results must remain historical until recaptured.
-- Check kernel collectors with matching symbols and explicit positive/negative cases. Private profiles apply only to their exact image/PDB identities and required code windows. See [symbol test procedures](SYMBOL_SUPPORT.md#reproduce) and [operator kernel validation](KERNEL_ANALYSIS.md#operator-kernel-validation).
-- Check unreadable pages, incomplete lists, live registration races, cancellation and native-engine delays on the intended target. A cooperative budget cannot interrupt a pending DbgEng call.
-- Verify real floating-window input, DPI changes, docking and accessibility on the intended desktop. Browser fixtures do not establish those host behaviors.
-- Treat the independent snapshot-driver sample's build, signing, guest loading and Driver Verifier checks as separate work. Its own README describes those requirements.
+The first command exercises the engine DIA fallback. Browser fixtures use product assets with synthetic replies. The live-harness unit tests do not connect to a kernel; the actual `test-live-kernel.py` lifecycle can start, reset or resume a guest.
 
-The [support matrix](SUPPORT.md) describes current compatibility and interpretation limits. No fixture or single kernel identity establishes support for other hosts, architectures, builds or transports.
+For matched x64 kernel dumps, `tools/test-symbol-dump.py` and `tools/test-callback-dump.py` compare collected values with native CDB reads. Use each script's `--help` for paths and required profile/target inputs. Other dump, local-kernel and live-KD scripts likewise require their own configured targets; running fixture suites does not replace these checks.
+
+On the intended target, compare reads with native WinDbg across process/thread changes and reconnects; check missing pages, incomplete lists, cancellation and slow symbol/engine calls. Compare IRP observations with native `!irp`, `!devstack` and `!drvobj`. Verify floating-window input, docking, DPI and accessibility on the intended desktop. The snapshot-driver sample's signing, guest loading and Driver Verifier checks are separate from extension validation. Record unperformed checks explicitly; [SUPPORT.md](SUPPORT.md) defines the supported claims.
 
 ## Publication boundary
 
-`python tools/release.py check-privacy` checks Git-tracked and visible untracked files for credential patterns, personal/build paths and raw target addresses/process IDs in Markdown. Documentation paths use generic example roots or known OS/tool installation roots; other absolute drive paths are rejected. Public text inputs must be UTF-8 without embedded NUL bytes. Diagnostics report categories, never matched values. Pattern checks cannot establish that arbitrary sensitive prose or unknown credential formats are absent; review the actual files and commit message before publication.
+`python tools/release.py check-privacy` scans tracked and visible untracked files for known credential patterns, personal/build paths and raw session addresses/process IDs in Markdown. Diagnostics print categories rather than matched values. The scan cannot establish that arbitrary sensitive prose or unknown credential formats are absent; review public files and commit messages too.
 
-Private project or customer identifiers belong in the ignored `.publication-terms.local.json`:
+Optional private project/customer terms belong in the ignored `.publication-terms.local.json`:
 
 ```json
 {"terms": ["Example Client", "private_prefix"]}
 ```
 
-Supply actual terms only locally. `check-privacy` and `package` load this file when present. Matching is case-insensitive; spaces, underscores and hyphens between configured word parts are interchangeable and may be omitted. Require a particular policy with `--private-terms-file <private-policy.local.json>`; an explicitly selected missing file, duplicate JSON key or malformed policy stops the operation. An in-checkout policy must use a recognized local-only path; an external file is also accepted. Zero reported private term rules means no private-name policy was loaded. Policies are excluded from packages and source manifests.
+`check-privacy` and `package` load this file when present. To require a particular policy, pass `--private-terms-file <private-policy.local.json>`; a missing or malformed explicit policy fails. Policies are excluded from packages and source manifests.
 
-`docs/images/` and `docs/videos/` are private raw-capture directories. Publication checks reject them even after forced tracking or deletion of an indexed file's working copy. Original screenshots, recordings, full PDBs, dumps, logs, private profiles and result exports remain local. Byte-level scans do not inspect image pixels or video frames; sanitized media requires its own content review.
+Keep full PDBs, dumps, logs, result exports, private profiles and raw media local. `docs/images/` and `docs/videos/` are reserved for private captures and rejected by publication checks, even if force-added to Git. Byte scans do not review image pixels or video frames. Cleaning the current tree does not remove older Git objects or existing archives.
 
-Packages include the extension, its required redistributed runtime, current guides, compiled-profile descriptions, dependency notices and manifests. They exclude full PDBs, raw session data and run-specific reports. The manifest fingerprints current bytes of tracked source files; it does not assert that every recorded test was rerun for that source. Cleaning current files does not remove older Git objects, existing archives or remote caches.
+`docs/screenshots/` contains the selected lab screenshots used by the README and [workspace guide](UX.md). Review visible content before adding or replacing one: omit unrelated applications, personal paths and private target information. The published examples retain their lab addresses and observed status so the workflow can be understood; they are documentation examples, not exhaustive compatibility evidence. The packager lists each image explicitly and does not collect raw captures by directory glob. Keep capture provenance, DLL hashes and additional session evidence under ignored `artifacts/`.

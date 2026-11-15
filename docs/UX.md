@@ -1,232 +1,372 @@
-# KNDbgX workspace
+# Workspace and workflows
 
-Use the workspace to run commands, inspect captured results, manage debugger context and recover operation outcomes. See [COMMANDS.md](COMMANDS.md) for syntax, [CONTEXT_DIAGNOSTICS.md](CONTEXT_DIAGNOSTICS.md) for context and symbol diagnostics, and [SUPPORT.md](SUPPORT.md) for target restrictions.
+Open the workspace with `!kndbgx`, then work in the KNDbgX window. This guide follows a live Windows 11 x64 VMware guest connected to WinDbg, using KNDbgX **0.2.0-preview.7**. The screenshots show actual captures, including incomplete results and unavailable values. Addresses and counts belong to that session; use your own target's values.
 
-The workspace combines command input, structured Results and Console output. **Inspect** contains the Processes, Memory, Disassembly and Registers views; **Row details** shows fields of the selected result row. Their visibility and width controls are independent.
+Start with [KNDbgX kernel and driver workflows](#kernel-and-driver-workflows), then explore [command discovery](#find-and-run-commands), [process inspection](#processes-tab) or [address navigation](#inspect-results). For setup, see the [README](../README.md). The [command reference](COMMANDS.md) supplies exact syntax; [support](SUPPORT.md) describes target and symbol limits.
 
-The main workspace, floating Inspect group and individual views have an 8-pixel outer inset. Overlay panels and their resize handles follow the same inset. This spacing is independent of Compact/Comfortable row density.
+## Kernel and driver workflows
 
-## Workspace defaults
+These workflows add cross-view collection, structured evidence and saved-state comparison to the debugger workspace. They run from **Library** or **Ctrl+K** and keep their results in tabs. Review **Capture info**, the result status and the original fields before drawing a conclusion.
 
-Results uses the remaining height rather than a fixed 280-pixel table. At ordinary paired-window widths, Inspect leaves at least 560 pixels for Results and Library opens as a drawer. At smaller widths, Inspect itself becomes a drawer. Console and Row details start collapsed; explicit visibility and density choices persist independently. **Windows > Restore adaptive layout** restores these defaults without changing captures or command drafts.
+- **Processes and saved evidence:** [cross-view](#compare-two-process-inventories), [handles](#inspect-process-handle-access), [snapshots](#save-and-compare-kernel-snapshots).
+- **Drivers and registrations:** [file audit](#audit-a-driver-file), [minifilters](#follow-minifilter-registrations), [dispatch and loaded images](#inspect-driver-dispatch-and-loaded-image-metadata).
+- **Memory permissions:** [VAD samples](#compare-vad-protection-with-page-samples), [page translations](#inspect-page-permissions-for-a-chosen-range), [big-pool samples](#inspect-big-pool-allocations-and-wx-samples).
+- **Kernel state and diagnostics:** [CPU state](#review-per-cpu-idt-and-control-state), [ETW coverage](#inspect-etw-logger-metadata), [diagnostic checklists](#run-a-diagnostic-checklist).
 
-The Inspect drawer follows the current process strip and stays above command input when docking a view or wrapping toolbar/context text changes the layout.
+### Compare two process inventories
 
-**Library > Pin left** keeps Library in a separate left column, including beside Inspect. The choice persists across reopening and reloads. Narrow windows temporarily use an overlay while retaining the pin preference. Unpin returns to adaptive placement; **Restore adaptive layout** also clears the pin.
+1. Stop a supported x64 kernel target and find `!hiddenproc` in the command palette.
+2. Select **Run**. On remote live KD, KNDbgX compares the target's active process list with its CID table.
+3. Compare **Observation**, the two image names, EPROCESS values and creation times. Select a row and open **Row details** for its complete records; **Export** preserves the full comparison.
 
-**Windows** lists the four inspection views, with Show/Dock actions, **Dock all views** and **Bring windows into view**. Recovery restores minimized windows and clamps them to the main workspace monitor's work area. Existing X behavior remains compatible: the group hides, while an individual view returns to its tab. The menu explains this distinction and the limits of persistence. Compact/Comfortable density preserves virtual-row selection; the menu also contains shortcut help.
+![Active process list and target CID table compared in Results](screenshots/process-cross-view.jpg)
 
-The toolbar distinguishes **Capture stack** and **Last event** reads from Results navigation. Recent captures and Open by ID share **Results menu**. **Navigate** exposes address history/bookmarks independently of Row details. **Capture info** describes the selected capture, while **Row details** describes one selected record. Empty workspaces offer supported stopped-context reads and command discovery; none runs merely because the screen opens.
+This run completed with 190 rows. The visible rows report **SameObservedIdentity**. A one-view-only row is a candidate for re-observation: process creation, teardown or PID reuse can also explain a difference. Incomplete inputs cannot establish absence, and a process missing from both views cannot be found by this comparison. Verified local KD uses a host Toolhelp comparison instead; this screenshot is from remote KD.
 
-Tool menus stay within the visible window and scroll when needed, including above Console and Inspect. Opening another tool menu, **Context details** or **Operations** dismisses the previous surface. Clicking or moving keyboard focus outside a tool menu closes it; **Escape** from within it returns focus to its toggle. Approval dialogs preserve the originating menu so cancellation can restore focus to its control.
+### Inspect process-handle access
+
+Find `!handles`, add an owner or target filter to its draft, then select **Run**. The example uses `!handles /owner-pid 4` to inspect the System process's handles. `/target-pid` narrows the destination process; use an ID observed in your current target.
+
+![Process handles with owner, destination, granted access and cross-process classification](screenshots/process-handles.jpg)
+
+The collector selects verified Process handles with VM-access rights. **Owner PID**, **Target PID**, **Granted Access** and **Cross Process** answer different questions; access rights alone do not establish that a read, write or injection occurred. Remote KD reads the target handle tables, rather than substituting the debugger host's handles.
+
+This capture retained 881 rows with **Partial** coverage and four unknown observations. Keep that qualification when using the result. Select a handle and open **Row details** to inspect its original access mask and object identity.
+
+<details>
+<summary>View the selected handle's fields</summary>
+
+![Original access mask and identity fields for a selected process handle](screenshots/handle-details.jpg)
+
+</details>
+
+### Read a collector's coverage limits
+
+Find `!ssdt` and select **Run** to inspect service-table entries when the target has verified layout and extent information. A result with no rows still needs interpretation. Open **View output** and read the collector's scope-specific gaps alongside its status.
+
+![SSDT returns Partial with explicit native-table and shadow-table coverage gaps](screenshots/ssdt-coverage.jpg)
+
+For this guest, the native table extent could not be verified, and the shadow-table descriptor/session mapping was unavailable. The result is **0 rows / Partial**, not a clean SSDT verdict. When entries can be collected, module ownership still does not prove that the service code is unchanged.
+
+### Save and compare kernel snapshots
+
+1. Stop the target, find `!snapshot` in **Library / Ctrl+K**, and fill in a new directory, for example `!snapshot "C:\captures\before"`.
+2. Select **Run** and wait for completion. Open **Capture info** to check **Artifact Committed** and the saved path. A committed bundle can still have incomplete collections; **Collection Complete** and the result status describe that separately.
+3. At the next state you want to compare, stop the target and save another snapshot to a different new directory, such as `C:\captures\after`. Existing directories are not overwritten.
+4. Find `!diff`, supply the two directories and select **Run**. The comparison appears in Results, where **Columns**, **Row details** and **Export** work as they do for live collections.
+
+![Committed snapshot bundle with incomplete collection coverage](screenshots/snapshot-save.jpg)
+
+The save result is a receipt for the bundle, not a count of captured kernel objects. Snapshot v2 stores processes, modules, callbacks, SSDT, IDT, control registers, HAL and unloaded-driver events as structured collections, with a manifest and SHA-256 checksums. It does not include raw memory. Collection is sequential and not atomic across collectors.
+
+Different session identities require the explicit `/cross-session` option:
+
+```text
+!diff "C:\captures\before" "C:\captures\after" /cross-session
+```
+
+<details>
+<summary>See the default session-identity guard</summary>
+
+![Comparison refused until cross-session intent is explicit](screenshots/snapshot-session-guard.jpg)
+
+</details>
+
+Click **State** to sort the comparison. The example retains **1,551 rows**, with **1,534 Unknown** and 17 Unchanged. A finished comparison can still be Partial because its inputs or identities are incomplete.
+
+![Snapshot comparison sorted by state, with comparable rows and unknown coverage](screenshots/snapshot-diff.jpg)
+
+The captured example spans a debugger session reinitialization. It is a cross-session comparison, not evidence that one intervening action caused every difference. Process identities and unloaded-driver events remain incomparable across sessions. Missing identities or incomplete inputs prevent unsupported Added/Removed claims; inspect **Unknown** and coverage gaps as part of the result.
+
+<details>
+<summary>Inspect the before and after records</summary>
+
+Select a row and open **Row details** to inspect **before**, **after**, their counts and **knownChanged**. Offline comparison rows do not bind their saved addresses to the current live target.
+
+![Saved before and after records in the diff row-details pane](screenshots/snapshot-diff-details.jpg)
+
+</details>
+
+### Audit a driver file
+
+Find `driver-audit` in **Library / Ctrl+K**, supply a file on the debugger host and select **Run**, for example `driver-audit "C:\evidence\driver.sys"`. No guest driver installation is required. The result separates file identity, PE metadata, mitigation declarations, section properties, imports and embedded-signature policy into rows.
+
+Use **Columns** to select the fields needed for the question, then select a row and open **Row details** for fields that do not fit the table. **FileEvidence** records the supplied path and hash; match that evidence to the target before correlating it with loaded modules.
+
+![Driver PE sections and imports with declared mitigation fields in Row details](screenshots/driver-audit.jpg)
+
+This example reads a copy of the host's `disk.sys`, producing **121 rows**. Its association with the guest's loaded driver is unverified. The selected **DriverImage** row exposes fields such as `dynamicBase`, `guardCfDeclared` and `highEntropyVa`; section and import rows remain available in the same result.
+
+PE flags are declarations in the supplied file, not proof that a mitigation is active in the running target. Embedded-signature verification uses the host's cached policy without revocation checks. It does not verify catalog signing, target kernel signing policy or trust on another machine; **NoEmbeddedSignature** does not mean that a driver lacks a valid catalog signature.
+
+<details>
+<summary>Read the embedded-signature result and its scope</summary>
+
+Select the **EmbeddedSignature** row and inspect **interpretation**, **scope**, **catalogChecked** and **revocationChecked**. This file reports **TrustedByHostPolicyWithoutRevocation**, while both of those additional checks are false.
+
+![Embedded-signature result with the host policy and unchecked scopes visible](screenshots/driver-signature.jpg)
+
+</details>
+
+### Follow minifilter registrations
+
+Run `!minifilter` from **Library / Ctrl+K**. The result combines filter identity and altitude with separate PreOperation and PostOperation records. Compare **filter**, **majorName**, **family**, **routine** and ownership fields; use **Row details** when a field is hidden from the table.
+
+![Minifilter altitude, named Pre/Post callbacks and routine ownership in one result](screenshots/minifilter-callbacks.jpg)
+
+This completed capture contains 469 rows, including filter records and operation callbacks. It is not a count of 469 filters. If symbol resolution takes time, check **Operations** and wait for a confirmed completion or cancellation before starting another collection.
+
+A null optional callback is different from an unreadable callback. Missing layouts, incomplete operation arrays and unreadable pages remain coverage gaps. A routine inside a loaded module is an ownership observation, not proof that its code is unchanged.
+
+### Inspect driver dispatch and loaded-image metadata
+
+Run `!driver` to find driver objects, then inspect an observed name or address with `!drvobj`. The example uses `!drvobj \Driver\fvevol` and completes with 34 rows covering the object, MajorFunction slots and device chain. A partial namespace walk cannot establish that an unlisted driver is absent.
+
+![Driver dispatch slots with handler symbols and module ownership](screenshots/driver-dispatch.jpg)
+
+**handler** is the dispatch address, while **ownership** describes the loaded module range containing it. Shared dispatch implementations can legitimately belong to another module.
+
+Use `!module fvevol` for the loaded image's PE identity and static section metadata. This reads target memory; `driver-audit` instead reads a supplied host file. `/disk` comparison is restricted to verified local KD and is not used for this remote guest.
+
+<details>
+<summary>Inspect the loaded image's static section flags</summary>
+
+![Target-memory PE observation with section metadata in Row details](screenshots/loaded-module.png)
+
+</details>
+
+### Compare VAD protection with page samples
+
+Select a process in **Inspect > Processes** and open **Memory (VADs)**, or find `!vad` and supply an explicit process selector. To include page-table observations, use a draft such as `!vad image:smss.exe /hiddenpte /limit 32` after confirming that image in the current inventory.
+
+Select a VAD and open **Row details**. **pageProtection** and **executableByVad** describe the VAD; **pageSamples** records the observed writable/executable bits and **vadMismatch** for sampled pages. Unavailable samples remain Unknown. This does not switch the debugger's address space.
+
+![VAD protection beside first and last page samples, including an unavailable sample](screenshots/vad-page-samples.png)
+
+This capture retains 24 VAD rows with Partial coverage and 23 unknown observations. In the selected row, one page sample is Observed and the other is Unavailable; the latter is not converted into a non-executable or unmapped verdict.
+
+`/hiddenpte` checks only the first and last pages of each VAD, up to 256 sampled pages. It does not search for every mapping outside the VAD tree. `/exec` and `/limit` control console display; the retained result and export still contain all collected VAD rows. With `/hiddenpte`, the console also shows non-executable regions for comparison.
+
+### Inspect page permissions for a chosen range
+
+Run `!kpage nt!NtOpenProcess L4` to inspect four pages starting at the page containing that symbol. The count after `L` is hexadecimal. **va**, **pa**, **dtb**, **writable** and **executable** show each translation; **error** explains a failed walk. Use the DTB from the intended process context when examining user addresses.
+
+![Four page translations with physical addresses and effective permissions](screenshots/page-permissions.jpg)
+
+All four page translations in this capture completed and reported executable, not writable. Each row is page-aligned, so its nearest symbol can differ from the expression that selected the range.
+
+These permissions come from page-table entries, unlike static PE section flags. An unavailable walk does not establish that memory is unmapped, and readable pages do not establish allocation ownership or lifetime.
+
+### Inspect big-pool allocations and W+X samples
+
+Find `!pool` and use `!pool big /wx /limit 16` to collect big-pool allocations with permission samples. Remote KD reads the target's `PoolBigPageTable` using verified layout information. Use an observed four-character, case-sensitive `/tag`, hexadecimal `/min` and `/max` byte sizes, or `/addr` to narrow matching allocations.
+
+Select a row and compare **wxObserved**, **inspectedPages**, **unavailablePages**, **skippedPages** and **rangeClassified**. `/wx` samples the first page of each matching allocation; it does not filter the result to W+X rows. `/full` requests all pages within the global time/page budget. `/limit` caps console output, not the retained rows.
+
+![Big-pool allocation samples with skipped pages and incomplete range classification](screenshots/pool-permissions.jpg)
+
+This capture retained 113 allocations before reaching its collection budget. The selected three-page allocation has one inspected page, two skipped pages and **rangeClassified: false**. Its **wxObserved: false** applies only to the inspected page. The Partial banner describes collection-wide gaps; Row details describes the selected allocation's coverage.
+
+`!payload` uses this same big-pool collector with permission sampling. A false first-page W+X sample does not clear the remaining allocation, and a true sample does not by itself establish a malicious payload. Small-pool allocations are outside this inventory.
+
+### Review per-CPU IDT and control state
+
+Run `!idt` to retain the decoded IDT gates for each available CPU. Compare **cpu**, **vector**, **present**, **validGate**, **dpl**, **routine** and ownership. The descriptor comes from PDB-verified saved processor state; the collector does not switch the debugger CPU.
+
+![IDT rows sorted by vector to compare matching handlers across two CPUs](screenshots/idt-cpu-comparison.png)
+
+Click the **Vector** heading to bring matching vectors from different CPUs together. This capture retained 368 gates with Partial status after its collection budget was reached. Matching visible handlers do not establish that every vector was inspected; check **Capture info** before drawing a coverage conclusion.
+
+Run `!cr` to view each CPU's saved CR0, CR4 and CR8 in a single result. **writeProtect**, **smep**, **smap** and **la57** decode relevant bits when values are available. Legitimate per-CPU differences and stale saved state must be considered before interpreting a difference.
+
+![Six saved control-register rows from two CPUs with decoded protection bits](screenshots/cpu-control-state.png)
+
+The six completed rows here cover three registers on each of two CPUs. **Read from: Saved CPU state** identifies the source; these rows are not a live read of every processor at the instant the table is viewed.
+
+`!msrcheck` is a separate current-event-CPU observation of LSTAR, CSTAR, STAR, FMASK and EFER. Other CPUs remain Unknown; it does not silently switch CPUs or establish hook absence.
+
+### Inspect ETW logger metadata
+
+Run `!etw` to inspect logger contexts in the target's host silo when its layout can be verified. Compare **name**, **loggerId**, **rawClock**, **clockType** and **clockRepresentation**. Integer clock selectors are decoded only with a verified profile; other values retain their raw representation.
+
+![ETW coverage gap with the unresolved storage and type relationship in saved output](screenshots/etw-coverage.jpg)
+
+On this target the collector could not verify the global storage/type relationship, so it retained zero rows, one unknown observation and Partial status. **View output** exposes that reason. This capture does not demonstrate a successful logger inventory, and an empty table does not mean that ETW is inactive.
+
+This is logger metadata, not an event trace or a system-wide ETW integrity verdict. It neither starts tracing nor substitutes the debugger host's logger list for a remote target. `etl-import` reads an existing host ETL file when recorded events are needed.
+
+### Run a diagnostic checklist
+
+Choose `diag-catalog` in **Library**, then select **Run** to browse 53 fixed diagnostic recipes, their purpose, operand and native command. Use `diagnose <recipe>` for one recipe or `triage devices` for the storage, USB and PnP checklist. Other profiles cover crash, hang, I/O, power, memory, network and WDF; WDF requires a module operand.
+
+![Diagnostic recipes with the native command and required operand visible before execution](screenshots/diagnostic-catalog.jpg)
+
+These recipes call existing WinDbg extensions. KNDbgX adds the checklist, retained step records, captured output and context-restoration status around those calls.
+
+Select a **DiagnosticStep** to see whether it was attempted, then a **HostDiagnostic** row for **engineAccepted**, **contextRestored**, **outputTruncated** and the saved output. **View output** opens the collected native text. Partial is expected for unparsed native output; engine acceptance does not prove that a native extension found complete data. Missing extensions, symbols and skipped steps remain visible.
+
+![Storage and USB diagnostic steps with restored context, followed by a skipped PnP step](screenshots/diagnostic-checklist.jpg)
+
+This run attempted storage and USB, retained both outputs with **contextRestored: true**, and skipped PnP after the step deadline. The 30-second deadline is checked between calls; an active native extension call can run longer. This run finished after about 77 seconds without a cancellation request.
+
+<details>
+<summary>Read the saved native output</summary>
+
+![USB diagnostic text retained beside the checklist, with outputTruncated false](screenshots/diagnostic-output.jpg)
+
+Drag the Row details divider to widen the text. Long field previews may end with **see raw record** even when **outputTruncated** is false. Expand **Raw record**, use **View output**, or export the result to inspect the retained text. The capture limit and the on-screen preview limit are separate.
+
+</details>
+
+### More starting points
+
+Find these entries in **Library** or **Ctrl+K**, review the inserted draft, then select **Run**. Commands that need an object address or host file leave that operand for you to supply.
+
+- **Process objects:** `!process 0`, `!threads` and `!token` provide object-level details alongside the cross-view, handle and VAD workflows above.
+- **Callbacks and device stacks:** `!callbacks` retains both Pre/Post routines for object callbacks; `!devstack` follows an observed device stack. Missing layouts or pages reduce coverage; `module+RVA` is the fallback when a verified symbol name is unavailable.
+- **Crash and I/O records:** `bugcheck` reads target bugcheck data, `irp <address>` inspects an observed IRP, and `ioctl <code>` / `ntstatus <code>` decode supplied values.
+- **Recorded evidence:** `sarif-import` and `etl-import` read existing host files. Match artifact identity to the target before correlation. ETL import does not start tracing, and imported analyzer results are not independently confirmed defects.
+- **Memory export:** `dump-raw` exports a bounded range; `dump-pe` exports a mapped PE with sections at virtual offsets, not a reconstruction of the original disk file. Unreadable requested bytes prevent publication of the output file.
+
+Use `help <command>` for operands; `jobs`, `job <id>` and `cancel <id>` provide command-based job inspection and cancellation too.
 
 ## Find and run commands
 
-Use **Find a command**, **Ctrl+K** or **Ctrl+Shift+P** to search names, aliases, syntax and recent input. Exact command names rank first. Arrow keys select an entry; Enter inserts an editable draft. Library entries and the **Kernel investigation** selector also insert drafts without executing them. Replace required operands, then press Enter or **Run**. IME composition never submits input.
+![Library, retained result tabs and Disassembly in one workspace](screenshots/workspace.jpg)
 
-Selecting a command or investigation starting point in the Library overlay closes it and focuses the command input so the draft remains visible. A docked Library stays open. Filtering, folding groups and changing favorites keep the overlay open.
+1. Open **Library** or **Find a command / Ctrl+K**. Search by name, alias or purpose; the example below searches for `callback`.
+2. Choose an entry to insert an editable draft. Fill any required operands. **Tab** completes registered syntax and loaded symbols without executing anything.
+3. Press Enter or **Run** to collect a result. The new result opens in a tab, leaving earlier captures available.
 
-Library group headers fold their commands. **Sort** selects Recommended or Name (A-Z); filtering temporarily reveals matches without replacing saved group choices. **Selected: ...** clears a hiding filter and focuses the current command. Group and sort preferences persist in the WebView profile when storage is available. Star a command to keep it in **Favorites only**. Alias search still inserts the selected alias as a draft. Input hints identify KNDbgX versus WinDbg direct routing and known preview/mode restrictions; they do not assert that an arbitrary engine command is read only.
+![Finding callback collectors without memorizing their syntax](screenshots/command-palette.jpg)
 
-**Tab** completes command names, aliases, help operands, selector prefixes and registered options. For example, `!threads et` becomes `!threads ethread:` and `!vad pid:4 /ex` becomes `!vad pid:4 /exec`. Required arguments appear as templates such as `irp <hex-address>`; Tab inserts the template and selects each field. Unresolved fields keep Run disabled, and Enter selects the next field. Completion does not invent addresses, PIDs, paths or approval tokens. Quoted/option-bearing input keeps its normal argument rules; Shift+Tab and empty input retain focus navigation.
+**Library > Investigation starting points > Kernel investigation** offers drafts for common kernel investigations. **Up/Down** selects suggestions or browses command history; returning past the newest entry restores the unfinished draft. Use `help <command>` or `help ui` for built-in help.
 
-Address operands also suggest loaded modules/symbols, for example `u nt!KeBug`. Up/Down selects and Tab completes the current operand while preserving later arguments. This works in Memory and Disassembly inputs too; selecting a suggestion never starts a read. Enter or Read does. Suggestions overlay the address input without moving its buttons. Physical-address inputs stay manual. For deferred symbols, load the needed module in WinDbg first, for example `.reload /f module.sys`.
+**Library > Pin left** keeps the Library beside Results and Inspect. Narrow windows temporarily use an overlay. Command selection closes an overlay and focuses the draft; a pinned Library stays open. Favorites, group folding and sort preferences persist when browser storage is available. **Windows > Restore adaptive layout** resets placement without clearing captures or drafts.
 
-Symbol suggestions require a current stopped context. Lookup does not evaluate expressions, reload PDBs or execute commands. All inputs share one pending request and the newest queued prefix; lookup waits 180 ms after typing, returns at most 24 entries and searches at most eight loaded modules for an unqualified prefix. Its cooperative 200 ms engine budget can be exceeded by a native call. After eight seconds the UI discards optional lookup results; that does not prove the call stopped. Required templates remain available. Escape, blur, IME, edits or changed context invalidate obsolete suggestions. Click/refocus an address input to retry an unchanged prefix after an empty or failed lookup.
-
-With completion closed, **Up/Down** browses the 200-entry command history. Returning past the newest entry restores the unfinished draft, its selection and required-argument markers. Editing a recalled command starts a new draft. Stack, Event and other toolbar actions preserve input without submitting it, including when new history entries evict the recalled entry.
-
-`command-schema` exports command definitions as JSON. Its previous spelling remains accepted for existing scripts but is omitted from the command list and completion.
-
-`help ui` or `:help` displays workspace help. `help <command-or-alias>` shows grammar and session requirements. `ln`, `uf` and `source` default to the current instruction; memory displays and `u` use their separate continuation cursors. Process/thread/token defaults and explicit selector forms are in [Omitted targets](COMMANDS.md#omitted-targets).
-
-For CI/HVCI, search `HVCI` in the Library to find `!ci` under **Kernel**, or search `/host` in the command palette. `help !ci` explains the scope, and Tab completes `!ci /h` to `!ci /host`. The registry has 126 commands and 20 aliases. Library groups aliases beneath their canonical command by default; all 146 names remain searchable. Selecting or completing a command only edits its draft.
-
-In a remote session, `!ci` shows Unsupported and directs the user to explicit `/host` inspection. A host CI query with unknown option bits shows **Partial result** and a collection notice while retaining known fields. **Capture info** identifies the host source and `NotRequested` target correlation. For `!hv`, select each row in **Row details** to see `DebuggerHost`/`DebuggerHostCpuid` versus `Debuggee`/`DebuggeeRegister`. The Current process strip describes the selected debuggee independently of those row scopes.
-
-## Status, execution and approval
-
-**Context details** explains the last observed address space, debugger thread/CPU, register/scope information, last event and capture generations separately from the selected Processes row. Opening it uses cached data; **Refresh context** requests a new status observation. External `.trap`/`.cxr` origins stay Unknown. **Symbols** provides explicit module inventory and selected-module inspection, separating PDB identity from requested type/field availability. Its reload action inserts a command draft only. See [Context, operation waits and symbol health](CONTEXT_DIAGNOSTICS.md) for failure behavior and limits.
-
-**Operations** observes active stages and elapsed times through host receipts without engine reentry. A cancellation request remains pending until execution finishes; internal wait causes remain unconfirmed. **Pause automatic inspection reads** suppresses automatic Processes/Registers/Follow IP refreshes while preserving manual reads and context checks. The preference persists and is visible in the Context button. Small Context and Operations drawers keep their close controls above scrollable content.
-
-The **Current process** strip shows the selected kernel process name, decimal PID and full EPROCESS, independently of the selected result. Values copy on click. The bounded `ImageFileName` may be shorter than a full executable name. Missing identity is Unavailable; EngineBusy retains the last checked identity with a busy label. Running/disconnected targets and non-busy status failures clear it.
-
-Status normally refreshes every three seconds while visible and idle, and every 500 ms during an execution transition. **Refresh context** requests an immediate check; it does not replace retained captures. Capture summaries label Debug target, Debugger host, Host + target or other documented sources separately from current/historical debugger context. Current context describes a retained snapshot, not a continuously live value. Initial, failed or malformed status, reopening and forwarded WinDbg commands lock target actions until valid stopped or explicit no-target status arrives. Busy preserves drafts and captures without submitting them automatically. No-target status permits debugger setup commands.
-
-The header button switches between green **Continue** and amber **Break**, including with Inspect hidden. **F5** continues from any workspace tab. **F10 / F11** step over/into while Disassembly is visible, including in its own floating window, with a KNDbgX window focused. Continue/step requires a stopped live user or remote-kernel target and no active workspace operation. Dumps, local KD and unsupported sessions cannot execute.
-
-**Break** sends an active interrupt independently of workspace **Cancel operation**. A confirmed running status enables Break even if Continue's completion receipt is delayed. **Breaking...** lasts until a fresh status confirms a stop or target change. An interrupt acknowledgement alone is not a stop. Failure or a wait exceeding ten seconds produces a message without repeating the interrupt; refresh status or inspect WinDbg before another attempt. WinDbg's own Break remains available.
-
-Registered memory changes open a complete preview with one-use approval. Plans expire after 60 seconds; memory changes are limited to 64 KiB and recheck original bytes and target/context identity. Missing, cancelled, expired or stale plans cannot apply. Partial writes report their ranges without automatic retry or rollback. Physical/MMIO writes and minifilter callback modification are disabled. `setfield` accepts only verified 1/2/4/8-byte integer/bool fields, not pointer, enum, bitfield or composite writes.
-
-There is no global Planned writes switch. Legacy `policy` / `gate` report its removal. Breakpoint Add/Delete uses explicit approval; Enable/Disable and execution buttons apply bound one-use actions on click. Those controls do not enable later memory writes.
-
-Names outside the registry entered **manually in the UI** are forwarded unchanged to WinDbg, including quotes and command separators. Examples are `.echo hello`, `.formats @rip` and qualified external extension commands. They use WinDbg's semantics and may change the target or host without a KNDbgX preview. Registered names and aliases take precedence, so malformed `db` or `eb` stays a KNDbgX error. Forwarding retains text with WinDbg provenance and invalidates cached context and approvals. CLI and jobs require explicit `raw --ack-effects` for this path.
-
-During work, the `knx>` marker shows the phase and elapsed time, including queueing, approval and output delivery. It is not a completion estimate. **Cancel operation** requests cancellation; duplicate clicks do not send repeated interrupts. **Cancellation unconfirmed** permits checking the same operation and trying Cancel operation again. Late replies cannot revive a cancelled preview or change a later operation. Completion restores the normal prompt; an unknown outcome is queried without replay.
+Registered names always use KNDbgX validation. Other commands entered manually in the UI, including `.reload` and external extension commands, go directly to WinDbg and can change the target or host without a KNDbgX preview. CLI and background jobs require `raw --ack-effects <command>` for opaque execution.
 
 ## Inspect results
 
-Each stored command result opens a tab; selecting it reads saved data without executing the command again. Tabs retain Rows/Findings selection, sorting, original row selection, columns and scroll positions. The toolbar's **Capture stack**, **Breakpoints** and **Last event** buttons open auxiliary views; **Results** returns to the active tab's command result. The retained **Inspect > Registers** panel is separate and leaves that result visible.
+Each retained result opens a tab. Double-click a tab or press F2 to rename it, drag to reorder, and use the tab menu to close tabs. **Rows / Findings**, **Capture info**, **Row details** and **View output** show the collected records, coverage, raw fields and saved console output. Selecting a tab or changing its columns/sort order uses saved data.
 
-**Stack capture** shows the captured process name, Windows PID/TID and selected CPU above the frames, including when reopening a saved `stack` / `k` result. In x64 kernel sessions it identifies the selected implicit thread and its owning process, independently of the current address space or last-event thread. User-mode captures use system IDs. Hover for engine IDs and availability details. Sorting, paging and later context changes keep the original identity; missing identity and older captures stay **Unavailable**. The same context is retained in each frame and `analysis.stackContext`. Explicit `.cxr`/`.trap` contexts can override the stack's register context, and an address space belonging to another process can prevent correct user-mode unwinding.
+Use **Columns** to keep the fields relevant to the current question. Here, Callback type, Routine / Pre and Symbol / Pre are selected. Hidden columns remain in the retained result and its export.
 
-- Double-click a label or press **F2** to rename. Enter or focus change saves, Escape cancels, and an empty name restores the command label. Names are limited to 128 UTF-16 units and do not change exports.
-- Drag labels or use **Ctrl+Shift+Left/Right** to reorder. Left/Right, Home and End select focused tabs; Delete closes one. Right-click or Shift+F10 offers Close tab, Close other tabs and Close all tabs.
-- Closing a tab releases its protection but does not immediately delete its stored result. **Results menu > Recent results** recalls up to 16 IDs seen by the document; **Open by ID** accepts a CLI result ID. Expired IDs report an error without command replay.
-- Up to 128 open tabs protect results within the shared 64 MiB budget; up to 16 unpinned recent results share that budget. If a new result cannot fit without evicting protected data, retention fails. Close tabs and export important results before unload.
+![Choosing visible columns from the retained callback result](screenshots/result-columns.jpg)
 
-**Rows** and **Findings** have separate counts and pages. Finding-only results open in Findings. **Capture info** shows status, source, consistency, coverage, stop reason, limitations and result identity. **View output** retrieves saved console text, even after Output Off; it does not rerun the command. A zero-row Partial result does not establish absence. Oversized records use `RecordReference`; Export contains their originals. Inconsistent page counts produce an error rather than a silently shortened result.
+Click a cell to copy its full value, or use its context menu for row JSON. Right-click a recognized address for **Open Memory / Open Disassembly**. Callback rows offer Routine, Pre and Post addresses separately. Navigation checks the original result and process context; historical, expired or mismatched captures cannot start target reads. Offline file and diff results do not acquire current-target address bindings.
 
-Tables choose columns from the actual records. **Columns** selects fields, restores Recommended or shows all discovered paths. Up to 96 field paths are discovered, with nested columns two components deep; deeper objects remain in Raw record and Export. Recommendations show at most nine data columns, plus an Observation summary when needed. Unknown/null, absent, zero and false remain distinct. Display ellipses never truncate copied/exported values.
+![Opening Memory or Disassembly from a collected callback address](screenshots/address-navigation.jpg)
 
-Click a header to toggle ascending/descending sort; **#** restores source order. Sorting covers the displayed collection, up to 100,000 records, loading remaining pages first. It preserves exact integer/address values and original action bindings. Unknown values remain last. A failed page load preserves the previous view. Export retains stored source order.
-
-Drag a header's right divider to resize. Keyboard Left/Right uses 16-pixel steps, Shift uses 64; Home/End selects limits, Escape cancels, double-click restores the default. **Columns > Reset widths** resets the current collection. Data columns allow 64–4,096 pixels, the row-number column 48–4,096, and breakpoint Enabled at least 160. Open tabs retain their layouts; other layouts use a bounded 32-entry document cache.
-
-**Row details** shows the selected row and Raw record. Drag its divider or use the same keyboard sizing controls. Its saved width is 240–800 pixels while leaving at least 320 pixels for Results; when Inspect leaves a compact data area, Row details opens over the table without reducing its width. Temporary constraints do not replace its preferred width. Double-click restores the responsive default. Resizing does not read the target.
-
-Right-click a recognized address cell or Row details field for **Open Memory** / **Open Disassembly**. The host resolves the source result, original row and field again at dispatch. Physical addresses, including PA zero and DTB, open Physical Memory only. Flags, offsets, RVAs, timestamps and arbitrary hex strings stay copy-only. Null/unavailable pointers, historical results, expired sources and user addresses without the matching owning process cannot start a read. Offline file/diff records do not acquire current-target bindings. Discovery is bounded to 32 addresses and four path components per record.
-
-For callbacks, **Callback address** selects Routine, Pre or Post independently, including after sorting. Object registrations keep paired Pre/Post values in one row. Not registered, Unknown and Unresolved have different meanings. Coverage gaps remain in Capture info and `analysis.diagnostics`, not blank observation rows. Verified symbols retain loaded-symbol provenance; unresolved names use module/RVA when ownership is known. Module-base names omit zero displacement. [SYMBOL_SUPPORT.md](SYMBOL_SUPPORT.md) explains loading and binding.
-
-Minifilter Major labels use `IRP_MJ_...`; Row details/export retains the numeric code. `RoutineObservation` records a callback observation, including an optional unregistered routine, and is not itself a security finding.
-
-### Shared inspection panel
-
-**Inspect / Ctrl+M** shows or hides Processes, Memory, Disassembly and Registers beside Results. First use shows Memory; saved visibility/tab/width preferences take precedence. The left divider supports pointer and keyboard resizing. Small windows use a drawer. Hiding or changing tabs retains captures and does not cancel an active read. Selecting Memory/Disassembly alone does not read the target; visible Processes and Registers collect when their context needs refreshing.
+**Inspect / Ctrl+M** opens Processes, Memory, Disassembly and Registers beside Results. **Row details** is a separate result pane. Hiding a view retains its capture; failed refreshes keep the previous data with a notice.
 
 ### Floating inspection windows
 
-The toolbar separates **Inspect** from result views and marks it with a panel icon and **DOCKABLE** badge. Its highlight indicates whether Inspect is shown; **Ctrl+M** toggles it.
+Each view's **Float** opens a separate native window. **Dock** or that window's close button returns the view to Inspect. **Float group** detaches the tab group; closing the group hides it, and **Inspect** reopens it. Independent views and the group can coexist.
 
-Each view's **Float** opens it in its own movable, resizable native window, including from the floating Inspect group. All four views and the group can stay open together. **Dock** or that individual window's **X** returns only its view to the current Inspect group, retaining drafts, filters, captured data, selection and scroll. Its tab offers **Show window** and **Dock here**; **Dock all** returns every independent view.
+![Registers in an independent native window while Memory remains docked](screenshots/floating-inspect.jpg)
 
-Independent windows have a view-specific icon and accent, a visible **Dock** button, and a bottom status strip for execution state, process, PID and session type. The floating group shares this styling, with a workspace heading, four prominent tabs and a title-bar docking hint. State labels distinguish Stopped, Running, Working, Debugger busy and unavailable status; shared feedback appears beneath them. Hover the session type for the full debugger status. In compact windows, the content scrolls beneath the fixed heading while the status strip stays visible. Docking restores the compact in-panel heading.
-
-Both individual views and **Float group** use standard Windows frames with the KNDbgX app icon, system menu, minimize/maximize buttons and resizable edges. Each has a taskbar entry for restoring a minimized window; **Show window** also restores an individual view. Windows renders the border and shadow according to the active desktop theme. Minimizing retains the document and differs from the close-button behavior described here.
-
-**Float group** detaches the tab group while any independent views stay open. **Dock / Dock Inspect** returns the group without closing those independent views; the grouped window's **X / Hide** hides it, and **Inspect** reopens it. This differs from the individual window's X, which docks that view immediately.
-
-Drag a floating window by its native Windows title bar to reveal drop guides. Release over **Dock to workspace** to return Inspect to the main window, or drop an individual view over the floating group's guide to join its tabs. If the group is floating, dropping an individual view onto the main window returns the group there as well; other independent views stay open. The guide highlights the active destination. Releasing outside a guide, cancelling the move with **Esc**, or dragging over a covering application keeps the window floating. Resizing alone does not dock it.
-
-Closing/reopening the main window hides/restores all floating views while the same document survives. Explicit shutdown, unload or document recreation starts the next workspace docked. Popup, stylesheet or native visibility failure returns an independent view to Inspect. If the floating group cannot be shown or restored, the group returns to the main workspace. Docking does not allow an older native focus reply to override the newly focused tab.
-
-Floating views share Busy/context checks, completion, Recent, copying and debugger shortcuts with the main window. A detached view remains visible when another main-window tab is selected or the docked panel is hidden. Process details still open in Results. Approval dialogs and the palette appear in the main window, temporarily hiding/disabling floating views, then restoring them. Cross-monitor DPI and physical keyboard behavior across hosts remain validation gaps.
+Drag a native title bar onto a workspace or group docking guide to dock. **Windows > Dock all views** restores the individual views; **Bring windows into view** recovers off-screen/minimized windows. Docking preserves drafts, selection, scroll positions and captured data. All windows share one debugger context and execution slot. Floating placement does not survive document recreation or DLL unload.
 
 ### Processes tab
 
-Processes collects `!dml_proc` on first use on a stopped kernel target and after a context change while visible. Search the retained inventory by image, PID or EPROCESS. Select a row for Open details, Threads, Memory (VADs), Token or Attach address space. Detail results leave the process list available; a narrow drawer hides to show Results. Hidden/inactive tabs retain their snapshots. **Refresh list** replaces a failed or expired capture.
+Open **Inspect > Processes**, select a row, then choose **Open details**, **Threads**, **Memory (VADs)** or **Token**. The screenshot shows a completed thread result for the selected process; its tab has been renamed to keep it recognizable.
 
-Click a **PID**, **Image**, **EPROCESS**, **DTB** or **Created (FILETIME)** header to sort ascending; click it again to sort descending. The arrow marks the active direction. Tab reaches each header, and Enter or Space changes its direction. Sorting covers the entire collected inventory, preserves exact 64-bit values and puts unavailable values last in either direction. Equal values keep capture order. Filtering and refresh retain the chosen sort. Sorting keeps selection and actions bound to their original processes without reading the target again.
+![A selected process and its thread capture in separate panes](screenshots/processes.jpg)
 
-The list and selected-process details share the available pane height and scroll separately. In a short window, scroll the Processes pane to reach the details; the detail area keeps a minimum usable height. Changing Compact/Comfortable density preserves the selected process and adjusts the scrolled list without reading the target again. Floating and docking retain this state.
+The kernel process inventory refreshes on first use and after context changes while visible. Search or sort by image, PID, EPROCESS, DTB and creation time. A name selector requires a complete inventory; use an observed `pid:PID` or `eprocess:ADDRESS` when collection is partial.
 
-The inventory has a 30-second shared traversal deadline and 65,536-node limit. Pending native reads can exceed that cooperative deadline. Partial/failed/cancelled collection remains explicit; failed page retrieval preserves the prior list. Filtering does not recollect. Cancel operation during page delivery does not interrupt already completed engine collection. Failed prerequisite process selection does not expose intermediate process rows as thread/VAD/token results.
-
-**Attach address space** requires a stopped x64 remote kernel or dump, readable matched identity and current source context. It rechecks process type, PID, creation time and DTB, selects the implicit process address space and verifies the result. Failed switching restores the old context; failed restoration faults the session. It does not resume, change thread/register context, reload user symbols or page memory in. Thread state can still belong to another process. User-mode/local-KD sessions cannot attach this way. `procctx` alone is a translation-DTB override, not an implicit process switch.
+Selecting a row does not switch the debugger context. **Attach address space** requires a stopped x64 remote kernel or kernel dump and readable process identity. It changes the implicit process address space after verification; it does not select another register thread/CPU, resume execution or reload user symbols. `procctx` changes the translation DTB only.
 
 ### Memory tab
 
-Enter an address, symbol or expression such as `nt!NtBuildNumber`, `nt + 0x10` or `@rip`, then use Enter or **Read**. Blank input, command separators and quotes are refused. Successful reads replace the input with the resolved address; re-enter an expression to evaluate it again.
+Open an address from a result, or enter an address, symbol or expression directly. Expand **Read options** for Virtual/Physical and byte count, then use **Read**. Display width, bytes per row and ASCII controls use the captured bytes. `??` denotes unavailable bytes.
 
-Expand **Read options** for Virtual/Physical and 64, 256 or 1,024 bytes. Virtual reads use DbgEng's selected process; a `procctx` translation override does not change them. Physical reads retain their kernel-target requirements. Display selects little-endian byte/word/dword/qword values without rereading. **Bytes / row** selects 8 or 16 and **ASCII** toggles the text column. These controls preserve bytes and selection and never initiate a read. The captured input remains in the context line/tooltip separately from the resolved range. Missing bytes are `??`; a numeric unit containing a hole has no numeric copy action. ASCII distinguishes readable nonprintable bytes from missing bytes.
+![Bytes and ASCII read from the selected callback routine](screenshots/memory.jpg)
 
-Previous/Next range moves by the captured size and refuses address wraparound. Editing address, space or size disables navigation until a successful read. Context changes preserve the original capture but require explicit refresh. Failed/cancelled reads and invalid pages retain the prior view; the UI does not periodically reread memory.
+**Read details** shows saved ranges, transferred counts and native errors without another target read. This capture read all 256 requested bytes. Readability alone does not establish pointer validity, allocation lifetime or ownership; a failed read does not establish why a page is missing.
 
-**Read details** opens the saved capture's requested range, readable/unavailable byte counts, address space, implicit process, generations and capture kind. Click a `??` cell to inspect its row, or select a row and press Enter in the grid. Enter on a readable cell keeps its copy action, including held keys. Escape or **Close** returns focus to the details toggle. The panel follows Memory into a floating window and back; ordinary status updates preserve its reading position. A failed refresh is shown separately from the previous capture it did not replace.
+<details>
+<summary>View the saved read-details panel</summary>
 
-New captures include the status, transferred count and HRESULT for each page-bounded read request. A short transfer can have a successful HRESULT, so the byte count remains independent of the error code. This follows the [DbgEng ReadVirtual documentation](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/dbgeng/nf-dbgeng-idebugdataspaces-readvirtual). Physical reads report the final result of the existing physical-read fallback path. Missing metadata from an older host, or metadata inconsistent with the bytes, is labeled unavailable; the byte view remains usable.
+![Saved memory ranges, byte counts and read context](screenshots/memory-read-details.jpg)
 
-The native capture kind and optional dump format flags are observed during the explicit memory command. The panel itself sends no RPC or target read. A failed read leaves its cause **Unknown**: it does not prove an invalid pointer, paging, a missing dump page or a wrong process. Mapping and page inclusion remain unconfirmed; dump origin (crash versus live capture) is not inferred from the generic dump kind. The panel shows saved read details; it does not run page-table or VAD diagnostics. It never runs `.pagein`, Continue or an automatic context switch.
+</details>
 
-Right-click a captured row's address for **Open Disassembly**. The action uses the original context and retained 16-byte source row, with a checked byte offset for an 8-byte display row. Offsets cannot escape the source row or overflow the address. Physical Memory cannot open Disassembly. Readable byte cells and ASCII cells remain copy-only. Expired captures do not fall back to manual reads.
+Previous/Next moves by the captured range. Editing the address, space or size requires a new successful read before range navigation. Context changes retain the previous capture as historical. Virtual reads use the debugger's selected process; a `procctx` translation override does not change that address space.
 
-Memory and Disassembly each keep up to 20 completed manual expressions in **Recent**, with at most 1,024 UTF-16 units per expression. Selecting an entry reads it in the current stopped context and current read size; Memory restores its address space. Disassembly Recent pauses Follow IP. Restoring settings never starts a read. Automatic Follow IP and breakpoint-maintenance refreshes do not enter Recent. Storage failure leaves document-local history usable; captures and target bindings are not stored in these lists.
+Memory and Disassembly each keep up to 20 completed manual expressions in **Recent**. Selecting an entry performs a new read in the current stopped context; restoring settings alone does not read memory.
 
 ### Disassembly tab
 
-Enter a virtual address/expression and choose 16, 32 or 64 instructions. **Current IP** reads `@$ip`. Rows show addresses, decoded text, verified bytes, symbols and the saved IP marker. Raw native instruction text remains in the stored result. Unreadable/invalid initial instructions are Unavailable; a decoded prefix remains Partial. `uf` retains native function text as Partial because complete function coverage is unverified.
+Enter an expression or use **Current IP**, then choose an instruction count. **Next instructions** follows the decoded boundary; **Previous view** restores a capture without rereading. Failed reads retain the previous view.
 
-**Next instructions** follows the verified decoded boundary of a complete current view. **Previous view** restores up to 16 captures without reading or guessing backward boundaries. Changed context disables Next; failed/cancelled reads retain the previous view. Right-click an instruction address for **Open Memory**, using the original row/context and current byte count. Both directions preserve Results and work docked or floating.
+![Disassembly of the callback routine opened from Results](screenshots/disassembly.jpg)
 
-**Follow IP** defaults On and remembers an explicit Off choice. A new live stop, breakpoint hit or completed step refreshes Disassembly at the actual IP without replacing Results or the command draft. A detached Disassembly view updates in its own window. If the docked Registers tab is selected, it stays selected while both views refresh; otherwise following can reveal Disassembly. Initial status establishes a baseline without an automatic read. Manual input, Next, Previous view or result-address browsing pauses following; Current IP or Follow IP enables it again. Automatic reads wait for active work and reject newer-context/Off/cancellation races. Hidden workspaces pause them; a later stop can reveal Inspect while following is enabled.
-
-At a CALL, F10 runs through its return and F11 enters the callee. Follow IP shares DbgEng with other debugger windows. Reuse within one result avoids repeated reverse symbol lookups, but pending symbol, stack or Data Model queries can still delay status and reads. Reduce unrelated automatic inspection while investigating a slow step; this does not impose a latency bound on native calls.
+**Follow IP** refreshes at new live stops. Manual browsing pauses following; Current IP or Follow IP resumes it. F10/F11 step over/into when Disassembly is visible and a KNDbgX window has focus. Symbol loading or another DbgEng operation can delay these reads.
 
 ### Registers tab
 
-Open **Inspect > Registers** for a retained register view beside Results, or use its **Float** button to keep it visible with the other inspection windows. It reads the debugger's current stopped thread/CPU context on first use and after a new stopped-context status while visible. **Refresh** requests another capture, including after a failed read. Running targets, Busy and other active workspace operations disable new reads; hidden register views wait until shown again.
+Registers refreshes on first use and at new stopped contexts while visible. Filter by name or **All / Pinned / Changed**, pin names, copy scalar values or raw vector bytes, and use **Refresh** to retry a failed capture. Changed values compare captures from the same thread/CPU context; unavailable values are never substituted with zero.
 
-Filter by register name or **All / Pinned / Changed** without reading the target. **All** places pinned registers first, preserving capture order within the pinned and remaining groups. Unpin returns a register to its position among the remaining names. Pins retain names across documents; they do not retain captured values. Scalar values and raw vector bytes preserve their exact text; unreadable values display **Unavailable**, never an invented zero. **Changed** compares successive captures only for the same session, target and process/thread/CPU context. Copy a name or value on click, or use the context menu for a value or row JSON. Replacing/filtering register rows closes their old copy menu while preserving copy menus in other views.
+![Registers with their captured CPU identity and an unavailable-value notice](screenshots/registers.jpg)
 
-The summary shows the captured process name, Windows **PID/TID** and selected **CPU**. In x64 kernel sessions the identity comes from the selected implicit thread and its owning process, independently of the selected address space. In user-mode sessions it uses Windows system IDs. Hover the summary for separate engine IDs, kernel object addresses and availability details. Missing identity stays **Unavailable**, and legacy engine IDs are never presented as Windows IDs. The identity is saved with the register capture; previous or partial captures keep their own summary. Some kernel registers remain processor-specific, and explicit `.cxr`/`.trap` contexts can override register values.
+The example is Partial because some registers are unavailable in this stopped context. Its register identity is shown independently of the workspace's selected process and address space.
 
-Running, context changes, cancellation and read/page failures preserve the last capture with a notice. Changed comparisons reset when the captured thread identity or implicit address space changes, even if the engine IDs stay the same. A failed automatic read does not loop at the same stop; use Refresh to retry. The view is read only. Process selection or **Attach address space** does not select a new register thread/CPU context.
+The summary identifies the captured process, Windows PID/TID and CPU when available. Selecting or attaching a process does not change the register thread/CPU. Running, stale or failed captures retain their own identity and notice. `registers` / `r` creates a separate command-result snapshot.
 
-Register browsing uses **Inspect > Registers**. The `registers [name]` / `r [name]` commands remain available for separate snapshots in Results, including export. They do not select or replace the retained Inspect panel.
+## Context, symbols and waits
 
-### Breakpoint management
+**Context details** separates the selected process row, implicit address space, debugger thread/CPU, scope and last event. Opening it shows cached observations; **Refresh context** requests an update. External `.trap`/`.cxr` origins can remain Unknown.
 
-1. Stop a supported live target and choose **Breakpoints** to read its list.
-2. Open **New breakpoint**, enter an expression and **Review and add** an enabled software code breakpoint through preview approval. **Delete** also needs approval. Existing data/deferred breakpoints can be managed in the list; creating them remains a WinDbg operation.
-3. Use each row's **Enable/Disable** button or the selected-row toolbar for immediate bound actions. Sorting preserves original GUID/configuration identity. Changed/reused IDs, historical rows and failed refreshes cannot apply.
-4. In Disassembly, filled/hollow BP markers show enabled/disabled code breakpoints. Click a marker or press **F9** to toggle. **+** permits an addition preview only with a complete current inventory; **?** is unknown/stale. Multiple breakpoints at one address open the list for selection.
+![Selected process, address space and debugger context shown separately](screenshots/context.jpg)
 
-**Refresh breakpoints** updates markers without decoding. Successful instruction-origin changes may reread the same instruction range; cancellation, failed inventory refresh or changed/Busy context suppresses that follow-up. An uncertain apply is never replayed: refresh before deciding on another action. Dumps/local KD/running targets cannot apply breakpoint changes.
+To inspect symbols, open **Context details > Symbols**, choose **Read modules**, select a module and use **Inspect selected module**. Type/Field are optional simple names, such as `_EPROCESS` and `UniqueProcessId`. Load state, image/PDB match and type availability are separate observations. A matching public PDB can still lack a private field. **Insert reload draft** only inserts `.reload /f <module>`; it does not execute it.
 
-A new breakpoint stop displays a persistent notification at the bottom right of the workspace. **Open Event** opens the Event view without replacing the command draft; **Dismiss** closes the notification while an unread mark stays on **Last event** until the current stop is opened. It does not take keyboard focus. The initial status is a baseline, and repeated polls or thread/symbol changes do not repeat a dismissed notification. Continue, a different stop or a target change clears it. Manual Break, single-step exceptions, dumps and local KD do not produce breakpoint-hit notifications. Notification delivery follows the workspace's status polling while visible; it is not a Windows desktop notification.
+![Kernel PDB identity and an available EPROCESS field query](screenshots/symbols.jpg)
 
-Notifications require available breakpoint-hit observation. If observation is lost, the notification is cleared; recovery establishes a new baseline without replaying the last recorded hit. Command-related stop-generation changes alone cannot create a hit notification.
+In this capture, the kernel image/PDB match is Matched and the requested field is Available. These are observations for the selected module and capture, not a guarantee for other Windows builds or types.
 
-Breakpoint notifications label **Current BP setting address** explicitly. The last-event API does not establish a reliable breakpoint stop IP, so that value remains unavailable rather than being replaced with the current register context. The setting is read by breakpoint ID at query time; it may have changed since the hit, may be a watched data address rather than an instruction, and may be unavailable after a one-shot breakpoint is removed. Exception events retain the exception-record address. The original address text remains exact when copied.
+**Operations** shows observed stages, elapsed time, cancellation state and retained outcomes. It cannot identify DbgEng's internal wait cause. **Pause automatic inspection reads** pauses Processes, Registers and Follow IP refreshes while retaining manual reads. A pending native call must return before cooperative cancellation can take effect.
 
-The last-stop card shows the target's process name, **PID**, **TID** and, for x64 kernel sessions, **CPU**. Kernel identity is read from the thread running on the event CPU and its owning process at capture; changing the selected implicit thread does not substitute that selection. This is an observation of the stopped target, not a historical process snapshot. Missing event, symbol layout or memory data stays **Unavailable**. Hover the context line for EPROCESS/ETHREAD, availability details and the separate engine process/thread IDs. In user-mode sessions the engine IDs are mapped to Windows IDs; an event thread in a different selected process remains unavailable without switching context.
+![Operations showing a pending symbol API call and earlier outcomes](screenshots/operations.jpg)
 
-**Breakpoints** and **Last event** show **Symbol** beside **Address** by default, using the existing address annotation (resolved symbol plus displacement, or module plus RVA when only module information is available). Deferred entries show their expression with a **(deferred)** suffix. The last-stop card also shows the symbol for the current breakpoint setting; that symbol does not verify the historical hit IP.
+The thread collection below was cancelled after a long native call. Its retained rows remain useful for inspection, but **Capture info** records the cancellation and incomplete coverage. Do not treat those rows as a complete inventory.
 
-**Last event** opens Event with a separate last-stop card and breakpoint settings table. The last event remains in the exported source result but is not a settings row. Paging, sorting and row actions retain original source indexes. Matching breakpoint IDs are marked; this does not prove that their settings were unchanged since the hit. Each Breakpoint row includes its address (or deferred address expression), software/hardware trigger, data access and size, `/w` condition, on-hit command text, pass counts, debugger thread restriction, one-shot and go-only flags. Select a row in Row details for all fields. Condition strings are read from WinDbg's Data Model without evaluating them; an unavailable getter is shown as **Unavailable**, separately from **None**. Command-based `.if` conditions remain in the command text. Settings describe the current inventory, not a historical snapshot at the hit; a removed one-shot breakpoint may only remain in LastEvent.
+![Capture info for a cancelled collection with retained partial rows](screenshots/coverage.jpg)
 
-### Copy values
+## Execution and changes
 
-Click a cell or Row details value to copy its full content; right-click/Shift+F10 offers value and row-JSON copying. In the grid, arrows select a row, Tab reaches its fields, and Enter/Space/Ctrl+C copies a focused field. Ctrl+C on the grid copies the selected row; ordinary selected text takes precedence. Escape returns to the grid. Copying does not execute debugger commands.
+The header's **Continue / Break** controls a supported live user or remote-kernel target. F5 continues; F9 in Disassembly toggles an existing code breakpoint or opens an addition preview. **Break** interrupts target execution; **Cancel operation** requests cancellation of workspace work. An acknowledged interrupt or cancellation is not proof of completion. Dumps and local KD cannot use target writes or execution controls.
 
-Strings copy as text; other values use JSON. Embedded NUL uses JSON string escaping. Missing fields have no copy action; a RecordReference copies the reference, so use Export for its original. If clipboard access fails, a read-only field exposes the exact text for manual Ctrl+C in the visible window. Console Copy is limited to displayed text; Clear removes only that display.
+**Breakpoints** lists current settings. Add/Delete requires preview approval; Enable/Disable applies a context-bound action on click. **Last event** is separate from the current breakpoint settings; a setting address does not establish the historical hit IP.
+
+In Disassembly, select **+** beside an instruction to open its addition preview. Check the target and operand before choosing **Add this breakpoint**. **Cancel** leaves the target unchanged. The screenshot was captured at the preview and then cancelled.
+
+![Breakpoint addition preview with explicit apply and cancel actions](screenshots/breakpoint-preview.jpg)
+
+Registered memory changes also require a complete preview and one-use approval. Plans expire after 60 seconds and recheck context and original bytes. There is no global write switch. Partial writes report their ranges without automatic retry or rollback. The [command reference](COMMANDS.md) describes memory-change plans and their operands.
+
+After **Continue**, retained results become Historical and inspection views keep their previous captures. Stop the target before making a new read; an old result does not acquire authority over the new context.
+
+![Running target with historical results and retained disassembly](screenshots/running-history.jpg)
 
 ## Export and recovery
 
-**Export** saves the complete retained result and output with completion hashes, using a temporary file and non-overwriting publication. It includes rows outside the viewport. Disk/permission failures identify the destination and Win32 code; disk-full messages include a `result-export <id> "<path>"` recovery command for another destination. Save before result eviction or unload. Success reports the path outside Console; **Capture info > Copy saved path** copies the last confirmed export path. Paths can also be copied from Operations. Files are not opened automatically.
+Select a result tab and choose **Export**. It saves the complete retained result, including rows outside the viewport and saved output, as a new JSON file under `%LOCALAPPDATA%\kndbgx\logs`. The success notice identifies the destination; **Capture info > Copy saved path** retrieves it later. The callback result illustrated above was exported and its 29 rows were verified in the saved file.
 
-Export participates in Queued/Running/Cancel operation controls. Eight seconds without a receipt triggers outcome queries, not a repeated save. Cancellation before publication leaves no final artifact; a completed publication retains its path even if cancellation arrives later. **Outcome unknown; checking** means the transport has not confirmed the result, not that execution failed.
+To choose another destination, use `result-export <result-id> "C:\captures\result.json"`; `results` lists retained IDs. A failed save reports the destination and error; retry with another writable path while the result remains retained. **Output Off** suppresses new console text without discarding retained results.
 
-**Output On / Off** controls new UI console text independently of panel collapse or stored results. Off retains existing text and Export while showing errors/outcomes outside the console. A muted or interrupted stream is not replayed when output returns; View output retrieves saved text explicitly. The console displays at most 262,144 UTF-16 units. Collection notices start with a concise expandable summary. Full errors and coverage details remain available. Ordinary confirmations disappear after five seconds; errors/warnings and result notices remain until dismissed/replaced. Dismiss changes presentation, not status or stale-action checks.
+**Operations > Refresh outcomes** queries completion records without replaying commands or saves. Open result retrieves retained content, and Copy saved path uses a confirmed export path. Missing or expired outcomes remain Unknown; inspect results/files before resubmitting an operation.
 
-## UI recovery
+Up to 16 unpinned recent results and 128 protected open-tab results share 64 MiB. Closing tabs releases protection; export important data before eviction or unload. Operation records have their own bounded lifetime and also end at DLL unload.
 
-Closing the window hides the document and preserves its draft, console, result tabs and inspection captures in the loaded extension. `!kndbgx` reopens it and waits for fresh status. Hidden workspaces pause periodic/automatic reads; already submitted work may finish. Explicit shutdown, extension unload, debugger exit or failed-document recreation releases this state. It is not a disk-backed session restore.
+Closing the main window preserves the workspace in the loaded extension; bare `!kndbgx` reopens it. `!kndbgx shutdown`, DLL unload or document recreation releases captures and tabs. Layout preferences persist separately when browser storage is available. **Retry UI** creates a fresh UI after initialization failure without replaying commands.
 
-Library layout/favorites, Inspect preferences, Row details width, Console visibility, density, register pins, Follow IP, output preference and Recent lists persist separately when browser storage is available. Malformed/unavailable settings fall back to defaults or document-local state. Floating placement and captured bytes/instructions are not persistent settings.
+## Shortcuts
 
-GPU/utility recovery may preserve a surviving document. Browser/main-renderer loss discards pending approval plans and shows the exact failure stage/HRESULT with **Retry UI**. A fresh handshake is required; commands are never replayed. There is no global write policy to restore. The native boot/handshake watchdog is 15 seconds.
-
-**Operations** opens a separate drawer containing host operation records from current/prior documents, their phases/outcomes, retained result links and saved paths. Acknowledged background status/symbol reads leave this history so polling does not displace user operations. Active or unacknowledged reads remain recoverable. It works with Console collapsed or Output Off. **Refresh outcomes** only queries receipts; it never replays work. Unavailable or mismatched receipts remain Unknown. A failed page refresh preserves the previous list and its last successful check time; an incomplete first load is labeled explicitly. At most 128 records remain in memory; completed entries become eligible for expiry after 30 minutes, and acknowledged entries may be evicted earlier under pressure. Active work never expires. Result content has its own retention budget, and records end at DLL unload. If an outcome is absent/expired, inspect saved results/files before resubmission; absence does not prove no side effect occurred.
-
-## Keyboard and layout
-
-| Shortcut | Action |
-| --- | --- |
-| Ctrl+K / Ctrl+Shift+P | Find a command |
-| Ctrl+L | Focus command input |
-| Ctrl+B / Ctrl+J / Ctrl+M | Toggle library / console / Inspect |
-| F5 | Continue a supported stopped live target |
-| F9 in Disassembly | Toggle an existing code breakpoint or preview an addition |
-| F10 / F11 with Disassembly visible | Step over / into, including with a floating view |
-| F2 on a result tab | Rename |
-| Ctrl+Shift+Left/Right on a result tab | Reorder |
-| Shift+F10 on a cell/tab | Open its context menu |
-| Escape | Dismiss transient UI or cancel an active edit/preview |
-
-Narrow layouts wrap Results controls. When docked Inspect leaves a compact data area, Row details opens over the grid; without Inspect, narrow or short windows place it below the grid. Library/console/inspection panels can be collapsed independently. Dialogs trap and restore focus. Text/icons accompany colors, and CSS supports reduced motion and forced colors. OS Narrator speech and physical contrast-theme switching remain untested.
-
-Builds run bootstrap, policy and fault frontend suites. The separate Edge suite checks product assets against fixture replies; the DbgEng harness checks owned native processes and WebView2. Use the [validation procedures](VALIDATION.md) for these checks and for separate target-specific testing.
+- Ctrl+K / Ctrl+Shift+P: find a command; Ctrl+L: focus input.
+- Ctrl+B / Ctrl+J / Ctrl+M: toggle Library, Console or Inspect.
+- F5: continue; F9: breakpoint action; F10/F11: step with Disassembly visible.
+- F2 on a result tab: rename; Ctrl+Shift+Left/Right: reorder.
+- Shift+F10: context menu; Escape: dismiss a menu or cancel an edit/preview.

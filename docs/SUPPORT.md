@@ -1,63 +1,56 @@
-# Support matrix
+# Supported sessions and limits
 
-KNDbgX targets x64 Windows debugger sessions. Use [UX.md](UX.md) for controls, [COMMANDS.md](COMMANDS.md) for command requirements and [SYMBOL_SUPPORT.md](SYMBOL_SUPPORT.md) for exact PDB/layout profiles.
+KNDbgX is an x64 preview extension. `Stable` in the command registry describes a typed command contract; it does not certify every Windows build or debugger. Kernel security collectors, field mutation and Data Model integration remain experimental. See [COMMANDS.md](COMMANDS.md) for each command's capability and session mode.
 
-`Stable` in the command registry describes a typed contract, not certification of every WinDbg, Windows build or target. All kernel security collectors, field mutation and Data Model integration remain Experimental. Run the [validation procedures](VALIDATION.md) for the intended host, target and binary.
+## Host and target requirements
 
-| Configuration or feature | Status | Requirements and limits |
-| --- | --- | --- |
-| Windows 11 x64 host and modern WinDbg x64 | Primary environment | Reference configuration: Windows build 26200.8655 and WinDbg 1.2610.1001.0. Windows SDK and Microsoft VC++ x64 runtime required; other host/debugger versions require validation |
-| Classic/system DbgEng | Unvalidated | Extension loading can fail with signature or host-policy errors; KNDbgX does not change that policy |
-| x64 user-mode target | Available | Target must be stopped for context-bound reads and supported planned mutations |
-| User minidump | Available, read-only | Missing pages and metadata remain unavailable; writes and execution controls are refused |
-| Local live kernel | Experimental, read-only | Requires local KD enabled by the operator; AttachKernel may return E_NOTIMPL. No broad positive-path claim |
-| Remote live kernel | Experimental | Transport must already be connected. `!hiddenproc` compares target active-list/CID views and `!handles` reads target handle tables using matched x64 metadata. Bounded or unreadable walks remain Partial. Other builds and real IRP/WDF/WHEA cases need separate validation |
-| x64 kernel dump | Experimental, read-only | Private-layout fallbacks require exact compiled image/PDB identities; unreadable or omitted pages reduce coverage |
-| Reconnect and reload | Context invalidation required | Old captures and approvals cannot become current merely because addresses match |
-| x64 4-/5-level paging | Experimental | Target paging mode must be known; canonicality, reserved bits and short reads are checked |
-| WOW64 and native ARM64 | Unsupported for kernel collection/mutation | x64 layout and width guards apply |
-| Matched nt/fltmgr public PDB | Metadata-dependent | Symbol addresses do not prove type availability; DIA metadata and available DbgEng metadata must agree |
-| WebView2 UI | Optional | Evergreen runtime with WebView2_4/Environment5 interfaces; source-kind filtering uses WebView2_22 when available with a capability-checked fallback. CLI remains available after UI failure |
-| Inspection windows and drag docking | Available | Shared target context and execution lease; cross-monitor DPI, physical input and accessibility require validation on the intended host |
-| Operations recovery | Bounded in-memory records | Recovery queries outcomes without replay; records expire and do not survive DLL unload |
-| Data Model publication | Experimental, optional | Requires IHostDataModelAccess; unsupported hosts retain CLI/UI results |
-| Physical/MMIO writes and minifilter callback modification | Disabled | No fallback write path |
-| Separate UI process, TTD and Replay SDK | Disabled | `features` reports Unavailable |
+Use an x64 Windows host and x64 WinDbg. Windows 11 with modern WinDbg is the primary environment; classic/system DbgEng is not broadly validated. The Microsoft VC++ x64 runtime is required. WebView2 Evergreen Runtime is needed for the optional UI; CLI remains available after UI initialization failure. Keep the bundled `runtime/dia/msdia140.dll` for PDB metadata access. The preview DLL is unsigned and does not alter host loading policy.
+
+- **Live x64 user mode:** stopped-context reads, supported planned writes, breakpoints and execution controls.
+- **User dump:** read-only inspection of available memory and metadata.
+- **Remote live x64 kernel:** experimental collection over an already connected KD transport, plus supported writes and execution controls while stopped. KNDbgX does not configure the transport.
+- **Local live kernel:** experimental, read-only. Requires operator-configured local KD; some hosts return `E_NOTIMPL` when attaching.
+- **x64 kernel dump:** experimental, read-only. Commands marked LiveKernel remain unavailable; omitted pages and metadata reduce coverage.
+- **WOW64/native ARM64:** unsupported for kernel collection and mutation. Paging support is x64 4-/5-level and requires a known target paging mode.
+- **Data Model:** optional, requiring `IHostDataModelAccess`. Unsupported hosts retain CLI/UI results.
+
+Physical/MMIO writes, minifilter callback modification, a separate UI process, TTD and Replay SDK integration are disabled. `features` reports unavailable optional features. Build and target-specific verification procedures are in [VALIDATION.md](VALIDATION.md).
+
+## Symbols and kernel profiles
+
+Kernel collection requires a matching image/PDB and validated field metadata. A public symbol address does not establish the private record's size or layout. Missing types cannot be repaired by repeatedly loading the same PDB. Available DIA and DbgEng metadata must agree; mismatches are not bypassed.
+
+The source includes these compiled fallback profiles:
+
+- NT image **26100.8655 x64**: [callbacks](../profiles/nt-26100.8655-callbacks-x64.json), [additional symbol/layout coverage](../profiles/nt-26100.8655-symbols-x64.json) and [native SSDT](../profiles/nt-26100.8655-x64.json).
+- NT image **28000.2952 x64**: [callback layouts only](../profiles/nt-28000.2952-callbacks-x64.json).
+
+These names identify kernel images, which can differ from the OS build number. Fallbacks require the exact image/PDB identity, required symbol RVAs and target code windows. Editing profile JSON does not add support: the implementation is compiled into the extension. Missing pages, changed code or contradictory metadata refuse the affected fallback. A profile match validates that layout, not whole-image integrity or another kernel version.
+
+Routine annotation can load the owning module's PDB through the current WinDbg symbol path. Verified names retain their provenance; missing or rejected names use `module+RVA` when ownership is known. A pending symbol load can delay cancellation. Use [Context details > Symbols](UX.md#context-symbols-and-waits) to inspect one module's identity and type availability.
+
+Shadow SSDT, private HAL/PiDDB/CI layouts, encoded timer DPC pointers and other missing metadata can remain unverified. Callback coverage includes declared notify, object and registry families, not every callback mechanism in Windows. Object flags are the operation mask; notify context and registry flags have different meanings.
 
 ## Interpretation limits
 
-Memory/query results distinguish failed reads from holes. `query` accepts up to 64 KiB; `da`/`du` cap reads at 4 KiB and retain malformed/unterminated data explicitly. Explicit string lengths have their own bounded-read completion rule. Address and memory actions remain bound to their captured context; see [UX.md](UX.md).
+**Partial** results may contain useful observations. Missing pages, layouts, ownership, identities or budget-limited traversal prevent a complete conclusion. An empty Partial result does not establish absence; an external routine address or cross-view difference is not proof of a hook or hidden object.
 
-The [kernel analysis commands](KERNEL_ANALYSIS.md) provide IRP/IOCTL/NTSTATUS/KASAN decoding, host diagnostic recipes, triage profiles, driver PE audits and SARIF/ETL import. Decoder/parser fixtures establish only their tested contracts. Other KD configurations and driver ETL interpretation need target-specific validation. Host-extension text remains Partial even when DbgEng accepts the command. Offline artifacts are not automatically associated with the active target; signature observations do not evaluate catalog signing, revocation or target HVCI policy.
+- `!hiddenproc` on remote live KD compares target active-list and CID views. Process creation/teardown can produce differences, and a process absent from both views is invisible to that comparison. Verified local KD uses Toolhelp for its second view.
+- `!handles` reads target process handle tables on remote live KD, requiring matched layouts and verified Process types. Verified local KD uses a host handle snapshot. Unreadable owner tables remain scoped gaps; VM-access rights alone do not prove injection.
+- `!ci` requires verified local live kernel context. `/host` explicitly inspects the debugger host from other sessions or without a target; those flags do not establish remote-target CI/HVCI state. Unknown option bits retain known fields with Partial coverage.
+- `!wfp`, `!dma` and `!byovd` require verified local KD because they use host BFE, firmware and driver-file APIs. Remote KD cannot supply those guest APIs/files.
+- `!hv` labels host CPUID separately from target CR4. ACPI table presence does not establish active DMA protection. `!cr`/`!idt` use saved processor state; `!msrcheck` reads only a verified current event processor and leaves other CPUs unavailable.
+- VAD endpoint samples and pool `/wx` first-page samples do not describe an entire allocation. A VAD display label is not verified page protection when the target mapping table is unavailable. Module disk comparisons use bounded, identity-matched samples, not a complete relocated-memory integrity check.
+- `diagnose`/`triage` retain native extension text as Partial, even if DbgEng accepts a command. `driver-audit` observes an embedded signature using host trust policy; it does not evaluate catalog signing, revocation or target signing/HVCI policy. SARIF/ETL inputs are not automatically correlated with the debuggee. ETL import does not decode arbitrary WPP payloads or infer DPC latency from unrelated events.
 
-A result may contain useful rows and still be Partial. Missing private types, inaccessible pages, a time/node budget or incomplete ownership information prevents a complete conclusion. An external address or cross-view difference is an observation requiring corroboration, not automatic proof of a hook or hidden process. No detection-rate, false-positive-rate or malware-free claim is made.
-
-`!ci` requires verified local live kernel context; remote, dump and user-mode targets cannot silently fall back to host CI. `!ci /host` explicitly reads the debugger host and records `scope=DebuggerHost` and `targetCorrelation=NotRequested`. An API failure or incompatible structure leaves values null and Unavailable; a successful query with unknown option bits retains the raw/known fields and reports Partial. Public system-information flags use a different contract from private `ci!g_CiOptions`.
-
-VAD first/last-page samples do not describe every page. An untyped public `MmProtectToValue` symbol is accepted only after a bounded read verifies all 32 entries against the supported mapping. When the target table cannot be read and verified, console output labels the raw VAD index using the standard encoding, for example index 4 as `ReadWrite`. No-access variants have no cache or guard suffix. This display fallback does not populate `pageProtection` or `executableByVad`; those remain Unknown, and the collection remains Partial. Pool `/wx` samples an allocation's first page; `/full` remains bounded by a global page budget. Module disk comparisons require matching image/PDB identity and compare bounded raw section samples, not relocated-memory integrity. Hypervisor CPUID comes from the debugger host; target CR4 is a separate nullable observation. ACPI table presence does not prove DMA protection is enabled. WNF output is decode-only.
-
-`!wfp`, `!dma` and `!byovd` still require verified local KD: their implementations use the host BFE service, host firmware API and host driver files respectively. A remote KD transport does not provide these guest APIs/files. Their refusal is a support boundary; substituting debugger-host data would misidentify the target.
-
-Native SSDT profile support is locked to the exact identity in `profiles/nt-26100.8655-x64.json`. Disk-RVA verification is separate from runtime signed-relative decoding. Checking public symbols does not replace tests that read actual kernel memory.
-
-The callback profiles, `profiles/nt-26100.8655-callbacks-x64.json` and `profiles/nt-28000.2952-callbacks-x64.json`, are compiled into the extension. Their JSON records the image identity, symbols and code used for review; editing those files does not enable another kernel. Missing notify/object metadata can be completed only after exact PDB/image identity, symbol RVA and target code-window checks succeed. Registry decoding requires a verified profile. Missing or modified code refuses the fallback. These profile checks establish layout compatibility, not whole-image integrity. Validation of a stopped inventory does not establish behavior on live registration/unregistration races, other builds or other architectures.
-
-`!callbacks` returns one row per object registration, including separate `preRoutine`/`postRoutine`, symbols and ownership observations. Object `flags` is the `OB_OPERATION` mask; notify `flags` is the observed registration context, excluding the fast-reference count; registry `flags` is the registration flags field, separate from the unregistering reference-state bit. These values have different contracts and must not be compared as a single flag namespace. Symbol annotation queries the owning module through DbgEng, triggering normal deferred PDB loading from the configured symbol path. Missing or rejected names leave `module+RVA` with `symbolSource`/`preSymbolSource`/`postSymbolSource=ModuleRva`. Cold symbol-server requests can take longer than cached lookups; cancellation is checked between queries and cannot preempt a pending native symbol load. Missing fields remain unknown. Coverage gaps, table extents and raw first-slot observations are retained in `analysis.diagnostics` and console output.
+Historical results retain their captured context. Process selection, implicit address space and register thread/CPU are separate. Context changes invalidate sensitive actions; matching numeric addresses alone cannot make an old result current.
 
 ## Resource and operational limits
 
-Build with VS 2022 C++ v143 and a Windows SDK; Node.js runs frontend tests and Python 3.11+ runs release tooling. WebView2 Evergreen and the Microsoft VC++ x64 runtime are separate prerequisites. WDK is required only for the independent driver sample.
+- **Engine work:** one execution slot per session. Native calls can outlast cooperative deadlines; Busy or CancelRequested does not mean a call has finished.
+- **Traversal:** generally 65,536 nodes and five seconds. Process inventory, callbacks and target handle scans use 30-second budgets; target CID comparison uses 120 seconds; minifilters use one 60-second traversal deadline after setup. Missing data or exhausted budgets remain Partial.
+- **Planned changes:** at most 64 KiB per memory plan, 60-second expiry and one use. Context and original bytes are rechecked; partial writes have no automatic retry or rollback. Physical writes are disabled.
+- **Retention:** up to 16 unpinned recent results and 128 protected open-tab results share 64 MiB. Up to 128 operation records remain in memory; completed records become eligible for expiry after 30 minutes, and acknowledged records may be evicted earlier. Results and receipts do not survive DLL unload.
+- **File inputs/outputs:** memory/PE export and driver PE inspection are bounded to 64 MiB. SARIF input is limited to 16 MiB. ETL input is limited to 4 GiB, with 2,048 events by default, at most 16,384 events and a cooperative ten-second processing budget. Snapshot imports are bounded to 32 files, 64 MiB and 100,000 rows.
 
-- One target execution lease; admission can return Busy. No hard latency guarantee applies to native engine calls.
-- Inspection windows share that lease and target context. Up to four independent views and one floating tab group can coexist. Title-bar dragging can dock a view into the group or return Inspect to the main workspace; cancelled and stale drag messages cannot move its contents. Placement lasts for the current document. Registers accepts at most 4,096 rows in bounded pages, rejects invalid captures and retains previous values on failure. A selected/attached process does not switch the debugger's thread/CPU register context.
-- Follow IP shares DbgEng with the host. Symbol, stack and Data Model work can delay even status queries. Result-local symbol-address reuse avoids repeated reverse lookups for the same function; it does not bypass context validation or bound an external engine-lock wait. Each new result retries unavailable bindings after symbol or target changes. Reduce unrelated automatic inspection when investigating a slow step.
-- Interactive linked walks generally stop at 65,536 visited entries or 5 seconds. Process inventory uses 30 seconds; `!minifilter` / `!fltmgr` uses one 60-second traversal deadline after layout/ownership setup, shared across all frames, filters and operation arrays. Minifilter traversal retains the 65,536-entry/row bounds, 256 operation records per filter, required end markers and cancellation. A limit, missing page or damaged list still reports Partial. Slow engine I/O can outlast a cooperative budget or cancellation request.
-- Up to 16 memory/debug-action plans, 60-second expiry; memory changes are at most 64 KiB and require a stopped supported live target. Planning verifies the write range through the debugger's virtual query, falling back to a verified page-table walk (present and effectively writable through every traversed entry) where the query is unavailable — live KD targets; verified read-only pages such as the nt PE header are refused.
-- Shared results: up to 16 unpinned recent entries plus 128 open UI-tab entries, sharing a 64 MiB serialized-result/text budget. Open tabs protect their results from eviction; closing a result tab, explicit UI shutdown or document recreation releases the claim; ordinary window closing preserves it. A result that cannot fit without evicting a protected entry reports retention failure. UI: 128-record pages for each collection, 24,000-byte page arrays, a 64 KiB ordinary bridge-reply budget, 100,000 visible records per collection and 262,144 UTF-16 console units. Export includes all stored records; save before eviction/unload.
-- Dynamic tables: up to 96 discovered field paths and 32 result/collection layouts per document. Recommendations show at most nine data columns. Each loaded batch admits command-priority fields before metadata; a full chooser keeps existing paths and reports the limit. Field names over 256 characters remain in the raw Inspector and export; nested paths stop at two components. Colliding titles include exact paths. Cell text is capped at 512 characters plus an ellipsis, with a bounded tooltip; original records remain intact. Page delivery is checked against original stored counts, independently of the display cap.
-- Symbol completion: one shared pending frontend lookup, only the newest queued prefix, at most 24 entries and eight already loaded modules for an unqualified prefix. The cooperative engine budget is 200 ms between calls; the optional frontend lookup expires after eight seconds. A slow engine call can outlast those limits, and timeout does not prove it stopped. Recent address lists hold at most 20 entries per view, with expressions of at most 1,024 UTF-16 units; malformed or oversized saved settings are ignored.
-- UI operation completion records: at most 128 records with metadata capped at 64K UTF-16 units per terminal envelope. Status replies add bounded operation metadata around that envelope. Recovery lists page 16 summaries and fetch complete records separately. Active work never expires; completed records become eligible for expiry after 30 minutes, and acknowledged completions can be evicted sooner under pressure. Records do not survive DLL unload. Missing/expired outcomes are reported as unknown without replay.
-- Snapshots: bounded to 32 files, 64 MiB and 100,000 rows; legacy import is limited to 1 MiB / 10,000 lines.
-- Unsigned preview DLL, external Microsoft VC++ runtime and WebView2 prerequisites. This package does not change host load policy or debugger configuration.
-
-Extending Stable support requires recorded OS, architecture and PDB combinations, tests on real kernels, labeled positive and negative cases, and lifecycle and performance results for each debugger host. Fixture results alone do not establish support for other configurations.
+Fixture tests do not establish compatibility with every debugger, kernel, transport, live registration race or desktop configuration. Validate the intended target and physical floating-window/DPI/accessibility behavior separately.

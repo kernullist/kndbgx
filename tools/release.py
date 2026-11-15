@@ -240,11 +240,24 @@ def package(configuration, output, private_patterns=()):
     # Full and PDBCopy-stripped PDBs can retain machine paths. Keep them local.
     files = {"kndbgx.dll": read_public_file(ROOT, "x64/Release/kndbgx.dll"),
              "runtime/dia/msdia140.dll": read_public_file(ROOT, "x64/Release/runtime/dia/msdia140.dll")}
-    for name in ("README.md", "README.ko.md", "DESIGN.md", "THIRD_PARTY_NOTICES.md",
-                 "docs/COMMANDS.md", "docs/command-contract.json", "docs/CONTEXT_DIAGNOSTICS.md",
-                 "docs/SUPPORT.md", "docs/VALIDATION.md", "docs/UX.md", "docs/KERNEL_ANALYSIS.md",
-                 "docs/SYMBOL_SUPPORT.md", "docs/acceptance-map.json",
+    for name in ("LICENSE", "README.md", "README.ko.md", "THIRD_PARTY_NOTICES.md",
+                 "docs/COMMANDS.md", "docs/command-contract.json",
+                 "docs/SUPPORT.md", "docs/VALIDATION.md", "docs/UX.md",
                  "deps/dependencies.lock.json", "deps/webview2/LICENSE.txt"):
+        files[name] = read_public_file(ROOT, name)
+    for screenshot in ("workspace.jpg", "command-palette.jpg", "result-columns.jpg",
+                       "address-navigation.jpg", "processes.jpg", "memory.jpg", "memory-read-details.jpg",
+                       "disassembly.jpg", "registers.jpg", "floating-inspect.jpg", "context.jpg",
+                       "symbols.jpg", "operations.jpg", "coverage.jpg", "breakpoint-preview.jpg",
+                       "running-history.jpg", "process-cross-view.jpg", "process-handles.jpg",
+                       "handle-details.jpg", "ssdt-coverage.jpg", "snapshot-save.jpg",
+                       "snapshot-session-guard.jpg", "snapshot-diff.jpg", "snapshot-diff-details.jpg",
+                       "driver-audit.jpg", "driver-signature.jpg", "minifilter-callbacks.jpg",
+                       "driver-dispatch.jpg", "loaded-module.png", "vad-page-samples.png",
+                       "page-permissions.jpg", "pool-permissions.jpg", "idt-cpu-comparison.png",
+                       "cpu-control-state.png", "etw-coverage.jpg", "diagnostic-catalog.jpg",
+                       "diagnostic-checklist.jpg", "diagnostic-output.jpg"):
+        name = "docs/screenshots/" + screenshot
         files[name] = read_public_file(ROOT, name)
     for profile in ("nt-26100.8655-callbacks-x64.json", "nt-26100.8655-symbols-x64.json",
                     "nt-26100.8655-x64.json", "nt-28000.2952-callbacks-x64.json"):
@@ -260,7 +273,8 @@ def package(configuration, output, private_patterns=()):
                 "claims": "Preview; kernel collectors and Data Model remain Experimental; see SUPPORT.md"}
     files["release-manifest.json"] = (json.dumps(manifest, indent=2) + "\n").encode()
     sbom = {"bomFormat": "CycloneDX", "specVersion": "1.6", "version": 1,
-            "metadata": {"component": {"type": "application", "name": "KNDbgX", "version": "0.2.0-preview.7", "bom-ref": "kndbgx"}},
+            "metadata": {"component": {"type": "application", "name": "KNDbgX", "version": "0.2.0-preview.7", "bom-ref": "kndbgx",
+                                       "licenses": [{"license": {"id": "MIT"}}], "copyright": "Copyright (c) 2026 kernullist"}},
             "components": [{"type": "library", "name": lock["package"], "version": lock["version"], "bom-ref": "webview2-sdk",
                             "purl": f"pkg:nuget/{lock['package']}@{lock['version']}", "hashes": [{"alg": "SHA-256", "content": lock["packageSha256"]}],
                             "licenses": [{"license": {"name": "Microsoft WebView2 SDK distribution license", "url": "https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.2792.45"}}]},
