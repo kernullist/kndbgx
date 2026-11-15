@@ -220,7 +220,7 @@ def source_manifest(private_patterns=()):
     for name in git_names(ROOT):
         if pathlib.PurePosixPath(name).name.lower() in ("agents.md", "agents.override.md"):
             continue
-        require_public(name, b"", ROOT, private_patterns)
+        require_public(name, None, ROOT, private_patterns)
         if not (ROOT / name).exists():
             continue
         content = read_public_file(ROOT, name)
@@ -245,21 +245,21 @@ def package(configuration, output, private_patterns=()):
                  "docs/SUPPORT.md", "docs/VALIDATION.md", "docs/UX.md",
                  "deps/dependencies.lock.json", "deps/webview2/LICENSE.txt"):
         files[name] = read_public_file(ROOT, name)
-    for screenshot in ("workspace.jpg", "command-palette.jpg", "result-columns.jpg",
-                       "address-navigation.jpg", "processes.jpg", "memory.jpg", "memory-read-details.jpg",
-                       "disassembly.jpg", "registers.jpg", "floating-inspect.jpg", "context.jpg",
-                       "symbols.jpg", "operations.jpg", "coverage.jpg", "breakpoint-preview.jpg",
-                       "running-history.jpg", "process-cross-view.jpg", "process-handles.jpg",
-                       "handle-details.jpg", "ssdt-coverage.jpg", "snapshot-save.jpg",
-                       "snapshot-session-guard.jpg", "snapshot-diff.jpg", "snapshot-diff-details.jpg",
-                       "driver-audit.jpg", "driver-signature.jpg", "minifilter-callbacks.jpg",
-                       "driver-dispatch.jpg", "loaded-module.png", "vad-page-samples.png",
-                       "page-permissions.jpg", "pool-permissions.jpg", "idt-cpu-comparison.png",
-                       "cpu-control-state.png", "etw-coverage.jpg", "diagnostic-catalog.jpg",
-                       "diagnostic-checklist.jpg", "diagnostic-output.jpg", "driver-history-coverage.jpg",
-                       "registry-hive-routines.png", "alpc-ports.jpg", "timer-coverage.jpg", "syscall-msrs.jpg",
-                       "hypervisor-sources.png", "host-code-integrity.jpg", "sarif-import.jpg", "etl-import.jpg",
-                       "wnf-decoder.jpg", "typed-layout.png"):
+    for screenshot in ("workspace.png", "command-palette.png", "result-columns.png",
+                       "address-navigation.png", "processes.png", "memory.png", "memory-read-details.png",
+                       "disassembly.png", "registers.png", "floating-inspect.png", "context.png",
+                       "symbols.png", "operations.png", "coverage.png", "breakpoint-preview.png",
+                       "running-history.png", "process-cross-view.png", "process-handles.png",
+                       "handle-details.png", "ssdt-coverage.png", "snapshot-save.png",
+                       "snapshot-session-guard.png", "snapshot-diff.png", "snapshot-diff-details.png",
+                       "driver-audit.png", "driver-signature.png", "minifilter-callbacks.png",
+                       "driver-dispatch.png", "loaded-module.png", "vad-page-samples.png",
+                       "page-permissions.png", "pool-permissions.png", "idt-cpu-comparison.png",
+                       "cpu-control-state.png", "etw-coverage.png", "diagnostic-catalog.png",
+                       "diagnostic-checklist.png", "diagnostic-output.png", "driver-history-coverage.png",
+                       "registry-hive-routines.png", "alpc-ports.png", "timer-coverage.png", "syscall-msrs.png",
+                       "hypervisor-sources.png", "host-code-integrity.png", "sarif-import.png", "etl-import.png",
+                       "wnf-decoder.png", "typed-layout.png"):
         name = "docs/screenshots/" + screenshot
         files[name] = read_public_file(ROOT, name)
     for profile in ("nt-26100.8655-callbacks-x64.json", "nt-26100.8655-symbols-x64.json",

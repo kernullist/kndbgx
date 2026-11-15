@@ -3,7 +3,9 @@
 import json
 import pathlib
 import re
+import struct
 import subprocess
+import zlib
 
 
 TEXT_SUFFIXES = {'.md', '.txt', '.json', '.py', '.ps1', '.cpp', '.h', '.hpp', '.js',
@@ -105,6 +107,131 @@ def load_private_terms(path, optional=False):
         raise ValueError('Invalid private term policy') from None
 
 
+def png_scanlines(header):
+    """Return bounded PNG pass dimensions without decoding or retaining pixels."""
+    width, height, depth, color, compression, filtering, interlace = struct.unpack('>IIBBBBB', header)
+    depths = {0: (1, 2, 4, 8, 16), 2: (8, 16), 3: (1, 2, 4, 8), 4: (8, 16), 6: (8, 16)}
+    if (not 0 < width < 2 ** 31 or not 0 < height < 2 ** 31 or depth not in depths.get(color, ())
+            or compression or filtering or interlace not in (0, 1)):
+        raise ValueError('Invalid PNG image layout')
+    bits = depth * {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[color]
+    passes = ((0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4),
+              (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)) if interlace else ((0, 0, 1, 1),)
+    rows = []
+    for x, y, dx, dy in passes:
+        if width > x and height > y:
+            columns, count = (width - x + dx - 1) // dx, (height - y + dy - 1) // dy
+            rows.append((1 + (columns * bits + 7) // 8, count))
+    if sum(stride * count for stride, count in rows) > 256 * 1024 * 1024:
+        raise ValueError('PNG decoded image limit')
+    return rows
+
+
+def validate_png_pixels(chunks, rows):
+    """Reject non-image payloads before exempting compressed raster bytes from text scans."""
+    expected = sum(stride * count for stride, count in rows)
+    decoder = zlib.decompressobj()
+    pixels = decoder.decompress(b''.join(chunks), expected + 1)
+    if len(pixels) != expected or not decoder.eof or decoder.unused_data or decoder.unconsumed_tail:
+        raise ValueError('Invalid PNG image data')
+    offset = 0
+    for stride, count in rows:
+        end = offset + stride * count
+        if any(value > 4 for value in pixels[offset:end:stride]):
+            raise ValueError('Invalid PNG scanline filter')
+        offset = end
+
+
+def png_metadata(content):
+    """Scan PNG metadata, not compressed pixels. Visible text needs separate OCR review."""
+    if not content.startswith(b'\x89PNG\r\n\x1a\n'):
+        raise ValueError('Invalid PNG signature')
+    offset = 8
+    seen_header = False
+    seen_data = False
+    seen_palette = False
+    data_closed = False
+    remaining = 4 * 1024 * 1024
+    parts = []
+    image_chunks = []
+    rows = []
+    color = None
+    depth = None
+
+    def retain(data):
+        nonlocal remaining
+        if len(data) > remaining:
+            raise ValueError('PNG metadata limit')
+        remaining -= len(data)
+        parts.append(data)
+
+    def expand(data):
+        decoder = zlib.decompressobj()
+        decoded = decoder.decompress(data, remaining + 1)
+        if len(decoded) > remaining or not decoder.eof or decoder.unused_data or decoder.unconsumed_tail:
+            raise ValueError('Invalid compressed PNG metadata')
+        retain(decoded)
+
+    while offset < len(content):
+        if len(content) - offset < 12:
+            raise ValueError('Truncated PNG chunk')
+        length = int.from_bytes(content[offset:offset + 4], 'big')
+        end = offset + length + 12
+        if end > len(content):
+            raise ValueError('PNG chunk boundary')
+        kind = content[offset + 4:offset + 8]
+        data = content[offset + 8:end - 4]
+        crc = int.from_bytes(content[end - 4:end], 'big')
+        if not re.fullmatch(b'[A-Za-z]{2}[A-Z][A-Za-z]', kind) or zlib.crc32(kind + data) != crc:
+            raise ValueError('Invalid PNG chunk')
+        if not seen_header and kind != b'IHDR':
+            raise ValueError('Missing PNG header')
+        if kind == b'IHDR':
+            if seen_header or length != 13:
+                raise ValueError('Invalid PNG header')
+            rows = png_scanlines(data)
+            depth, color = data[8:10]
+            seen_header = True
+        elif kind == b'PLTE':
+            if seen_palette or seen_data or color in (0, 4) or not 0 < length <= 768 or length % 3:
+                raise ValueError('Invalid PNG palette')
+            if color == 3 and length // 3 > 2 ** depth:
+                raise ValueError('PNG palette exceeds bit depth')
+            seen_palette = True
+        elif kind == b'IDAT':
+            if data_closed or (color == 3 and not seen_palette):
+                raise ValueError('Noncontiguous PNG image data')
+            seen_data = True
+            image_chunks.append(data)
+        elif kind == b'IEND':
+            if length or not seen_data or end != len(content):
+                raise ValueError('Invalid PNG end')
+            validate_png_pixels(image_chunks, rows)
+            return parts
+        elif kind[0] < ord('a') and kind != b'PLTE':
+            raise ValueError('Unknown PNG critical chunk')
+        if kind != b'IDAT':
+            data_closed = seen_data
+            retain(data)
+            if kind in (b'zTXt', b'iCCP'):
+                fields = data.split(b'\0', 1)
+                if len(fields) != 2 or not 1 <= len(fields[0]) <= 79 or not fields[1].startswith(b'\0'):
+                    raise ValueError('Invalid compressed PNG metadata')
+                expand(fields[1][1:])
+            elif kind == b'iTXt':
+                fields = data.split(b'\0', 1)
+                if len(fields) != 2 or not 1 <= len(fields[0]) <= 79 or len(fields[1]) < 4:
+                    raise ValueError('Invalid PNG international text')
+                flag, method = fields[1][:2]
+                text_fields = fields[1][2:].split(b'\0', 2)
+                if flag not in (0, 1) or method != 0 or len(text_fields) != 3:
+                    raise ValueError('Invalid PNG international text')
+                if flag:
+                    expand(text_fields[2])
+        offset = end
+    raise ValueError('Missing PNG end')
+
+
 def findings(name, content, root=None, private_patterns=()):
     """Return categories and line numbers only, including binary string encodings."""
     suffix = pathlib.PurePosixPath(name).suffix.lower()
@@ -117,8 +244,18 @@ def findings(name, content, root=None, private_patterns=()):
         if '\0' in texts[0]:
             return [('unreadable-text', 1)]
     else:
-        texts = [content.decode('latin-1'), content.decode('utf-16-le', errors='ignore'),
-                 content[1:].decode('utf-16-le', errors='ignore')]
+        blobs = [content]
+        if suffix == '.png':
+            try:
+                blobs = png_metadata(content)
+            except (ValueError, zlib.error):
+                return [('unreadable-image', 0)]
+        texts = []
+        for blob in blobs:
+            texts.extend((blob.decode('latin-1'), blob.decode('utf-16-le', errors='ignore'),
+                          blob[1:].decode('utf-16-le', errors='ignore')))
+            if suffix == '.png':
+                texts.append(blob.decode('utf-8', errors='ignore'))
     result = set()
     for text in texts:
         for kind, pattern in PATTERNS.items():
@@ -144,9 +281,12 @@ def findings(name, content, root=None, private_patterns=()):
 
 
 def require_public(name, content, root=None, private_patterns=()):
+    """Use None only for a path preflight; empty file content still receives format checks."""
     if private_path(name):
         raise ValueError('Private file is not a publication input')
-    issues = findings(name, content, root, private_patterns) + findings('path.txt', name.encode('utf-8'), root, private_patterns)
+    issues = findings('path.txt', name.encode('utf-8'), root, private_patterns)
+    if content is not None:
+        issues += findings(name, content, root, private_patterns)
     if issues:
         # Do not echo a possibly sensitive file name or matched value.
         raise ValueError('Publication privacy check failed: ' + ', '.join(sorted({kind for kind, _ in issues})))
@@ -176,7 +316,7 @@ def check_repository(root, private_patterns=()):
         # Agent instructions are local context and never publication metadata.
         if pathlib.PurePosixPath(name).name.lower() in ('agents.md', 'agents.override.md'):
             continue
-        require_public(name, b'', root, private_patterns)
+        require_public(name, None, root, private_patterns)
         if not (root / name).exists():
             continue
         require_public(name, read_public_file(root, name), root, private_patterns)

@@ -1,6 +1,6 @@
 # Workspace and workflows
 
-Open the workspace with `!kndbgx`, then work in the KNDbgX window. This guide follows a live Windows 11 x64 VMware guest connected to WinDbg, using KNDbgX **0.2.0-preview.7**. The screenshots show actual captures, including incomplete results and unavailable values. Host-only observations and synthetic file/decoder examples are labeled separately. Addresses and counts belong to those captures; use your own target's values.
+Open the workspace with `!kndbgx`, then work in the KNDbgX window. This guide follows a live Windows 11 x64 VMware guest connected to WinDbg, using KNDbgX **0.2.0-preview.7**. The screenshots were captured from the actual UI on 2026-11-15, including incomplete results and unavailable values. Host-only observations and synthetic file/decoder examples are labeled separately. Addresses and counts belong to those captures; use your own target's values.
 
 Start with [KNDbgX kernel and driver workflows](#kernel-and-driver-workflows), then explore [command discovery](#find-and-run-commands), [process inspection](#processes-tab) or [address navigation](#inspect-results). For setup, see the [README](../README.md). The [command reference](COMMANDS.md) supplies exact syntax; [support](SUPPORT.md) describes target and symbol limits.
 
@@ -19,15 +19,15 @@ These workflows add cross-view collection, structured evidence and saved-state c
 
 Run `!callbacks` from **Library / Ctrl+K** on a stopped, supported kernel target. Compare **Callback type**, **Routine / Pre**, **Post callback** and their symbol or module fields. Use **Columns** to expose the fields needed for the investigation and **Row details** to inspect the full record. Follow a selected Routine, Pre or Post address into **Memory** or **Disassembly**.
 
-![Kernel callback registrations beside the selected routine's disassembly](screenshots/workspace.jpg)
+![Kernel callback registrations beside the selected routine's disassembly](screenshots/workspace.png)
 
-This capture retains 29 callback rows. The collector covers declared notify, object and registry families, including both Pre/Post routines for object callbacks. It does not enumerate every Windows callback mechanism. Missing layouts, unreadable pages and unresolved ownership remain coverage gaps; a registration or owning module alone does not establish a hook or malicious code.
+This capture retains 28 callback rows. The collector covers declared notify, object and registry families, including both Pre/Post routines for object callbacks. It does not enumerate every Windows callback mechanism. Missing layouts, unreadable pages and unresolved ownership remain coverage gaps; a registration or owning module alone does not establish a hook or malicious code.
 
 ### Follow minifilter registrations
 
 Run `!minifilter` from **Library / Ctrl+K**. The result combines filter identity and altitude with separate PreOperation and PostOperation records. Compare **filter**, **majorName**, **family**, **routine** and ownership fields; use **Row details** when a field is hidden from the table.
 
-![Minifilter altitude, named Pre/Post callbacks and routine ownership in one result](screenshots/minifilter-callbacks.jpg)
+![Minifilter altitude, named Pre/Post callbacks and routine ownership in one result](screenshots/minifilter-callbacks.png)
 
 This completed capture contains 469 rows, including filter records and operation callbacks. It is not a count of 469 filters. If symbol resolution takes time, check **Operations** and wait for a confirmed completion or cancellation before starting another collection.
 
@@ -40,7 +40,7 @@ A null optional callback is different from an unreadable callback. Missing layou
 3. Read **Total**, **Matched**, **Mismatch candidates** and **Indeterminate** in the result header before inspecting individual rows.
 4. Compare **Observation**, the two image names, EPROCESS values and creation times. Select a row and open **Row details** for its complete records; **Export** preserves the full comparison.
 
-![Process cross-view with separate total, matched, mismatch candidate and indeterminate counts](screenshots/process-cross-view.jpg)
+![Process cross-view with separate total, matched, mismatch candidate and indeterminate counts](screenshots/process-cross-view.png)
 
 This live VMware capture completed with **Total 88 / Matched 88 / Mismatch candidates 0 / Indeterminate 0**. All 88 rows report **SameObservedIdentity**; the active-list and CID entries agree on EPROCESS and creation time. Total includes matching processes and is not a hidden-process count.
 
@@ -52,16 +52,16 @@ Counts describe collected rows. Incomplete inputs cannot establish absence, and 
 
 Find `!handles`, add an owner or target filter to its draft, then select **Run**. The example uses `!handles /owner-pid 4` to inspect the System process's handles. `/target-pid` narrows the destination process; use an ID observed in your current target.
 
-![Process handles with owner, destination, granted access and cross-process classification](screenshots/process-handles.jpg)
+![Process handles with owner, destination, granted access and cross-process classification](screenshots/process-handles.png)
 
 The collector selects verified Process handles with VM-access rights. **Owner PID**, **Target PID**, **Granted Access** and **Cross Process** answer different questions; access rights alone do not establish that a read, write or injection occurred. Remote KD reads the target handle tables, rather than substituting the debugger host's handles.
 
-This capture retained 881 rows with **Partial** coverage and four unknown observations. Keep that qualification when using the result. Select a handle and open **Row details** to inspect its original access mask and object identity.
+This capture completed with **437 rows** for Process handles owned by System. Its owner filter limits the scope; it is not an inventory of every process handle on the system. Select a handle and open **Row details** to inspect its original access mask and object identity.
 
 <details>
 <summary>View the selected handle's fields</summary>
 
-![Original access mask and identity fields for a selected process handle](screenshots/handle-details.jpg)
+![Original access mask and identity fields for a selected process handle](screenshots/handle-details.png)
 
 </details>
 
@@ -69,7 +69,7 @@ This capture retained 881 rows with **Partial** coverage and four unknown observ
 
 Find `!ssdt` and select **Run** to inspect service-table entries when the target has verified layout and extent information. A result with no rows still needs interpretation. Open **View output** and read the collector's scope-specific gaps alongside its status.
 
-![SSDT returns Partial with explicit native-table and shadow-table coverage gaps](screenshots/ssdt-coverage.jpg)
+![SSDT returns Partial with explicit native-table and shadow-table coverage gaps](screenshots/ssdt-coverage.png)
 
 For this guest, the native table extent could not be verified, and the shadow-table descriptor/session mapping was unavailable. The result is **0 rows / Partial**, not a clean SSDT verdict. When entries can be collected, module ownership still does not prove that the service code is unchanged.
 
@@ -80,7 +80,7 @@ For this guest, the native table extent could not be verified, and the shadow-ta
 3. At the next state you want to compare, stop the target and save another snapshot to a different new directory, such as `C:\captures\after`. Existing directories are not overwritten.
 4. Find `!diff`, supply the two directories and select **Run**. The comparison appears in Results, where **Columns**, **Row details** and **Export** work as they do for live collections.
 
-![Committed snapshot bundle with incomplete collection coverage](screenshots/snapshot-save.jpg)
+![Committed snapshot bundle with incomplete collection coverage](screenshots/snapshot-save.png)
 
 The save result is a receipt for the bundle, not a count of captured kernel objects. Snapshot v2 stores processes, modules, callbacks, SSDT, IDT, control registers, HAL and unloaded-driver events as structured collections, with a manifest and SHA-256 checksums. It does not include raw memory. Collection is sequential and not atomic across collectors.
 
@@ -93,22 +93,22 @@ Different session identities require the explicit `/cross-session` option:
 <details>
 <summary>See the default session-identity guard</summary>
 
-![Comparison refused until cross-session intent is explicit](screenshots/snapshot-session-guard.jpg)
+![Comparison refused until cross-session intent is explicit](screenshots/snapshot-session-guard.png)
 
 </details>
 
 Click **State** to sort the comparison. The example retains **1,551 rows**, with **1,534 Unknown** and 17 Unchanged. A finished comparison can still be Partial because its inputs or identities are incomplete.
 
-![Snapshot comparison sorted by state, with comparable rows and unknown coverage](screenshots/snapshot-diff.jpg)
+![Snapshot comparison sorted by state, with comparable rows and unknown coverage](screenshots/snapshot-diff.png)
 
-The captured example spans a debugger session reinitialization. It is a cross-session comparison, not evidence that one intervening action caused every difference. Process identities and unloaded-driver events remain incomparable across sessions. Missing identities or incomplete inputs prevent unsupported Added/Removed claims; inspect **Unknown** and coverage gaps as part of the result.
+The comparison screenshots reopen an earlier pair of saved bundles, separate from the new save shown above. That pair spans a debugger session reinitialization. It is a cross-session comparison, not evidence that one intervening action caused every difference. Process identities and unloaded-driver events remain incomparable across sessions. Missing identities or incomplete inputs prevent unsupported Added/Removed claims; inspect **Unknown** and coverage gaps as part of the result.
 
 <details>
 <summary>Inspect the before and after records</summary>
 
 Select a row and open **Row details** to inspect **before**, **after**, their counts and **knownChanged**. Offline comparison rows do not bind their saved addresses to the current live target.
 
-![Saved before and after records in the diff row-details pane](screenshots/snapshot-diff-details.jpg)
+![Saved before and after records in the diff row-details pane](screenshots/snapshot-diff-details.png)
 
 </details>
 
@@ -118,7 +118,7 @@ Find `driver-audit` in **Library / Ctrl+K**, supply a file on the debugger host 
 
 Use **Columns** to select the fields needed for the question, then select a row and open **Row details** for fields that do not fit the table. **FileEvidence** records the supplied path and hash; match that evidence to the target before correlating it with loaded modules.
 
-![Driver PE sections and imports with declared mitigation fields in Row details](screenshots/driver-audit.jpg)
+![Driver PE sections and imports with declared mitigation fields in Row details](screenshots/driver-audit.png)
 
 This example reads a copy of the host's `disk.sys`, producing **121 rows**. Its association with the guest's loaded driver is unverified. The selected **DriverImage** row exposes fields such as `dynamicBase`, `guardCfDeclared` and `highEntropyVa`; section and import rows remain available in the same result.
 
@@ -129,7 +129,7 @@ PE flags are declarations in the supplied file, not proof that a mitigation is a
 
 Select the **EmbeddedSignature** row and inspect **interpretation**, **scope**, **catalogChecked** and **revocationChecked**. This file reports **TrustedByHostPolicyWithoutRevocation**, while both of those additional checks are false.
 
-![Embedded-signature result with the host policy and unchecked scopes visible](screenshots/driver-signature.jpg)
+![Embedded-signature result with the host policy and unchecked scopes visible](screenshots/driver-signature.png)
 
 </details>
 
@@ -137,7 +137,7 @@ Select the **EmbeddedSignature** row and inspect **interpretation**, **scope**, 
 
 Run `!driver` to find driver objects, then inspect an observed name or address with `!drvobj`. The example uses `!drvobj \Driver\fvevol` and completes with 34 rows covering the object, MajorFunction slots and device chain. A partial namespace walk cannot establish that an unlisted driver is absent.
 
-![Driver dispatch slots with handler symbols and module ownership](screenshots/driver-dispatch.jpg)
+![Driver dispatch slots with handler symbols and module ownership](screenshots/driver-dispatch.png)
 
 **handler** is the dispatch address, while **ownership** describes the loaded module range containing it. Shared dispatch implementations can legitimately belong to another module.
 
@@ -166,7 +166,7 @@ This capture retains 24 VAD rows with Partial coverage and 23 unknown observatio
 
 Run `!kpage nt!NtOpenProcess L4` to inspect four pages starting at the page containing that symbol. The count after `L` is hexadecimal. **va**, **pa**, **dtb**, **writable** and **executable** show each translation; **error** explains a failed walk. Use the DTB from the intended process context when examining user addresses.
 
-![Four page translations with physical addresses and effective permissions](screenshots/page-permissions.jpg)
+![Four page translations with physical addresses and effective permissions](screenshots/page-permissions.png)
 
 All four page translations in this capture completed and reported executable, not writable. Each row is page-aligned, so its nearest symbol can differ from the expression that selected the range.
 
@@ -178,9 +178,9 @@ Find `!pool` and use `!pool big /wx /limit 16` to collect big-pool allocations w
 
 Select a row and compare **wxObserved**, **inspectedPages**, **unavailablePages**, **skippedPages** and **rangeClassified**. `/wx` samples the first page of each matching allocation; it does not filter the result to W+X rows. `/full` requests all pages within the global time/page budget. `/limit` caps console output, not the retained rows.
 
-![Big-pool allocation samples with skipped pages and incomplete range classification](screenshots/pool-permissions.jpg)
+![Big-pool allocation samples with skipped pages and incomplete range classification](screenshots/pool-permissions.png)
 
-This capture retained 113 allocations before reaching its collection budget. The selected three-page allocation has one inspected page, two skipped pages and **rangeClassified: false**. Its **wxObserved: false** applies only to the inspected page. The Partial banner describes collection-wide gaps; Row details describes the selected allocation's coverage.
+This capture retained 73 allocations before reaching its collection budget. The selected three-page allocation has one inspected page, two skipped pages and **rangeClassified: false**. Its **wxObserved: false** applies only to the inspected page. The Partial banner describes collection-wide gaps; Row details describes the selected allocation's coverage.
 
 `!payload` uses this same big-pool collector with permission sampling. A false first-page W+X sample does not clear the remaining allocation, and a true sample does not by itself establish a malicious payload. Small-pool allocations are outside this inventory.
 
@@ -190,7 +190,7 @@ Run `!idt` to retain the decoded IDT gates for each available CPU. Compare **cpu
 
 ![IDT rows sorted by vector to compare matching handlers across two CPUs](screenshots/idt-cpu-comparison.png)
 
-Click the **Vector** heading to bring matching vectors from different CPUs together. This capture retained 368 gates with Partial status after its collection budget was reached. Matching visible handlers do not establish that every vector was inspected; check **Capture info** before drawing a coverage conclusion.
+Click the **Vector** heading to bring matching vectors from different CPUs together. This capture retained 451 gates with Partial status after its collection budget was reached. Matching visible handlers do not establish that every vector was inspected; check **Capture info** before drawing a coverage conclusion.
 
 Run `!cr` to view each CPU's saved CR0, CR4 and CR8 in a single result. **writeProtect**, **smep**, **smap** and **la57** decode relevant bits when values are available. Legitimate per-CPU differences and stale saved state must be considered before interpreting a difference.
 
@@ -200,7 +200,7 @@ The six completed rows here cover three registers on each of two CPUs. **Read fr
 
 `!msrcheck` is a separate current-event-CPU observation of LSTAR, CSTAR, STAR, FMASK and EFER. Other CPUs remain Unknown; it does not silently switch CPUs or establish hook absence.
 
-![Five observed MSRs on CPU 0 and five unknown values on CPU 1](screenshots/syscall-msrs.jpg)
+![Five observed MSRs on CPU 0 and five unknown values on CPU 1](screenshots/syscall-msrs.png)
 
 This later capture has ten rows and five unknown observations. **Read from** identifies Event CPU (MSR); **Why unavailable** explains the unread CPU. It is not a comparison of observed MSRs across all CPUs.
 
@@ -208,7 +208,7 @@ This later capture has ten rows and five unknown observations. **Read from** ide
 
 Run `!etw` to inspect logger contexts in the target's host silo when its layout can be verified. Compare **name**, **loggerId**, **rawClock**, **clockType** and **clockRepresentation**. Integer clock selectors are decoded only with a verified profile; other values retain their raw representation.
 
-![ETW coverage gap with the unresolved storage and type relationship in saved output](screenshots/etw-coverage.jpg)
+![ETW coverage gap with the unresolved storage and type relationship in saved output](screenshots/etw-coverage.png)
 
 On this target the collector could not verify the global storage/type relationship, so it retained zero rows, one unknown observation and Partial status. **View output** exposes that reason. This capture does not demonstrate a successful logger inventory, and an empty table does not mean that ETW is inactive.
 
@@ -218,20 +218,20 @@ This is logger metadata, not an event trace or a system-wide ETW integrity verdi
 
 Choose `diag-catalog` in **Library**, then select **Run** to browse 53 fixed diagnostic recipes, their purpose, operand and native command. Use `diagnose <recipe>` for one recipe or `triage devices` for the storage, USB and PnP checklist. Other profiles cover crash, hang, I/O, power, memory, network and WDF; WDF requires a module operand.
 
-![Diagnostic recipes with the native command and required operand visible before execution](screenshots/diagnostic-catalog.jpg)
+![Diagnostic recipes with the native command and required operand visible before execution](screenshots/diagnostic-catalog.png)
 
 These recipes call existing WinDbg extensions. KNDbgX adds the checklist, retained step records, captured output and context-restoration status around those calls.
 
 Select a **DiagnosticStep** to see whether it was attempted, then a **HostDiagnostic** row for **engineAccepted**, **contextRestored**, **outputTruncated** and the saved output. **View output** opens the collected native text. Partial is expected for unparsed native output; engine acceptance does not prove that a native extension found complete data. Missing extensions, symbols and skipped steps remain visible.
 
-![Storage and USB diagnostic steps with restored context, followed by a skipped PnP step](screenshots/diagnostic-checklist.jpg)
+![Storage and USB diagnostic steps with restored context, followed by a skipped PnP step](screenshots/diagnostic-checklist.png)
 
-This run attempted storage and USB, retained both outputs with **contextRestored: true**, and skipped PnP after the step deadline. The 30-second deadline is checked between calls; an active native extension call can run longer. This run finished after about 77 seconds without a cancellation request.
+This run attempted storage and USB, retained both outputs with **contextRestored: true**, and skipped PnP after the step deadline. The 30-second deadline is checked between calls; an active native extension call can run longer. No cancellation was requested in this run.
 
 <details>
 <summary>Read the saved native output</summary>
 
-![USB diagnostic text retained beside the checklist, with outputTruncated false](screenshots/diagnostic-output.jpg)
+![USB diagnostic text retained beside the checklist with its interpretation limit](screenshots/diagnostic-output.png)
 
 Drag the Row details divider to widen the text. Long field previews may end with **see raw record** even when **outputTruncated** is false. Expand **Raw record**, use **View output**, or export the result to inspect the retained text. The capture limit and the on-screen preview limit are separate.
 
@@ -243,7 +243,7 @@ Drag the Row details divider to widen the text. Long field previews may end with
 2. Read each child collection's **Command ID**, **Status**, **Coverage / Complete** and stop reason. The outer rows represent collections, not individual drivers.
 3. Run a child command separately for its own table. Open **Row details / Raw record** or export the composite result to inspect nested evidence.
 
-![Composite driver-history collections and an oversized nested record](screenshots/driver-history-coverage.jpg)
+![Composite driver-history collections and an oversized nested record](screenshots/driver-history-coverage.png)
 
 The three-row screenshot is Partial. Unloaded-driver and CI field/ownership metadata remain unverified on this guest. The PiDDB child exceeds the UI page budget and is replaced by an export notice in that page; this is a display limit, not evidence that its retained result is empty. Export reads the full retained result while it remains available.
 
@@ -257,7 +257,7 @@ Run `!hive` to inspect the target hive list's `GetCellRoutine` pointers. Compare
 
 Run `!alpc`, select a row and enable **Row details**. Read the port address, connection port, namespace depth and **owner** object, including PID, image, EPROCESS and creation time when available.
 
-![An ALPC port's connection and owner identity](screenshots/alpc-ports.jpg)
+![An ALPC port's connection and owner identity](screenshots/alpc-ports.png)
 
 This namespace walk retained nine ports before reaching its budget. Ports outside the walked namespace and unreadable fields are not covered. An unresolved symbol for an object address does not by itself indicate corruption; use its typed fields and coverage.
 
@@ -267,9 +267,9 @@ Related commands cover other registrations: `!nmi` walks the NMI callback chain,
 
 Run `!dpc` for per-CPU DPC queues, or `!timer` for per-CPU timer-table entries. Compare **CPU**, **Queue**, **Routine** and **Decode**, then read the queue totals in the coverage banner or Capture info.
 
-![Timer records with explicit queue totals and unavailable DPC decoding](screenshots/timer-coverage.jpg)
+![Timer records with explicit queue totals and unavailable DPC decoding](screenshots/timer-coverage.png)
 
-This timer capture retained 108 rows and 108 unknown observations. Only 408 of 1,024 queues were fully read before its budget expired. Encoded timer DPC pointers are not treated as decoded routine addresses without a verified representation. The separate DPC run completed with zero rows at this stop; it is only an observation of the declared queues. Active or completed work outside those transient queues is not covered, and neither command measures DPC latency.
+This timer capture retained 189 rows and 189 unknown observations. All 1,024 queues were fully read, but unavailable routine decoding keeps the result Partial. Encoded timer DPC pointers are not treated as decoded routine addresses without a verified representation. Active or completed work outside those transient queues is not covered, and neither command measures DPC latency.
 
 ### Distinguish host and target security state
 
@@ -279,7 +279,7 @@ Run `!hv`, then compare the **Kind** and source fields before interpreting the v
 
 Run `!ci /host` only when you intend to inspect the debugger host. It reports public CI/HVCI options, raw bits and query status. Without `/host`, `!ci` requires verified local live kernel context. Current flags do not establish enforcement history or whole-system integrity; unknown option bits preserve Partial coverage.
 
-![Public CI and HVCI flags explicitly queried from the debugger host](screenshots/host-code-integrity.jpg)
+![Public CI and HVCI flags explicitly queried from the debugger host](screenshots/host-code-integrity.png)
 
 The following commands require **verified local KD**, so they are not demonstrated as guest collections in this remote-KD session:
 
@@ -306,13 +306,13 @@ Missing/invalid catalogs are unavailable or rejected, not silently treated as an
 2. Select a **StaticFinding** and open **Row details** for rule ID, level, message, location and raw result.
 3. Inspect **SarifRun** and **FileEvidence** rows for provenance before correlating any result with the current target.
 
-![Synthetic SARIF finding and its original fields](screenshots/sarif-import.jpg)
+![Synthetic SARIF finding and its original fields](screenshots/sarif-import.png)
 
 The screenshot uses a documentation-only SARIF 2.1.0 fixture with one note at `example/driver.cpp:42`, producing three rows: run, static finding and file evidence. The message explicitly says it is synthetic. These are imported analyzer claims, not independently verified defects. Inputs are limited to 16 MiB; external SARIF properties are not fetched.
 
 Run `etl-import "C:\evidence\trace.etl" 2048` for event headers, provider metadata and bounded payload previews. Select an **EtwEvent** and check **metadataAvailable**, **metadataStatus**, provider identity and timestamp. The final **EtlSummary** describes the import.
 
-![Owned synthetic ETL events with missing provider metadata retained explicitly](screenshots/etl-import.jpg)
+![Owned synthetic ETL events with missing provider metadata retained explicitly](screenshots/etl-import.png)
 
 This screenshot imports an existing owned synthetic trace with a limit of eight, retaining five event rows and a summary. Three events lack provider metadata, so the result is Partial. It is not a trace of the current guest, and the recorded PIDs/timestamps must not be correlated with it automatically.
 
@@ -324,7 +324,7 @@ Use `ioctl 222004` to decode CTL_CODE fields, `ntstatus c0000005` for severity/f
 
 Run `!wnf 41c64e6da3bc0875` for a synthetic WNF example. The input was constructed to decode version 1, lifetime 0, scope 0 and sequence 1.
 
-![Synthetic WNF state-name decoding](screenshots/wnf-decoder.jpg)
+![Synthetic WNF state-name decoding](screenshots/wnf-decoder.png)
 
 This is a name decoder only. No live state payload, subscription list, access policy or security property is collected. Unknown encoding versions/scopes remain Partial. Decoder results can be retained/exported like other results without implying target evidence.
 
@@ -356,7 +356,7 @@ Use `help <command>` for operands; `jobs`, `job <id>` and `cancel <id>` provide 
 2. Choose an entry to insert an editable draft. Fill any required operands. **Tab** completes registered syntax and loaded symbols without executing anything.
 3. Press Enter or **Run** to collect a result. The new result opens in a tab, leaving earlier captures available.
 
-![Finding callback collectors without memorizing their syntax](screenshots/command-palette.jpg)
+![Finding callback collectors without memorizing their syntax](screenshots/command-palette.png)
 
 **Library > Investigation starting points > Kernel investigation** offers drafts for common kernel investigations. **Up/Down** selects suggestions or browses command history; returning past the newest entry restores the unfinished draft. Use `help <command>` or `help ui` for built-in help.
 
@@ -370,11 +370,11 @@ Each retained result opens a tab. Double-click a tab or press F2 to rename it, d
 
 Use **Columns** to keep the fields relevant to the current question. Here, Callback type, Routine / Pre and Symbol / Pre are selected. Hidden columns remain in the retained result and its export.
 
-![Choosing visible columns from the retained callback result](screenshots/result-columns.jpg)
+![Retained callback result showing three selected columns](screenshots/result-columns.png)
 
-Click a cell to copy its full value, or use its context menu for row JSON. Right-click a recognized address for **Open Memory / Open Disassembly**. Callback rows offer Routine, Pre and Post addresses separately. Navigation checks the original result and process context; historical, expired or mismatched captures cannot start target reads. Offline file and diff results do not acquire current-target address bindings.
+Click a cell to copy its full value, or use its context menu for row JSON. Select a row and open **Row details** for **Open Memory / Disassemble**, as shown below. Recognized addresses also offer **Open Memory / Open Disassembly** on right-click. Callback rows offer Routine, Pre and Post addresses separately. Navigation checks the original result and process context; historical, expired or mismatched captures cannot start target reads. Offline file and diff results do not acquire current-target address bindings.
 
-![Opening Memory or Disassembly from a collected callback address](screenshots/address-navigation.jpg)
+![Opening Memory or Disassembly from a collected callback address](screenshots/address-navigation.png)
 
 **Inspect / Ctrl+M** opens Processes, Memory, Disassembly and Registers beside Results. **Row details** is a separate result pane. Hiding a view retains its capture; failed refreshes keep the previous data with a notice.
 
@@ -382,15 +382,15 @@ Click a cell to copy its full value, or use its context menu for row JSON. Right
 
 Each view's **Float** opens a separate native window. **Dock** or that window's close button returns the view to Inspect. **Float group** detaches the tab group; closing the group hides it, and **Inspect** reopens it. Independent views and the group can coexist.
 
-![Registers in an independent native window while Memory remains docked](screenshots/floating-inspect.jpg)
+![Registers in an independent native window while Memory remains docked](screenshots/floating-inspect.png)
 
 Drag a native title bar onto a workspace or group docking guide to dock. **Windows > Dock all views** restores the individual views; **Bring windows into view** recovers off-screen/minimized windows. Docking preserves drafts, selection, scroll positions and captured data. All windows share one debugger context and execution slot. Floating placement does not survive document recreation or DLL unload.
 
 ### Processes tab
 
-Open **Inspect > Processes**, select a row, then choose **Open details**, **Threads**, **Memory (VADs)** or **Token**. The screenshot shows a completed thread result for the selected process; its tab has been renamed to keep it recognizable.
+Open **Inspect > Processes**, select a row, then choose **Open details**, **Threads**, **Memory (VADs)** or **Token**. The screenshot shows four completed thread rows for the selected smss.exe process, alongside the 88-process inventory. The result tab keeps the executed command; double-click it to assign a shorter name.
 
-![A selected process and its thread capture in separate panes](screenshots/processes.jpg)
+![A selected process and its thread capture in separate panes](screenshots/processes.png)
 
 The kernel process inventory refreshes on first use and after context changes while visible. Search or sort by image, PID, EPROCESS, DTB and creation time. A name selector requires a complete inventory; use an observed `pid:PID` or `eprocess:ADDRESS` when collection is partial.
 
@@ -400,14 +400,14 @@ Selecting a row does not switch the debugger context. **Attach address space** r
 
 Open an address from a result, or enter an address, symbol or expression directly. Expand **Read options** for Virtual/Physical and byte count, then use **Read**. Display width, bytes per row and ASCII controls use the captured bytes. `??` denotes unavailable bytes.
 
-![Bytes and ASCII read from the selected callback routine](screenshots/memory.jpg)
+![Bytes and ASCII read from the selected callback routine](screenshots/memory.png)
 
 **Read details** shows saved ranges, transferred counts and native errors without another target read. This capture read all 256 requested bytes. Readability alone does not establish pointer validity, allocation lifetime or ownership; a failed read does not establish why a page is missing.
 
 <details>
 <summary>View the saved read-details panel</summary>
 
-![Saved memory ranges, byte counts and read context](screenshots/memory-read-details.jpg)
+![Saved memory ranges, byte counts and read context](screenshots/memory-read-details.png)
 
 </details>
 
@@ -419,7 +419,7 @@ Memory and Disassembly each keep up to 20 completed manual expressions in **Rece
 
 Enter an expression or use **Current IP**, then choose an instruction count. **Next instructions** follows the decoded boundary; **Previous view** restores a capture without rereading. Failed reads retain the previous view.
 
-![Disassembly of the callback routine opened from Results](screenshots/disassembly.jpg)
+![Disassembly of the callback routine opened from Results](screenshots/disassembly.png)
 
 **Follow IP** refreshes at new live stops. Manual browsing pauses following; Current IP or Follow IP resumes it. F10/F11 step over/into when Disassembly is visible and a KNDbgX window has focus. Symbol loading or another DbgEng operation can delay these reads.
 
@@ -427,7 +427,7 @@ Enter an expression or use **Current IP**, then choose an instruction count. **N
 
 Registers refreshes on first use and at new stopped contexts while visible. Filter by name or **All / Pinned / Changed**, pin names, copy scalar values or raw vector bytes, and use **Refresh** to retry a failed capture. Changed values compare captures from the same thread/CPU context; unavailable values are never substituted with zero.
 
-![Registers with their captured CPU identity and an unavailable-value notice](screenshots/registers.jpg)
+![Registers with their captured CPU identity and an unavailable-value notice](screenshots/registers.png)
 
 The example is Partial because some registers are unavailable in this stopped context. Its register identity is shown independently of the workspace's selected process and address space.
 
@@ -437,21 +437,21 @@ The summary identifies the captured process, Windows PID/TID and CPU when availa
 
 **Context details** separates the selected process row, implicit address space, debugger thread/CPU, scope and last event. Opening it shows cached observations; **Refresh context** requests an update. External `.trap`/`.cxr` origins can remain Unknown.
 
-![Selected process, address space and debugger context shown separately](screenshots/context.jpg)
+![Selected process, address space and debugger context shown separately](screenshots/context.png)
 
 To inspect symbols, open **Context details > Symbols**, choose **Read modules**, select a module and use **Inspect selected module**. Type/Field are optional simple names, such as `_EPROCESS` and `UniqueProcessId`. Load state, image/PDB match and type availability are separate observations. A matching public PDB can still lack a private field. **Insert reload draft** only inserts `.reload /f <module>`; it does not execute it.
 
-![Kernel PDB identity and an available EPROCESS field query](screenshots/symbols.jpg)
+![Kernel PDB identity and an available EPROCESS field query](screenshots/symbols.png)
 
 In this capture, the kernel image/PDB match is Matched and the requested field is Available. These are observations for the selected module and capture, not a guarantee for other Windows builds or types.
 
 **Operations** shows observed stages, elapsed time, cancellation state and retained outcomes. It cannot identify DbgEng's internal wait cause. **Pause automatic inspection reads** pauses Processes, Registers and Follow IP refreshes while retaining manual reads. A pending native call must return before cooperative cancellation can take effect.
 
-![Operations showing a pending symbol API call and earlier outcomes](screenshots/operations.jpg)
+![Operations showing a pending native diagnostic command and earlier outcomes](screenshots/operations.png)
 
-The thread collection below was cancelled after a long native call. Its retained rows remain useful for inspection, but **Capture info** records the cancellation and incomplete coverage. Do not treat those rows as a complete inventory.
+The diagnostic run below reached its step deadline without a cancellation request. **Row details** records PnP as **attempted: false / Skipped**, while the earlier storage and USB outputs remain available. The status message covers both cancellation and deadlines; this capture demonstrates the deadline case. Do not treat retained output as a completed checklist.
 
-![Capture info for a cancelled collection with retained partial rows](screenshots/coverage.jpg)
+![Partial diagnostic collection with its skipped PnP step and deadline reason](screenshots/coverage.png)
 
 ## Execution and changes
 
@@ -461,17 +461,17 @@ The header's **Continue / Break** controls a supported live user or remote-kerne
 
 In Disassembly, select **+** beside an instruction to open its addition preview. Check the target and operand before choosing **Add this breakpoint**. **Cancel** leaves the target unchanged. The screenshot was captured at the preview and then cancelled.
 
-![Breakpoint addition preview with explicit apply and cancel actions](screenshots/breakpoint-preview.jpg)
+![Breakpoint addition preview with explicit apply and cancel actions](screenshots/breakpoint-preview.png)
 
 Registered memory changes also require a complete preview and one-use approval. Plans expire after 60 seconds and recheck context and original bytes. There is no global write switch. Partial writes report their ranges without automatic retry or rollback. The [command reference](COMMANDS.md) describes memory-change plans and their operands.
 
 After **Continue**, retained results become Historical and inspection views keep their previous captures. Stop the target before making a new read; an old result does not acquire authority over the new context.
 
-![Running target with historical results and retained disassembly](screenshots/running-history.jpg)
+![Running target with historical results and retained disassembly](screenshots/running-history.png)
 
 ## Export and recovery
 
-Select a result tab and choose **Export**. It saves the complete retained result, including rows outside the viewport and saved output, as a new JSON file under `%LOCALAPPDATA%\kndbgx\logs`. The success notice identifies the destination; **Capture info > Copy saved path** retrieves it later. The callback result illustrated above was exported and its 29 rows were verified in the saved file.
+Select a result tab and choose **Export**. It saves the complete retained result, including rows outside the viewport and saved output, as a new JSON file under `%LOCALAPPDATA%\kndbgx\logs`. The success notice identifies the destination; **Capture info > Copy saved path** retrieves it later. A fresh callback result from this capture session was exported and all 28 rows were verified in the saved file.
 
 To choose another destination, use `result-export <result-id> "C:\captures\result.json"`; `results` lists retained IDs. A failed save reports the destination and error; retry with another writable path while the result remains retained. **Output Off** suppresses new console text without discarding retained results.
 

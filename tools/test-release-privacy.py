@@ -4,9 +4,12 @@ import contextlib
 import io
 import json
 import pathlib
+import re
+import struct
 import subprocess
 import tempfile
 import unittest
+import zlib
 from types import SimpleNamespace
 from unittest import mock
 
@@ -15,6 +18,130 @@ import release
 
 
 class PrivacyTests(unittest.TestCase):
+    @staticmethod
+    def png_chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
+
+    def png(self, metadata=()):
+        header = struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0)
+        pixels = zlib.compress(b'\0abc', level=0)
+        return (b'\x89PNG\r\n\x1a\n' + self.png_chunk(b'IHDR', header) + b''.join(metadata)
+                + self.png_chunk(b'IDAT', pixels) + self.png_chunk(b'IEND', b''))
+
+    def test_png_compressed_pixels_do_not_become_identifier_strings(self):
+        raw = self.png()
+        self.assertIn(b'abc', raw)
+        patterns = (re.compile('abc', re.I),)
+        self.assertFalse(privacy.findings('docs/screenshots/example.png', raw, private_patterns=patterns))
+        self.assertIn(('restricted-identifier', 0), privacy.findings('module.dll', raw, private_patterns=patterns))
+
+    def test_png_metadata_is_scanned_including_compressed_and_unicode_text(self):
+        value = ('C:' + '/Users/' + 'private-account/source').encode()
+        chunks = (
+            self.png_chunk(b'tEXt', b'Comment\0' + value),
+            self.png_chunk(b'zTXt', b'Comment\0\0' + zlib.compress(value)),
+            self.png_chunk(b'iTXt', b'Comment\0\1\0en\0Description\0' + zlib.compress(value)),
+            self.png_chunk(b'iCCP', b'Profile\0\0' + zlib.compress(value)),
+            self.png_chunk(b'eXIf', b'X' + value.decode().encode('utf-16-le')),
+        )
+        for chunk in chunks:
+            with self.subTest(kind=chunk[4:8]):
+                self.assertIn(('user-profile', 0), privacy.findings('example.png', self.png((chunk,))))
+        private = '\uac00\ub098\ub2e4'
+        chunk = self.png_chunk(b'iTXt', b'Comment\0\0\0\0\0' + private.encode())
+        self.assertIn(('restricted-identifier', 0), privacy.findings('example.png', self.png((chunk,)),
+                      private_patterns=(re.compile(private),)))
+
+    def test_png_malformed_or_oversized_metadata_fails_closed(self):
+        raw = self.png()
+        corrupt_crc = bytearray(raw)
+        corrupt_crc[-1] ^= 1
+        bad_metadata = (
+            self.png_chunk(b'zTXt', b'Comment\0\0broken'),
+            self.png_chunk(b'iTXt', b'Comment\0\2\0\0\0data'),
+            self.png_chunk(b'zTXt', b'Comment\0\0' + zlib.compress(b'x' * (4 * 1024 * 1024 + 1))),
+            self.png_chunk(b'zTXt', b'Comment\0\0' + zlib.compress(b'fine') + b'trailing'),
+        )
+        samples = [raw[:-1], bytes(corrupt_crc), raw + b'trailing', b'not a PNG']
+        samples.extend(self.png((chunk,)) for chunk in bad_metadata)
+        for sample in samples:
+            with self.subTest(length=len(sample)):
+                self.assertEqual(privacy.findings('example.png', sample), [('unreadable-image', 0)])
+                with self.assertRaises(ValueError):
+                    privacy.require_public('example.png', sample)
+
+    def test_png_idat_cannot_hide_plaintext_or_bytes_outside_the_raster(self):
+        header = self.png()[:33]
+        end = self.png_chunk(b'IEND', b'')
+        token = ('ghp_' + 'a1B2' * 10).encode()
+        cases = (token, zlib.compress(b'\0abc') + token, zlib.compress(b'\0abc' + token),
+                 zlib.compress(b'\0abc') + zlib.compress(token), zlib.compress(b'\0ab'),
+                 zlib.compress(b'\5abc'), zlib.compress(b'\0abc')[:-1], b'')
+        for data in cases:
+            raw = header + self.png_chunk(b'IDAT', data) + end
+            with self.subTest(size=len(data)):
+                self.assertEqual(privacy.findings('example.png', raw), [('unreadable-image', 0)])
+                with self.assertRaises(ValueError) as caught:
+                    privacy.require_public('example.png', raw)
+                self.assertNotIn(token.decode(), str(caught.exception))
+
+    def test_empty_png_is_distinct_from_path_preflight(self):
+        privacy.require_public('docs/screenshots/example.png', None)
+        with self.assertRaises(ValueError):
+            privacy.require_public('docs/screenshots/example.png', b'')
+        patterns = (re.compile('private_name'),)
+        with self.assertRaises(ValueError):
+            privacy.require_public('docs/screenshots/private_name.png', None, private_patterns=patterns)
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            (root / 'empty.png').write_bytes(b'')
+            with mock.patch.object(privacy, 'git_names', return_value=['empty.png']):
+                with self.assertRaises(ValueError):
+                    privacy.check_repository(root)
+            with mock.patch.object(release, 'ROOT', root), mock.patch.object(release, 'git_names', return_value=['empty.png']):
+                with self.assertRaises(ValueError):
+                    release.source_manifest()
+
+    def test_png_layout_is_validated_before_decompression(self):
+        for width, height, depth, color, compression, filtering, interlace in (
+                (0, 1, 8, 2, 0, 0, 0), (1, 1, 4, 2, 0, 0, 0), (1, 1, 8, 1, 0, 0, 0),
+                (1, 1, 8, 2, 1, 0, 0), (1, 1, 8, 2, 0, 1, 0), (1, 1, 8, 2, 0, 0, 2),
+                (2 ** 31, 1, 8, 2, 0, 0, 0), (100000, 100000, 8, 2, 0, 0, 0)):
+            header = struct.pack('>IIBBBBB', width, height, depth, color, compression, filtering, interlace)
+            raw = self.png()[:8] + self.png_chunk(b'IHDR', header) + self.png()[33:]
+            with self.subTest(layout=(width, height, depth, color, compression, filtering, interlace)):
+                with mock.patch.object(privacy.zlib, 'decompressobj') as decoder:
+                    self.assertEqual(privacy.findings('example.png', raw), [('unreadable-image', 0)])
+                    decoder.assert_not_called()
+
+    def test_png_interlaced_and_split_image_streams_are_supported(self):
+        header = struct.pack('>IIBBBBB', 3, 3, 8, 2, 0, 0, 1)
+        # The nonempty Adam7 passes contain 1, 1, 2, 2 and 3 pixels, in six scanlines.
+        pixels = b'\0abc\0def\0ghijkl\0mno\0pqr\0stuvwxyza'
+        data = zlib.compress(pixels)
+        chunks = b''.join(self.png_chunk(b'IDAT', data[i:i + 1]) for i in range(len(data)))
+        raw = self.png()[:8] + self.png_chunk(b'IHDR', header) + chunks + self.png_chunk(b'IEND', b'')
+        self.assertFalse(privacy.findings('example.png', raw))
+        for changed in (pixels[:-1], pixels + b'extra'):
+            raw = self.png()[:8] + self.png_chunk(b'IHDR', header) + self.png_chunk(b'IDAT', zlib.compress(changed)) + self.png_chunk(b'IEND', b'')
+            self.assertEqual(privacy.findings('example.png', raw), [('unreadable-image', 0)])
+
+    def test_png_palette_and_chunk_order_fail_closed(self):
+        header = struct.pack('>IIBBBBB', 1, 1, 1, 3, 0, 0, 0)
+        prefix = self.png()[:8] + self.png_chunk(b'IHDR', header)
+        data = self.png_chunk(b'IDAT', zlib.compress(b'\0\0'))
+        palette = self.png_chunk(b'PLTE', b'\xff\0\0\0\xff\0')
+        end = self.png_chunk(b'IEND', b'')
+        self.assertFalse(privacy.findings('example.png', prefix + palette + data + end))
+        cases = (prefix + data + end, prefix + palette + palette + data + end,
+                 prefix + self.png_chunk(b'PLTE', b'\0' * 9) + data + end,
+                 prefix + palette + data + palette + end,
+                 prefix + palette + data + self.png_chunk(b'tEXt', b'Comment\0public') + data + end,
+                 prefix + self.png_chunk(b'abcd', b'public') + palette + data + end)
+        for raw in cases:
+            with self.subTest(size=len(raw)):
+                self.assertEqual(privacy.findings('example.png', raw), [('unreadable-image', 0)])
+
     def test_credentials_report_only_categories(self):
         token = 'ghp_' + 'a1B2' * 10
         issues = privacy.findings('src/example.cpp', token.encode())
