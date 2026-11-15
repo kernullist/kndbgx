@@ -256,7 +256,10 @@ def package(configuration, output, private_patterns=()):
                        "driver-dispatch.jpg", "loaded-module.png", "vad-page-samples.png",
                        "page-permissions.jpg", "pool-permissions.jpg", "idt-cpu-comparison.png",
                        "cpu-control-state.png", "etw-coverage.jpg", "diagnostic-catalog.jpg",
-                       "diagnostic-checklist.jpg", "diagnostic-output.jpg"):
+                       "diagnostic-checklist.jpg", "diagnostic-output.jpg", "driver-history-coverage.jpg",
+                       "registry-hive-routines.png", "alpc-ports.jpg", "timer-coverage.jpg", "syscall-msrs.jpg",
+                       "hypervisor-sources.png", "host-code-integrity.jpg", "sarif-import.jpg", "etl-import.jpg",
+                       "wnf-decoder.jpg", "typed-layout.png"):
         name = "docs/screenshots/" + screenshot
         files[name] = read_public_file(ROOT, name)
     for profile in ("nt-26100.8655-callbacks-x64.json", "nt-26100.8655-symbols-x64.json",

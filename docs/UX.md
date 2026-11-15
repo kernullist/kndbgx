@@ -1,6 +1,6 @@
 # Workspace and workflows
 
-Open the workspace with `!kndbgx`, then work in the KNDbgX window. This guide follows a live Windows 11 x64 VMware guest connected to WinDbg, using KNDbgX **0.2.0-preview.7**. The screenshots show actual captures, including incomplete results and unavailable values. Addresses and counts belong to that session; use your own target's values.
+Open the workspace with `!kndbgx`, then work in the KNDbgX window. This guide follows a live Windows 11 x64 VMware guest connected to WinDbg, using KNDbgX **0.2.0-preview.7**. The screenshots show actual captures, including incomplete results and unavailable values. Host-only observations and synthetic file/decoder examples are labeled separately. Addresses and counts belong to those captures; use your own target's values.
 
 Start with [KNDbgX kernel and driver workflows](#kernel-and-driver-workflows), then explore [command discovery](#find-and-run-commands), [process inspection](#processes-tab) or [address navigation](#inspect-results). For setup, see the [README](../README.md). The [command reference](COMMANDS.md) supplies exact syntax; [support](SUPPORT.md) describes target and symbol limits.
 
@@ -12,6 +12,8 @@ These workflows add cross-view collection, structured evidence and saved-state c
 - **Processes and saved evidence:** [cross-view](#compare-two-process-inventories), [handles](#inspect-process-handle-access), [snapshots](#save-and-compare-kernel-snapshots).
 - **Memory permissions:** [VAD samples](#compare-vad-protection-with-page-samples), [page translations](#inspect-page-permissions-for-a-chosen-range), [big-pool samples](#inspect-big-pool-allocations-and-wx-samples).
 - **Kernel state and diagnostics:** [CPU state](#review-per-cpu-idt-and-control-state), [ETW coverage](#inspect-etw-logger-metadata), [diagnostic checklists](#run-a-diagnostic-checklist).
+- **More investigation surfaces:** [driver history](#inspect-driver-history), [hives and ALPC](#inspect-hives-and-alpc-ports), [DPC queues and timers](#inspect-dpc-queues-and-timers), [host/target security scope](#distinguish-host-and-target-security-state).
+- **Imported and typed evidence:** [SARIF and ETL](#import-sarif-and-etl-files), [value decoders](#decode-values-without-reading-the-target), [PDB layouts](#inspect-typed-layouts).
 
 ### Inspect kernel callbacks
 
@@ -198,6 +200,10 @@ The six completed rows here cover three registers on each of two CPUs. **Read fr
 
 `!msrcheck` is a separate current-event-CPU observation of LSTAR, CSTAR, STAR, FMASK and EFER. Other CPUs remain Unknown; it does not silently switch CPUs or establish hook absence.
 
+![Five observed MSRs on CPU 0 and five unknown values on CPU 1](screenshots/syscall-msrs.jpg)
+
+This later capture has ten rows and five unknown observations. **Read from** identifies Event CPU (MSR); **Why unavailable** explains the unread CPU. It is not a comparison of observed MSRs across all CPUs.
+
 ### Inspect ETW logger metadata
 
 Run `!etw` to inspect logger contexts in the target's host silo when its layout can be verified. Compare **name**, **loggerId**, **rawClock**, **clockType** and **clockRepresentation**. Integer clock selectors are decoded only with a verified profile; other values retain their raw representation.
@@ -231,6 +237,107 @@ Drag the Row details divider to widen the text. Long field previews may end with
 
 </details>
 
+### Inspect driver history
+
+1. Run `!mapper` from Library to collect `!unloaded`, `!piddb` and `!cihash` into one retained result.
+2. Read each child collection's **Command ID**, **Status**, **Coverage / Complete** and stop reason. The outer rows represent collections, not individual drivers.
+3. Run a child command separately for its own table. Open **Row details / Raw record** or export the composite result to inspect nested evidence.
+
+![Composite driver-history collections and an oversized nested record](screenshots/driver-history-coverage.jpg)
+
+The three-row screenshot is Partial. Unloaded-driver and CI field/ownership metadata remain unverified on this guest. The PiDDB child exceeds the UI page budget and is replaced by an export notice in that page; this is a display limit, not evidence that its retained result is empty. Export reads the full retained result while it remains available.
+
+Unloaded-driver events, PiDDB records and CI hash buckets have different lifetimes and coverage. A missing entry or an unavailable private layout does not establish history erasure, manual mapping or a clean system. `!mapper` combines observations; it does not supply a malware verdict.
+
+### Inspect hives and ALPC ports
+
+Run `!hive` to inspect the target hive list's `GetCellRoutine` pointers. Compare **Routine**, **Symbol**, **Module**, **Ownership** and **Slot**. The screenshot completed 15 rows resolving to `nt!HvpGetCellPaged`; it describes observed routine ownership, not the integrity of all registry contents.
+
+![Fifteen hive routine pointers with symbols and ownership](screenshots/registry-hive-routines.png)
+
+Run `!alpc`, select a row and enable **Row details**. Read the port address, connection port, namespace depth and **owner** object, including PID, image, EPROCESS and creation time when available.
+
+![An ALPC port's connection and owner identity](screenshots/alpc-ports.jpg)
+
+This namespace walk retained nine ports before reaching its budget. Ports outside the walked namespace and unreadable fields are not covered. An unresolved symbol for an object address does not by itself indicate corruption; use its typed fields and coverage.
+
+Related commands cover other registrations: `!nmi` walks the NMI callback chain, `!hal` inspects verified HAL dispatch function-pointer fields, and `!fwtable` inspects firmware-table providers. Missing private layouts remain gaps. The current guest's `!fwtable` attempt returned zero rows and one unknown observation with Partial status; no successful provider inventory is claimed here.
+
+### Inspect DPC queues and timers
+
+Run `!dpc` for per-CPU DPC queues, or `!timer` for per-CPU timer-table entries. Compare **CPU**, **Queue**, **Routine** and **Decode**, then read the queue totals in the coverage banner or Capture info.
+
+![Timer records with explicit queue totals and unavailable DPC decoding](screenshots/timer-coverage.jpg)
+
+This timer capture retained 108 rows and 108 unknown observations. Only 408 of 1,024 queues were fully read before its budget expired. Encoded timer DPC pointers are not treated as decoded routine addresses without a verified representation. The separate DPC run completed with zero rows at this stop; it is only an observation of the declared queues. Active or completed work outside those transient queues is not covered, and neither command measures DPC latency.
+
+### Distinguish host and target security state
+
+Run `!hv`, then compare the **Kind** and source fields before interpreting the values. **HostCpuidObservation** comes from the debugger machine; **TargetControlRegister** is the debuggee CR4 observation. The Microsoft HV vendor in this capture belongs to the host, not the VMware guest's CPUID.
+
+![Host CPUID and target register observations kept separate](screenshots/hypervisor-sources.png)
+
+Run `!ci /host` only when you intend to inspect the debugger host. It reports public CI/HVCI options, raw bits and query status. Without `/host`, `!ci` requires verified local live kernel context. Current flags do not establish enforcement history or whole-system integrity; unknown option bits preserve Partial coverage.
+
+![Public CI and HVCI flags explicitly queried from the debugger host](screenshots/host-code-integrity.jpg)
+
+The following commands require **verified local KD**, so they are not demonstrated as guest collections in this remote-KD session:
+
+- `!wfp` reads host BFE filters, callouts, providers, sublayers and layers. Service/API failures remain explicit; it does not alter network policy.
+- `!dma` queries DMAR/IVRS firmware tables. Presence alone does not establish enabled IOMMU/DMA protection.
+- `!byovd` hashes local driver files and compares SHA-256 digests with the operator's catalog. It does not download a catalog, establish exploitability or validate the loaded memory image.
+
+For `!byovd`, supply `%LOCALAPPDATA%\kndbgx\data\byovd-sha256.json` (at most 8 MiB) with this schema. This empty example demonstrates the format only; populate `sha256` with reviewed, unique, lowercase 64-character digests from your identified source/version before using it for matching:
+
+```json
+{
+  "schema": "kndbgx.hash-catalog.v1",
+  "source": "operator-maintained",
+  "version": "example",
+  "sha256": []
+}
+```
+
+Missing/invalid catalogs are unavailable or rejected, not silently treated as an authoritative clean list. Use a separate, appropriately configured local-KD session for these host API collectors; a remote guest cannot supply the required host APIs/files.
+
+### Import SARIF and ETL files
+
+1. Supply a host file with `sarif-import "C:\evidence\analysis.sarif"`.
+2. Select a **StaticFinding** and open **Row details** for rule ID, level, message, location and raw result.
+3. Inspect **SarifRun** and **FileEvidence** rows for provenance before correlating any result with the current target.
+
+![Synthetic SARIF finding and its original fields](screenshots/sarif-import.jpg)
+
+The screenshot uses a documentation-only SARIF 2.1.0 fixture with one note at `example/driver.cpp:42`, producing three rows: run, static finding and file evidence. The message explicitly says it is synthetic. These are imported analyzer claims, not independently verified defects. Inputs are limited to 16 MiB; external SARIF properties are not fetched.
+
+Run `etl-import "C:\evidence\trace.etl" 2048` for event headers, provider metadata and bounded payload previews. Select an **EtwEvent** and check **metadataAvailable**, **metadataStatus**, provider identity and timestamp. The final **EtlSummary** describes the import.
+
+![Owned synthetic ETL events with missing provider metadata retained explicitly](screenshots/etl-import.jpg)
+
+This screenshot imports an existing owned synthetic trace with a limit of eight, retaining five event rows and a summary. Three events lack provider metadata, so the result is Partial. It is not a trace of the current guest, and the recorded PIDs/timestamps must not be correlated with it automatically.
+
+ETL input is bounded to 4 GiB, 2,048 events by default, 16,384 at most and a cooperative ten-second processing budget. Import does not start recording, decode arbitrary WPP payloads or infer latency from unrelated events. Imported file rows do not gain current-target address navigation.
+
+### Decode values without reading the target
+
+Use `ioctl 222004` to decode CTL_CODE fields, `ntstatus c0000005` for severity/facility/code, and `bugcheck-decode <hex-code> <p1> <p2> <p3> <p4>` for supported bugcheck parameter descriptions, including KASAN cases. These operate on supplied values; they do not send IOCTLs or cause a bugcheck.
+
+Run `!wnf 41c64e6da3bc0875` for a synthetic WNF example. The input was constructed to decode version 1, lifetime 0, scope 0 and sequence 1.
+
+![Synthetic WNF state-name decoding](screenshots/wnf-decoder.jpg)
+
+This is a name decoder only. No live state payload, subscription list, access policy or security property is collected. Unknown encoding versions/scopes remain Partial. Decoder results can be retained/exported like other results without implying target evidence.
+
+### Inspect typed layouts
+
+Run `dt nt!_EPROCESS` in the KNDbgX input to retain verified field metadata in Results. Sort **Offset** to inspect layout order; compare size, bit offset/width, array count and source. Select a field for Row details.
+
+![EPROCESS layout fields with DIA-validated PDB provenance](screenshots/typed-layout.png)
+
+This completed capture has 265 field rows and requests no instance address. Append an observed instance address to request values; the layout alone is not a capture of a process's contents. Empty type names or unknown optional fields remain visible. Matching PDB/type metadata is required; reload cannot manufacture unavailable private fields.
+
+`setfield <address> <type> <field> <value>` belongs to the approved mutation flow, not this read-only layout view. See [Execution and changes](#execution-and-changes) before preparing a field change.
+
 ### More starting points
 
 Find these entries in **Library** or **Ctrl+K**, review the inserted draft, then select **Run**. Commands that need an object address or host file leave that operand for you to supply.
@@ -255,7 +362,7 @@ Use `help <command>` for operands; `jobs`, `job <id>` and `cancel <id>` provide 
 
 **Library > Pin left** keeps the Library beside Results and Inspect. Narrow windows temporarily use an overlay. Command selection closes an overlay and focuses the draft; a pinned Library stays open. Favorites, group folding and sort preferences persist when browser storage is available. **Windows > Restore adaptive layout** resets placement without clearing captures or drafts.
 
-Registered names always use KNDbgX validation. Other commands entered manually in the UI, including `.reload` and external extension commands, go directly to WinDbg and can change the target or host without a KNDbgX preview. CLI and background jobs require `raw --ack-effects <command>` for opaque execution.
+Registered names, including `.reload`, use KNDbgX validation. Unregistered commands entered manually in the UI, such as other extensions' commands, go directly to WinDbg and can change the target or host without a KNDbgX preview. CLI and background jobs require `raw --ack-effects <command>` for opaque execution.
 
 ## Inspect results
 
@@ -348,7 +455,7 @@ The thread collection below was cancelled after a long native call. Its retained
 
 ## Execution and changes
 
-The header's **Continue / Break** controls a supported live user or remote-kernel target. F5 continues; F9 in Disassembly toggles an existing code breakpoint or opens an addition preview. **Break** interrupts target execution; **Cancel operation** requests cancellation of workspace work. An acknowledged interrupt or cancellation is not proof of completion. Dumps and local KD cannot use target writes or execution controls.
+The header's **Continue / Break** controls a supported live user or remote-kernel target. F5 continues. With Disassembly's instruction grid focused, F9 opens an addition preview if the selected instruction has no breakpoint. If exactly one exists, F9 directly enables/disables it without an addition preview; multiple matches open the breakpoint list. The instruction's **+** or filled/hollow marker follows the same rules. **Break** interrupts target execution; **Cancel operation** requests cancellation of workspace work. An acknowledged interrupt or cancellation is not proof of completion. Dumps and local KD cannot use target writes or execution controls.
 
 **Breakpoints** lists current settings. Add/Delete requires preview approval; Enable/Disable applies a context-bound action on click. **Last event** is separate from the current breakpoint settings; a setting address does not establish the historical hit IP.
 
