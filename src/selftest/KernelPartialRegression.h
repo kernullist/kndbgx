@@ -261,9 +261,10 @@ template <typename Check> void RunKernelPartialRegression(Check check)
     const ModuleIdentity nt{L"{4660396C-2030-4C03-9AF4-5FC6B15ADF98}", 1, 0x8664, 0xe1a9f520, 0x1459000, base, true};
     const ModuleIdentity win32k{L"{2414214E-C1ED-F9F3-CE5F-1595CCD37B1B}", 1, 0x8664, 0xeaa9257b, 0xca000, base, true};
     for (const auto family : {KernelLayoutFamily::TimerDpc, KernelLayoutFamily::ShadowService, KernelLayoutFamily::Win32kService,
-                              KernelLayoutFamily::ObjectTypes, KernelLayoutFamily::ObjectNames, KernelLayoutFamily::AlpcPorts})
+                              KernelLayoutFamily::ObjectTypes, KernelLayoutFamily::ObjectNames, KernelLayoutFamily::AlpcPorts,
+                              KernelLayoutFamily::FilteredService, KernelLayoutFamily::Win32kDispatch})
     {
-        const auto identity = family == KernelLayoutFamily::Win32kService ? win32k : nt;
+        const auto identity = (family == KernelLayoutFamily::Win32kService || family == KernelLayoutFamily::Win32kDispatch) ? win32k : nt;
         ByteFixture code;
         std::map<std::wstring, uint64_t> symbols;
         for (const auto &[name, rva] : KernelProfileSymbols(family, true))
@@ -277,6 +278,15 @@ template <typename Check> void RunKernelPartialRegression(Check check)
             for (size_t i = 0; i < bytes.size(); i += 2)
             {
                 code.Put(base + window.SymbolRva + window.Offset + i / 2, std::stoul(bytes.substr(i, 2), nullptr, 16), 1);
+            }
+        }
+        if (family == KernelLayoutFamily::Win32kDispatch)
+        {
+            // Independent target bytes include padding skipped by control-flow disassembly.
+            const std::string lookup = "83f901720f488b05443e0800ffc9488b04c8c3cc8bc1488d0d6b3e0800488b04c1c3";
+            for (size_t i = 0; i < lookup.size(); i += 2)
+            {
+                code.Put(base + 0x5e50 + i / 2, std::stoul(lookup.substr(i, 2), nullptr, 16), 1);
             }
         }
         const auto resolve = [&](const wchar_t *name) -> std::optional<uint64_t>

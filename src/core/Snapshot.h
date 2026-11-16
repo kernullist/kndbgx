@@ -128,6 +128,13 @@ inline std::wstring SnapshotKey(const knjson::Value &row, bool crossSession)
     {
         return key({text(L"cpu"), text(L"vector")});
     }
+    if (kind == L"RoutineObservation" &&
+        (text(L"family") == L"ShadowSSDT" || text(L"family") == L"FilteredShadowSSDT") && !text(L"sessionId").empty())
+    {
+        // Windows session IDs and their bindings do not identify the same session on another target.
+        return crossSession || text(L"sessionState").empty() || text(L"index").empty()
+            ? L"" : key({text(L"family"), text(L"sessionId"), text(L"sessionState"), text(L"index")});
+    }
     if (!text(L"family").empty() && !text(L"index").empty())
     {
         return key({text(L"family"), text(L"index")});
@@ -323,11 +330,18 @@ inline Result DiffSnapshots(const Snapshot &before, const Snapshot &after, bool 
         input.Set(L"coverageComplete", knjson::Value(complete));
         std::map<std::wstring, std::pair<std::vector<knjson::Value>, std::vector<knjson::Value>>> objects;
         size_t unidentified = 0;
+        bool entryOnlyShadow = false;
+        bool sessionShadow = false;
         for (unsigned side = 0; side < 2; ++side)
         {
             const auto &rows = side == 0 ? old.Get(L"rows") : now.Get(L"rows");
             for (const auto &row : rows.Items())
             {
+                if (row.Get(L"kind").AsString(L"") == L"RoutineObservation" && row.Get(L"family").AsString(L"") == L"ShadowSSDT")
+                {
+                    entryOnlyShadow |= row.Get(L"sessionId").AsString(L"").empty();
+                    sessionShadow |= !row.Get(L"sessionId").AsString(L"").empty();
+                }
                 auto key = SnapshotKey(row, crossSession);
                 if (key.empty())
                 {
@@ -337,7 +351,8 @@ inline Result DiffSnapshots(const Snapshot &before, const Snapshot &after, bool 
                 (side == 0 ? entry.first : entry.second).push_back(row);
             }
         }
-        const bool identitiesKnown = unidentified == 0;
+        // Entry-thunk snapshots cannot establish additions/removals of session implementation bindings.
+        const bool identitiesKnown = unidentified == 0 && !(entryOnlyShadow && sessionShadow);
         inputIdentitiesKnown = inputIdentitiesKnown && identitiesKnown;
         input.Set(L"identitiesKnown", knjson::Value(identitiesKnown));
         inputCollections.Push(input);

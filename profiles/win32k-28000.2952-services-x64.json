@@ -7,7 +7,7 @@
   "pdbGuid": "2414214e-c1ed-f9f3-ce5f-1595ccd37b1b",
   "timestamp": "0xeaa9257b",
   "imageSize": "0xca000",
-  "runtimeImplementation": "src/core/KernelSymbolProfile.h and src/core/ServiceTable.h; this document cannot enable additional images",
+  "runtimeImplementation": "src/core/KernelSymbolProfile.h, ServiceTable.h, Win32kDispatch.h and Win32kDispatchProfile.h; this document cannot enable additional images",
   "codeWindows": [
     {
       "symbol": "SysEntryGetW32pServiceTable",
@@ -28,5 +28,90 @@
   "entries": 1497,
   "entryBytes": 4,
   "encoding": "x64 signed relative shift 4",
-  "scope": "Registered win32k entry thunks; requires independent NT descriptor validation. Per-session dispatch destinations and filtered service tables are excluded."
+  "scope": "Native descriptor validation is required. Enumerates populated session slots without switching debugger context. Follows the reviewed thunk to its first implementation; subsequent implementation calls are outside scope. Unsupported session decoding retains entry thunks with a coverage gap.",
+  "dispatchCodeWindows": [
+    {
+      "symbol": "W32GetSessionStateForSession",
+      "rva": "0x5e50",
+      "offset": "0",
+      "bytes": "83f901720f488b05443e0800ffc9488b04c8c3cc8bc1488d0d6b3e0800488b04c1c3"
+    },
+    {
+      "symbol": "W32GetSessionState",
+      "rva": "0x3330",
+      "offset": "0x2a",
+      "bytes": "83f80172158d48ff488b0537690800488b04c8"
+    },
+    {
+      "symbol": "W32GetSessionState",
+      "rva": "0x3330",
+      "offset": "0x44",
+      "bytes": "8bc8488d055b690800488b04c8"
+    },
+    {
+      "symbol": "W32GetMaxSessionCount",
+      "rva": "0x167b0",
+      "offset": "0x27",
+      "bytes": "8b1d03350700"
+    },
+    {
+      "symbol": "W32GetMaxSessionCount",
+      "rva": "0x167b0",
+      "offset": "0x4e",
+      "bytes": "8d43014883c4205bc3"
+    },
+    {
+      "symbol": "W32SessionInitialize",
+      "rva": "0x57b8",
+      "offset": "0x4d8",
+      "bytes": "488b050940080048833cf000"
+    },
+    {
+      "symbol": "SysEntryGetW32pServiceTableFilter",
+      "rva": "0x1c5a0",
+      "offset": "0",
+      "bytes": "488d05896d0800c3"
+    },
+    {
+      "symbol": "SysEntryGetW32pServiceLimitFilter",
+      "rva": "0x18850",
+      "offset": "0",
+      "bytes": "8b051ec80800c3"
+    }
+  ],
+  "sessionDispatch": {
+    "highSlotsPointerRva": "0x89ca0",
+    "sessionZeroSlotRva": "0x89cd8",
+    "highSlotCountRva": "0x89ce0",
+    "index": "Session zero uses the inline slot; session ID >= 1 uses highSlots[ID - 1]",
+    "sessionApiOffset": "0x88",
+    "maximumSessionSlots": 256,
+    "maximumRows": 65536,
+    "sharedTraversalSeconds": 120,
+    "sessionRoutes": 1223,
+    "directImportRoutes": 274,
+    "filterHelperRoutes": 2,
+    "routeProfiles": "src/core/Win32kDispatchProfile.h: 1499 reviewed RVAs, lengths, API host/target offsets, imports, names and SHA256 digests",
+    "codeValidation": "Full thunk SHA256 with declared external rel32 fields normalized. External call destinations must also match; direct tail jumps are compared with their import slot.",
+    "null": "A verified NULL terminal is Not registered; unreadable pointers and changed code remain unknown",
+    "stability": "Session count, slot array, session roots, API tables and host bindings are rechecked after enumeration",
+    "conditionalFallback": "Service thunk RVA 0x18910 can call watchdog!SMgrNotifySessionChange when the primary target is NULL or returns STATUS_INVALID_SYSTEM_SERVICE"
+  },
+  "filteredTable": {
+    "tableRva": "0xa3330",
+    "limitRva": "0xa5074",
+    "argumentsRva": "0xa5078",
+    "entries": 1497,
+    "wrapperFirstRva": "0x2fcc0",
+    "wrapperStride": 176,
+    "wrapperBytes": 167,
+    "codeValidation": "Exact normalized wrapper template; all service IDs, relative references and per-service import bridges must agree",
+    "predicateThunkRva": "0x9930",
+    "predicateImportRva": "0x73a88",
+    "handlerThunkRva": "0x19320",
+    "handlerImportRva": "0x73a80",
+    "rejectionByteRva": "0xa4a94",
+    "rejectionReturn": "Sign extend the per-service byte; positive values return 0xc000001c",
+    "scope": "Conditional first implementation call, predicate, handler and possible rejection return. Does not evaluate per-process filter policy or execute the service."
+  }
 }

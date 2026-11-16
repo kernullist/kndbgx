@@ -55,7 +55,8 @@ inline std::optional<std::wstring> AddressFieldSpace(const knjson::Value &row, c
         L"preRoutine", L"postRoutine", L"CompletionRoutine", L"CancelRoutine", L"DispatchRoutine", L"StartAddress", L"EndAddress",
         L"MdlAddress", L"UserBuffer", L"SystemBuffer", L"Thread", L"CurrentStackLocation", L"DeviceObject", L"FileObject",
         L"Context", L"type3InputBuffer", L"hive", L"deferredContext", L"record", L"attachedFrom", L"dpc", L"serviceTable", L"descriptor",
-        L"communicationInfo", L"serverPort", L"clientPort", L"peerPort"};
+        L"communicationInfo", L"serverPort", L"clientPort", L"peerPort", L"entryRoutine", L"dispatchSlot", L"sessionState",
+        L"sessionApi", L"filterPredicate", L"filterHandler", L"filterImport", L"conditionalFallback"};
     if (virtualFields.contains(field))
     {
         return explicitSpace.IsString() ? explicitSpace.AsString(L"") : inheritedSpace;

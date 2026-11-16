@@ -69,7 +69,9 @@ This capture completed with **437 rows** for Process handles owned by System. It
 
 Find `!ssdt` and select **Run** to inspect service-table entries when the target has verified layout and extent information. A result with no rows still needs interpretation. Open **View output** and read the collector's scope-specific gaps alongside its status.
 
-The reviewed 28000.2952 NT/win32k profiles expose native and Shadow SSDT entries with **Family**, **Service ID**, local index, routine and symbol. Shadow entries describe registered win32k entry thunks; their per-session dispatch destinations and the separate filtered table are outside the collection. Both image identities, reviewed code, descriptor values and table limits must agree.
+The reviewed 28000.2952 NT/win32k profiles expose **Family**, **Session**, **Service ID**, service name, routine, symbol and dispatch state. `NativeSSDT` is global. `ShadowSSDT` follows each populated session's API host pointers to its first implementation, or a verified direct import. `FilteredShadowSSDT` shows the conditional implementation reached after the filter wrapper. Both image identities, reviewed code, descriptor values and table limits must agree.
+
+Open **Row details** to inspect the entry thunk or filter wrapper separately from the implementation, the dispatch pointer slot, session state, filter predicate, filter handler, import and possible rejection return. `Not registered` means a verified zero target; missing reads remain unknown. A conditional fallback is shown separately where the reviewed thunk provides one. These observations do not execute a system call, predict a process's filtering decision or follow calls inside the implementation. The shared walk permits 120 seconds, 256 session slots and 65,536 rows; debugger calls can outlast the deadline. Unsupported session decoding retains verified entry thunks with an explicit gap.
 
 ![SSDT returns Partial with explicit native-table and shadow-table coverage gaps](screenshots/ssdt-coverage.png)
 

@@ -8,7 +8,7 @@
   "timestamp": "0xe1a9f520",
   "imageSize": "0x1459000",
   "pdbGuid": "4660396c-2030-4c03-9af4-5fc6b15adf98",
-  "scope": "Host-silo ETW storage/selectors, NMI callbacks, unloaded-driver ring and firmware providers, encoded timer DPCs, registered shadow service descriptor and object namespace decoding, initialized named and unnamed ALPC ports",
+  "scope": "Host-silo ETW storage/selectors, NMI callbacks, unloaded-driver ring and firmware providers, encoded timer DPCs, registered shadow and filtered service descriptors and object namespace decoding, initialized named and unnamed ALPC ports",
   "families": {
     "HostSilo": [
       {
@@ -273,6 +273,26 @@
         "offset": "0x1e",
         "bytes": "488b15a3f55800"
       }
+    ],
+    "FilteredService": [
+      {
+        "symbol": "KeAddSystemServiceTable",
+        "rva": "0xb5fde0",
+        "offset": "0x32",
+        "bytes": "488d05e71646008d4aff48c1e1054c89140144894401104c894c0118"
+      },
+      {
+        "symbol": "KiSystemServiceRepeat",
+        "rva": "0x749a88",
+        "offset": "0xe",
+        "bytes": "f74378800000007413f743780000200074074c8d1d517a87004d8bd3"
+      },
+      {
+        "symbol": "KiSystemServiceRepeat",
+        "rva": "0x749a88",
+        "offset": "0x35",
+        "bytes": "4d8b143a4d631c82498bc349c1fb044d03d3"
+      }
     ]
   },
   "records": {
@@ -342,11 +362,21 @@
         "3": "Server communication"
       },
       "scope": "Initialized ports in AlpcpPortList; no pool scan or discovery of detached objects."
+    },
+    "FilteredShadowSSDT": {
+      "descriptorRva": "0xfc1500",
+      "descriptorBytes": 32,
+      "shadowIndex": 1,
+      "tableOffset": "0x0",
+      "limitOffset": "0x10",
+      "argumentsOffset": "0x18",
+      "requiredCompanion": "win32k-28000.2952-services-x64.json",
+      "serviceIdBase": "0x1000"
     }
   },
   "limitations": [
     "Other images and changed/unreadable code windows are not decoded.",
-    "Shadow SSDT covers registered win32k entry thunks, not per-session dispatch destinations or the filtered table.",
+    "Per-session Shadow SSDT and filtered routes require the independent win32k session-dispatch profile; no process filter-policy verdict or nested implementation dispatch is inferred.",
     "Fallback namespace traversal follows root hash buckets; unnamed objects, private namespaces and shadow directories are excluded.",
     "Other ETW silos are not covered.",
     "ALPC global-list enumeration requires the AlpcPorts family and matching PDB layouts; detached, freed and not-yet-linked objects are excluded."

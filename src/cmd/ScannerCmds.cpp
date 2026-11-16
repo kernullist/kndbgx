@@ -4,6 +4,8 @@
 
 #include "CollectorSupport.h"
 #include "../core/ServiceTable.h"
+#include "../core/Win32kDispatch.h"
+#include "../util/SnapshotStore.h"
 
 #include <dbgeng.h>
 #include <cstring>
@@ -129,6 +131,7 @@ void ScanProcessList(Ctx &ctx)
 
 void ScanSsdt(Ctx &ctx)
 {
+    CollectorWalk collection;
     kncore::WalkBudget budget;
     kncore::TargetArchitecture architecture;
     if (!BeginCollection(ctx, budget, architecture, L"TargetMemory:ServiceTables"))
@@ -195,12 +198,33 @@ void ScanSsdt(Ctx &ctx)
             kncore::ServiceDescriptorMatches(*nativeDescriptor, *table, limit, identity->Base + 0xe823c) &&
             kncore::ServiceDescriptorMatches(*guiDescriptor, *guiTable, guiLimit, guiIdentity->Base + 0xa2d48);
     }
+    const bool dispatchReady = shadowReady && layout.VerifyProfile(kncore::KernelLayoutFamily::Win32kDispatch);
+    const auto filterAddress = layout.Address(L"nt", L"KeServiceDescriptorTableFilter");
+    std::optional<kncore::ServiceDescriptor> filterNative, filterGui;
+    uint32_t filterLimit = 0;
+    bool filterReady = false;
+    if (dispatchReady && filterAddress && layout.VerifyProfile(kncore::KernelLayoutFamily::FilteredService) &&
+        publicOrShape(L"W32pServiceTableFilter", 1497 * 4, true) && publicOrShape(L"W32pServiceLimitFilter", 4, false) &&
+        ctx.Session.ReadExact(kncore::AddressSpace::Virtual, guiIdentity->Base + 0xa5074, &filterLimit) && filterLimit == 1497)
+    {
+        filterNative = kncore::ReadServiceDescriptor(ctx.Session, *filterAddress);
+        filterGui = kncore::ReadServiceDescriptor(ctx.Session, *filterAddress + 32);
+        filterReady = filterNative && filterGui && *filterNative == *nativeDescriptor &&
+            kncore::ServiceDescriptorMatches(*filterGui, guiIdentity->Base + 0xa3330, filterLimit, guiIdentity->Base + 0xa5078);
+    }
+    if (dispatchReady)
+    {
+        budget.StartTraversal(std::chrono::steady_clock::now(), std::chrono::seconds(120));
+    }
     const auto owners = knengine::CollectOwnershipIndex(ctx.Session);
     const auto collect = [&](uint64_t address, uint32_t count, const wchar_t *family, uint32_t base, const std::wstring &name)
     {
         kncore::CollectServiceEntries(ctx.Session, architecture, owners, address, count, family, base, name, budget,
-            [&](const knjson::Value &row)
+            [&](knjson::Value row)
             {
+                row.Set(L"session", knjson::Value(L"Global"));
+                row.Set(L"entryRoutine", row.Get(L"routine"));
+                row.Set(L"dispatchState", knjson::Value(std::wstring_view(family) == L"NativeSSDT" ? L"Direct" : L"Entry thunk only"));
                 EmitRow(ctx, budget, row);
             });
     };
@@ -214,7 +238,27 @@ void ScanSsdt(Ctx &ctx)
     }
     if (shadowReady)
     {
-        collect(*guiTable, guiLimit, L"ShadowSSDT", 0x1000, kncore::Win32kServiceProfileId);
+        if (dispatchReady)
+        {
+            kncore::NamespaceReadMeter measured(ctx.Session);
+            kncore::CollectWin32kDispatch(measured, architecture, owners, guiIdentity->Base, identity->Base,
+                layout.Address(L"watchdog", L"SMgrNotifySessionChange").value_or(0), filterReady, budget,
+                [](std::span<const unsigned char> bytes)
+                {
+                    return knutil::Sha256Bytes(bytes);
+                },
+                [&](const knjson::Value &row)
+                {
+                    EmitRow(ctx, budget, row);
+                });
+            budget.Report.Analysis.Set(L"dispatchTargetReads", knjson::Value(std::to_wstring(measured.Requests)));
+            budget.Report.Analysis.Set(L"dispatchRequestedBytes", knjson::Value(std::to_wstring(measured.Bytes)));
+        }
+        else
+        {
+            collect(*guiTable, guiLimit, L"ShadowSSDT", 0x1000, kncore::Win32kServiceProfileId);
+            UnknownScope(ctx, budget, L"Win32kSessionDispatch", L"Reviewed session dispatch profile unavailable; entry thunks retained");
+        }
         if (kncore::RecheckServiceDescriptor(ctx.Session, *shadowAddress, *nativeDescriptor, budget))
         {
             kncore::RecheckServiceDescriptor(ctx.Session, *shadowAddress + 32, *guiDescriptor, budget);
@@ -223,6 +267,24 @@ void ScanSsdt(Ctx &ctx)
     else
     {
         UnknownScope(ctx, budget, L"ShadowSSDT", L"Matched NT/win32k code, descriptor, table extent or mapping unavailable");
+    }
+    if (filterReady)
+    {
+        if (kncore::RecheckServiceDescriptor(ctx.Session, *filterAddress, *filterNative, budget))
+        {
+            kncore::RecheckServiceDescriptor(ctx.Session, *filterAddress + 32, *filterGui, budget);
+        }
+        uint32_t observed = 0;
+        const bool stable = kncore::CheckWalkDeadline(budget) &&
+            ctx.Session.ReadExact(kncore::AddressSpace::Virtual, guiIdentity->Base + 0xa5074, &observed) && observed == filterLimit;
+        if (kncore::CheckWalkDeadline(budget) && !stable)
+        {
+            budget.Stop(kncore::Status::StaleContext, L"FilteredServiceLimitChanged");
+        }
+    }
+    else
+    {
+        UnknownScope(ctx, budget, L"FilteredShadowSSDT", L"Matched filtered descriptor, table or code profile unavailable");
     }
     for (const auto &[address, expectedLimit] : {std::pair(nativeReady ? limitAddress : std::nullopt, limit),
                                                std::pair(shadowReady ? guiLimitAddress : std::nullopt, guiLimit)})
@@ -241,8 +303,10 @@ void ScanSsdt(Ctx &ctx)
     {
         kncore::CheckWalkDeadline(budget);
     }
-    budget.Report.Limitations.Push(knjson::Value(L"ShadowSSDT covers the registered win32k entry thunks. Per-session dispatch targets "
-        L"and the separate filtered service table are outside this collection."));
+    budget.Report.Limitations.Push(knjson::Value(L"Session dispatch follows currently populated win32k global slots, at most 256 slots and "
+        L"65536 rows in a shared 120-second walk. Filtered targets are conditional on thread/process policy and filter callbacks; "
+        L"this inventory does not execute or predict a syscall. The recorded target is the first implementation call, with the "
+        L"SMgr fallback shown separately. Code after that call and inline hooks in implementation bodies are not decoded."));
     budget.Report.Limitations.Push(
         knjson::Value(L"A matching module does not prove that service code is unchanged. Checking a disk profile does not validate the running kernel."));
     FinishCollection(ctx, budget);

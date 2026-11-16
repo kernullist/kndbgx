@@ -105,14 +105,14 @@ Run `!hive` to compare registry root paths, backing-file names, flags and file s
 
 Use `!nmi` for the NMI callback chain, `!hal` for HAL dispatch function pointers and `!fwtable` for registered firmware-table providers. Each result carries the available routine/module evidence and layout gaps; these commands do not modify registrations.
 
-`!ssdt` collects native/shadow service-table observations only when their layout and extent can be verified. Open **View output** when the table is empty.
+`!ssdt` collects native, per-session Shadow SSDT and conditional filtered dispatch observations when their layout, code and extent can be verified. Open **View output** when the table is empty.
 
 <details>
 <summary>See why an empty SSDT result is still Partial</summary>
 
 ![SSDT scope-specific layout and extent gaps](docs/screenshots/ssdt-coverage.png)
 
-This screenshot predates the reviewed 28000.2952 profiles, which now expose 490 native entries and 1,497 registered win32k entry thunks on the validated target. Unsupported layouts still produce explicit gaps; zero rows do not establish a clean table. [Coverage workflow](docs/UX.md#read-a-collectors-coverage-limits)
+This screenshot predates the reviewed 28000.2952 profiles. The profiles cover 490 native entries and 1,497 win32k services per populated session, with separate normal and filtered rows. The table distinguishes entry wrappers, implementation targets and verified unregistered targets. Filtered routes are conditional, not a prediction of a process's policy. Unsupported layouts still produce explicit gaps; zero rows do not establish a clean table. [Coverage workflow](docs/UX.md#read-a-collectors-coverage-limits)
 
 </details>
 
@@ -516,7 +516,7 @@ Page commands require an x64 kernel target. Big-pool commands require a live ker
 | Command / aliases | Purpose and availability | Syntax and examples |
 |---|---|---|
 | `!idt` | Inspect per-CPU IDT gates, handler addresses and modules; compare matching vectors across CPUs.<br>Experimental · Kernel x64 / dump | `!idt`<br>Examples: `!idt` |
-| `!ssdt` | Read verified native and Shadow SSDT entry points with service IDs; inspect per-table coverage.<br>Experimental · Kernel x64 / dump | `!ssdt`<br>Examples: `!ssdt` |
+| `!ssdt` | Read native, per-session Shadow SSDT and conditional filtered dispatch targets with service names and IDs; inspect per-table coverage.<br>Experimental · Kernel x64 / dump | `!ssdt`<br>Examples: `!ssdt` |
 | `!msrcheck` | Read LSTAR/CSTAR/STAR/FMASK/EFER on the verified selected CPU; other CPUs remain Unknown.<br>Experimental · Kernel x64 / dump | `!msrcheck`<br>Examples: `!msrcheck` |
 | `!cr` | Read saved per-CPU CR0, CR4 and CR8 values and decoded flags.<br>Experimental · Kernel x64 / dump | `!cr`<br>Examples: `!cr` |
 | `!dpc` | Walk declared per-CPU DPC queues; does not measure latency or cover completed work.<br>Experimental · Kernel x64 / dump | `!dpc`<br>Examples: `!dpc` |

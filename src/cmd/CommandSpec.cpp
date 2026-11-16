@@ -964,7 +964,7 @@ const std::vector<CommandSpec> &CommandSpecs()
         {L"!ssdt",
          {},
          L"Kernel",
-         L"list verified native and shadow SSDT entry points with service IDs",
+     L"list native SSDT and verified per-session shadow/filtered dispatch targets",
          L"!ssdt",
          Effect::TargetRead,
          Capability::KernelX64,

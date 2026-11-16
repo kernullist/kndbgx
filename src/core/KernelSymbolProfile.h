@@ -46,11 +46,26 @@ enum class KernelLayoutFamily
     TimerDpc,
     ShadowService,
     Win32kService,
-    AlpcPorts
+    AlpcPorts,
+    FilteredService,
+    Win32kDispatch
 };
 
 inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFamily family, bool build28000 = false)
 {
+    if (family == KernelLayoutFamily::Win32kDispatch)
+    {
+        static const std::array<CallbackCodeWindow, 8> dispatch = {{
+            {L"W32GetSessionStateForSession", 0x5e50, 0, L"83f901720f488b05443e0800ffc9488b04c8c3cc8bc1488d0d6b3e0800488b04c1c3"},
+            {L"W32GetSessionState", 0x3330, 0x2a, L"83f80172158d48ff488b0537690800488b04c8"},
+            {L"W32GetSessionState", 0x3330, 0x44, L"8bc8488d055b690800488b04c8"},
+            {L"W32GetMaxSessionCount", 0x167b0, 0x27, L"8b1d03350700"},
+            {L"W32GetMaxSessionCount", 0x167b0, 0x4e, L"8d43014883c4205bc3"},
+            {L"W32SessionInitialize", 0x57b8, 0x4d8, L"488b050940080048833cf000"},
+            {L"SysEntryGetW32pServiceTableFilter", 0x1c5a0, 0, L"488d05896d0800c3"},
+            {L"SysEntryGetW32pServiceLimitFilter", 0x18850, 0, L"8b051ec80800c3"}}};
+        return dispatch;
+    }
     if (family == KernelLayoutFamily::Win32kService)
     {
         static const std::array<CallbackCodeWindow, 2> services = {{
@@ -72,6 +87,10 @@ inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFami
     }
     if (build28000 && family != KernelLayoutFamily::Piddb)
     {
+        static const std::array<CallbackCodeWindow, 3> filtered = {{
+            {L"KeAddSystemServiceTable", 0xb5fde0, 0x32, L"488d05e71646008d4aff48c1e1054c89140144894401104c894c0118"},
+            {L"KiSystemServiceRepeat", 0x749a88, 0xe, L"f74378800000007413f743780000200074074c8d1d517a87004d8bd3"},
+            {L"KiSystemServiceRepeat", 0x749a88, 0x35, L"4d8b143a4d631c82498bc349c1fb044d03d3"}}};
         static const std::array<CallbackCodeWindow, 12> alpc = {{
             {L"AlpcpInitializePort", 0xa324c0, 0x2c, L"488bd9"},
             {L"AlpcpInitializePort", 0xa324c0, 0xab, L"8b81a0010000"},
@@ -128,6 +147,8 @@ inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFami
              L"8b06488d79188901488b460848894108488b461048894110488d412848897f0848893f48894008488900488b4910e82f07b2ff488b05f0a66c00483928751348892f4889470848893848893ddaa66c00"}}};
         switch (family)
         {
+        case KernelLayoutFamily::FilteredService:
+            return filtered;
         case KernelLayoutFamily::AlpcPorts:
             return alpc;
         case KernelLayoutFamily::ObjectTypes:
@@ -216,6 +237,8 @@ inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFami
     case KernelLayoutFamily::ShadowService:
     case KernelLayoutFamily::Win32kService:
     case KernelLayoutFamily::AlpcPorts:
+    case KernelLayoutFamily::FilteredService:
+    case KernelLayoutFamily::Win32kDispatch:
         return {};
     }
     return {};
@@ -223,6 +246,13 @@ inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFami
 
 inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbols(KernelLayoutFamily family, bool build28000 = false)
 {
+    if (family == KernelLayoutFamily::Win32kDispatch)
+    {
+        static const std::pair<const wchar_t *, uint32_t> dispatch[] = {
+            {L"gSessionGlobalSlots", 0x89ca0}, {L"gLowSessionGlobalSlots", 0x89cd8}, {L"gAvailableSlots", 0x89ce0},
+            {L"W32pServiceTableFilter", 0xa3330}, {L"W32pServiceLimitFilter", 0xa5074}, {L"W32pArgumentTableFilter", 0xa5078}};
+        return dispatch;
+    }
     if (family == KernelLayoutFamily::Win32kService)
     {
         static const std::pair<const wchar_t *, uint32_t> services[] = {
@@ -236,6 +266,7 @@ inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbol
     }
     if (build28000 && family != KernelLayoutFamily::Piddb)
     {
+        static const std::pair<const wchar_t *, uint32_t> filtered[] = {{L"KeServiceDescriptorTableFilter", 0xfc1500}};
         static const std::pair<const wchar_t *, uint32_t> alpc[] = {{L"AlpcpPortList", 0xf14740}, {L"AlpcPortObjectType", 0xfc0d28}};
         static const std::pair<const wchar_t *, uint32_t> types[] = {{L"ObTypeIndexTable", 0xfc1960}, {L"ObHeaderCookie", 0xfc0f90}};
         static const std::pair<const wchar_t *, uint32_t> names[] = {{L"ObpInfoMaskToOffset", 0xf145e0}};
@@ -247,6 +278,8 @@ inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbol
         static const std::pair<const wchar_t *, uint32_t> firmware[] = {{L"ExpFirmwareTableProviderListHead", 0xf03940}};
         switch (family)
         {
+        case KernelLayoutFamily::FilteredService:
+            return filtered;
         case KernelLayoutFamily::AlpcPorts:
             return alpc;
         case KernelLayoutFamily::ObjectTypes:
@@ -301,6 +334,8 @@ inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbol
     case KernelLayoutFamily::ShadowService:
     case KernelLayoutFamily::Win32kService:
     case KernelLayoutFamily::AlpcPorts:
+    case KernelLayoutFamily::FilteredService:
+    case KernelLayoutFamily::Win32kDispatch:
         return {};
     }
     return {};
@@ -310,7 +345,7 @@ template <typename Resolve>
 const wchar_t *VerifyKernelProfile(TargetReader &reader, const ModuleIdentity &identity, KernelLayoutFamily family, Resolve resolve)
 {
     const bool build28000 = CallbackProfile28000Identity(identity);
-    const bool matched = family == KernelLayoutFamily::Win32kService ? Win32kServiceProfileIdentity(identity) :
+    const bool matched = (family == KernelLayoutFamily::Win32kService || family == KernelLayoutFamily::Win32kDispatch) ? Win32kServiceProfileIdentity(identity) :
                          family == KernelLayoutFamily::CiHash ? CiHashProfileIdentity(identity) :
                          family == KernelLayoutFamily::Piddb ? build28000 : CallbackProfileIdentity(identity);
     if (!matched || KernelProfileWindows(family, build28000).empty())

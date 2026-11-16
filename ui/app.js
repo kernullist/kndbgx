@@ -894,7 +894,7 @@
     { commands: "dpc", kinds: "QueuedDpc", fields: "cpu queue routine symbol module importance deferredContext object ownership" },
     { commands: "fwtable", kinds: "", fields: "provider routine symbol module ownership signature record" },
     { commands: "idt", kinds: "IdtGate", fields: "cpu vector routine symbol symbolSource module ownership type dpl present validGate slot" },
-    { commands: "ssdt", kinds: "", fields: "family serviceId index routine symbol symbolSource module ownership slot encoding" },
+    { commands: "ssdt", kinds: "", fields: "family session serviceId serviceName symbol routine dispatchState entryRoutine ownership index slot" },
     { commands: "process procscan dml_proc", kinds: "Process", fields: "eprocess pid image dtb createTime" },
     { commands: "threads thread", kinds: "Thread", fields: "tid ethread process.pid process.image start startSymbol win32Start win32StartSymbol startOwner win32StartOwner" },
     { commands: "lm modules", kinds: "Module", fields: "name base symbol size path moduleIdentity" },

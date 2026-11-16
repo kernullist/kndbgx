@@ -978,7 +978,7 @@
   {
     "name": "!ssdt",
     "group": "Kernel",
-    "summary": "list verified native and shadow SSDT entry points with service IDs",
+    "summary": "list native SSDT and verified per-session shadow/filtered dispatch targets",
     "grammar": "!ssdt",
     "support": "Experimental",
     "capability": "KernelX64",
