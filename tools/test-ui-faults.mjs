@@ -1408,6 +1408,37 @@ async function openTable(app, command, rows, options = {})
     }
 }
 
+await check("T-UI-RECORD-NAV semantic routine records retain inspector actions", async () =>
+{
+    for (const [command, kind] of [["!hive", "RegistryHive"], ["!timer", "KernelTimer"], ["!dpc", "QueuedDpc"]])
+    {
+        const app = await memoryApp();
+        const row = { kind, routine: "0xffff800000002000" };
+        await openTable(app, command, [row]);
+        app.nodes.get("result-rows").children[0].fire("click");
+        assert.equal(app.nodes.get("btn-open-memory").disabled, false, command);
+        assert.equal(app.nodes.get("btn-disassemble").disabled, false, command);
+        app.nodes.get("btn-open-memory").fire("click");
+        const request = app.latest("memoryRead");
+        assert.equal(request.params.source.field, "routine");
+        assert.equal(request.params.source.resultId, command);
+        assert.equal(request.params.source.index, "0");
+        await memoryReply(app, Array(64).fill(0x41), { address: row.routine });
+        app.nodes.get("btn-disassemble").fire("click");
+        const code = app.latest("disassemblyRead");
+        assert.equal(code.params.source.field, "routine");
+        assert.equal(code.params.source.resultId, command);
+        await disassemblyReply(app, { address: row.routine });
+        for (const routine of [null, "0x0000000000000000"])
+        {
+            await openTable(app, command, [{ ...row, routine }]);
+            app.nodes.get("result-rows").children[0].fire("click");
+            assert.equal(app.nodes.get("btn-open-memory").disabled, true, command);
+            assert.equal(app.nodes.get("btn-disassemble").disabled, true, command);
+        }
+    }
+});
+
 await check("T-UI-PIDDB driver identity and cached status replace topology columns", async () =>
 {
     const app = harness();

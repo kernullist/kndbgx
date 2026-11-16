@@ -68,13 +68,23 @@ inline bool ValidSnapshot(const Snapshot &snapshot)
     return true;
 }
 
+inline std::wstring SnapshotRecordKind(const knjson::Value &row)
+{
+    const auto kind = row.Get(L"kind").AsString(L"");
+    const auto family = row.Get(L"family").AsString(L"");
+    // Semantic row labels do not change the identity of existing routine observations.
+    return (kind == L"RegistryHive" && family == L"Hive.GetCellRoutine") ||
+           (kind == L"KernelTimer" && family == L"Timer.Dpc") ||
+           (kind == L"QueuedDpc" && family == L"Dpc.DeferredRoutine") ? L"RoutineObservation" : kind;
+}
+
 inline std::wstring SnapshotKey(const knjson::Value &row, bool crossSession)
 {
     const auto text = [&](const wchar_t *field)
     {
         return row.Get(field).AsString(L"");
     };
-    const auto kind = text(L"kind");
+    const auto kind = SnapshotRecordKind(row);
     if (!row.IsObject() || kind.empty())
     {
         return {};
@@ -169,6 +179,11 @@ inline knjson::Value ComparableRow(const knjson::Value &row, bool crossSession =
                                   row.Get(L"moduleIdentityKind").AsString(L"") == L"MatchedPdbImage";
     for (const auto &[name, value] : row.Fields())
     {
+        if (name == L"kind")
+        {
+            normalized.Set(name, knjson::Value(SnapshotRecordKind(row)));
+            continue;
+        }
         if (DisplaySymbolField(name))
         {
             // Host symbol availability is presentation, not target memory state.

@@ -41,6 +41,8 @@ The validation script rebuilds Debug/Release solution and direct projects, runs 
 
 The packager accepts Release only. It checks generated docs, dependency hashes, binary hardening, matching local PDB identity and publication policy, then verifies the archive. Existing output paths are refused. The ZIP contains the DLL, DIA runtime, MIT license, user guides and their selected screenshots, command metadata, profile descriptions, third-party notices, a release manifest and an SBOM. PDBs and raw session exports remain local. The source manifest hashes current tracked bytes and records a dirty worktree; it does not attest to test completion or include untracked source files.
 
+`tools/test-release-privacy.py` also builds a fixture archive and checks that every profile linked by packaged `SUPPORT.md` is present with its exact source bytes and manifest hash, including the Win32kbase process-filter policy profile.
+
 ## Additional and target-specific checks
 
 ```powershell
@@ -61,6 +63,8 @@ On the intended target, compare reads with native WinDbg across process/thread c
 Audit the compiled registry against both collector rows and default UI columns. A list link, tree node or nested collection envelope is not a substitute for the command's record identity. Keep structural fields in row details where they remain useful for navigation.
 
 `CommandRecordRegression.h` covers CI cache payloads, counted names, unreadable memory, cycles, traversal limits, cancellation, profile rejection and flattened mapper coverage. `test-ui-faults.mjs` checks command-specific fields, including zero/false values and missing routine symbols. These synthetic checks do not prove a private layout on another image.
+
+The semantic hive/timer/DPC row regressions exercise inspector Memory/Disassembly requests and native result binding, including NULL routines, stale context and attempts to reinterpret a routine as physical memory. Snapshot regressions compare earlier routine rows with their semantic row kinds: new fields remain Unknown, while a changed routine is still detected. This imported-v2 compatibility check does not expand the default snapshot collector set.
 
 For live read validation, retain the loaded DLL hash and exact NT/CI image identities. Compare CI names/hashes/status, hive paths/flags/sizes, timer objects/due values, driver dispatch names/handlers and native SSDT entries with independent WinDbg reads. Compare device stack membership with `!devstack`, and distinguish verified empty NMI/DPC lists from unavailable layouts. Inspect actual rendered tables and address navigation as well as exported JSON.
 

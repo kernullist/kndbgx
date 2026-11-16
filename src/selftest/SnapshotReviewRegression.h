@@ -19,6 +19,46 @@ template <typename Check> void RunSnapshotReviewRegression(Check check)
     row.Set(L"size", knjson::Value(L"4096"));
     collection.Rows.Push(row);
     baseline.Collections[L"modules"] = collection.ToJson();
+    for (const auto &[kind, family] : {std::pair(L"RegistryHive", L"Hive.GetCellRoutine"),
+                                      std::pair(L"KernelTimer", L"Timer.Dpc"), std::pair(L"QueuedDpc", L"Dpc.DeferredRoutine")})
+    {
+        auto legacyRow = knjson::Value::MakeObject();
+        legacyRow.Set(L"kind", knjson::Value(L"RoutineObservation"));
+        legacyRow.Set(L"family", knjson::Value(family));
+        legacyRow.Set(L"slot", knjson::Value(L"0xffff800000001000"));
+        legacyRow.Set(L"routine", knjson::Value(L"0xffff800000002000"));
+        auto modernRow = legacyRow;
+        modernRow.Set(L"kind", knjson::Value(kind));
+        check(SnapshotKey(legacyRow, false) == SnapshotKey(modernRow, false),
+              "snapshot.semantic-routine-kind-preserves-legacy-object-identity");
+        auto before = baseline, after = baseline;
+        before.Collections.clear();
+        after.Collections.clear();
+        Result records;
+        records.Collected.Complete = true;
+        records.Rows.Push(legacyRow);
+        before.Collections[L"records"] = records.ToJson();
+        const auto compare = [&]()
+        {
+            records.Rows = knjson::Value::MakeArray();
+            records.Rows.Push(modernRow);
+            after.Collections[L"records"] = records.ToJson();
+            return DiffSnapshots(before, after);
+        };
+        const auto unchanged = compare();
+        check(unchanged.Rows.Items().size() == 1 && unchanged.Rows.Items()[0].Get(L"state").AsString(L"") == L"Unchanged",
+              "snapshot.row-kind-upgrade-is-not-object-removal-and-addition");
+        modernRow.Set(L"object", legacyRow.Get(L"slot"));
+        const auto enriched = compare();
+        check(enriched.Rows.Items().size() == 1 && enriched.Rows.Items()[0].Get(L"state").AsString(L"") == L"Unknown" &&
+            !enriched.Rows.Items()[0].Get(L"knownChanged").AsBool(true),
+            "snapshot.new-observation-fields-remain-unknown-on-legacy-side");
+        modernRow.Set(L"routine", knjson::Value(L"0xffff800000003000"));
+        const auto changed = compare();
+        check(changed.Rows.Items().size() == 1 && changed.Rows.Items()[0].Get(L"state").AsString(L"") == L"Changed" &&
+            changed.Rows.Items()[0].Get(L"knownChanged").AsBool(false),
+            "snapshot.real-routine-change-survives-row-kind-upgrade");
+    }
     for (const auto status : {Status::Partial, Status::Cancelled, Status::EngineError, Status::Unavailable})
     {
         auto partial = collection;

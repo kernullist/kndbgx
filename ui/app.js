@@ -3386,7 +3386,7 @@
   function callbackAddressFields(row)
   {
     return row && row.kind === "ObjectCallbackRegistration" ? ["preRoutine", "postRoutine"] :
-      row && row.kind === "RoutineObservation" ? ["routine"] : [];
+      row && ["RoutineObservation", "RegistryHive", "KernelTimer", "QueuedDpc"].indexOf(row.kind) >= 0 ? ["routine"] : [];
   }
 
   function callbackColumnField(row, path)

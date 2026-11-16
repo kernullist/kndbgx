@@ -92,6 +92,8 @@ This earlier screenshot shows a target without verified service-table profiles. 
 
 The save result is a receipt for the bundle, not a count of captured kernel objects. Snapshot v2 stores processes, modules, callbacks, SSDT, IDT, control registers, HAL and unloaded-driver events as structured collections, with a manifest and SHA-256 checksums. It does not include raw memory. Collection is sequential and not atomic across collectors.
 
+Imported v2 collections can also contain hive, timer or DPC routine records. Their newer row labels retain the earlier family/slot identity during comparison. Fields absent from an older record remain Unknown; a label change alone does not establish object removal, addition or a changed routine. These collections are not added to the default `!snapshot` capture.
+
 Different session identities require the explicit `/cross-session` option:
 
 ```text
@@ -260,6 +262,8 @@ Unloaded-driver events, PiDDB records and CI hash buckets have different lifetim
 ### Inspect hives and ALPC ports
 
 Run `!hive` to compare **Root Path**, **File Path**, **File User Name**, hive address, flags and file size. `GetCellRoutine` and its symbol remain available. Empty file names are valid for hives without a backing file; unreadable names remain Unknown. These observations do not establish the integrity of all registry contents.
+
+Select a hive, timer or queued-DPC row to open its observed routine in Memory or Disassembly from the inspector. NULL or unreadable routines disable these actions; actions from an older target/context must be refreshed before use.
 
 Run `!alpc` to compare **Name**, **Port Type**, **Owner / PID**, **Owner / Image**, **Connection Name**, port address and peer port. An unnamed endpoint displays **Unnamed**; an unreadable name displays **Name unavailable**. The connection's name is a separate field and never becomes the endpoint's own name. Row details retain the owner EPROCESS, communication-info address, client/server/connection addresses and raw port state.
 

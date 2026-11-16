@@ -539,6 +539,34 @@ template <typename Check> void RunDebuggerRegression(Check check)
         memory.Set(L"source", binding);
         check(MemoryViewCommand(memory, &callbacks, &callbacks.Data.Stamp) == L"db \"0xffff800055556666\" L0x0000000000000040",
               "callback-navigation.notify-and-registry-routine-supported");
+        for (const auto *kind : {L"RegistryHive", L"KernelTimer", L"QueuedDpc"})
+        {
+            callback.Set(L"kind", knjson::Value(kind));
+            setCallback(callback);
+            check(MemoryViewCommand(memory, &callbacks, &callbacks.Data.Stamp) == L"db \"0xffff800055556666\" L0x0000000000000040",
+                  "record-navigation.semantic-routine-retains-bound-memory-action");
+            auto disassembly = binding;
+            disassembly.Set(L"action", knjson::Value(L"disassemble"));
+            code.Set(L"source", disassembly);
+            check(DisassemblyViewCommand(code, &callbacks, &callbacks.Data.Stamp) == L"u \"0xffff800055556666\" L0x0000000000000010",
+                  "record-navigation.semantic-routine-retains-bound-code-action");
+            auto invalid = callback;
+            invalid.Set(L"routine", knjson::Value(L"0x0"));
+            setCallback(invalid);
+            check(!MemoryViewCommand(memory, &callbacks, &callbacks.Data.Stamp), "record-navigation.null-routine-refused");
+            invalid = callback;
+            invalid.Set(L"addressSpace", knjson::Value(L"physical"));
+            setCallback(invalid);
+            auto routinePath = knjson::Value::MakeArray();
+            routinePath.Push(knjson::Value(L"routine"));
+            auto pathSource = navigation;
+            pathSource.Set(L"path", routinePath);
+            check(!MemoryViewCommand(memory, &callbacks, &callbacks.Data.Stamp) &&
+                !BoundResultAddress(callbacks, pathSource, callbacks.Data.Stamp),
+                "record-navigation.routine-cannot-be-reinterpreted-as-physical");
+            setCallback(callback);
+            check(!MemoryViewCommand(memory, &callbacks, &stale), "record-navigation.stale-source-refused");
+        }
     }
     {
         auto parameters = knjson::Value::MakeObject();

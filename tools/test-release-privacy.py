@@ -4,12 +4,14 @@ import contextlib
 import io
 import json
 import pathlib
+import posixpath
 import re
 import struct
 import subprocess
 import tempfile
 import unittest
 import zlib
+import zipfile
 from types import SimpleNamespace
 from unittest import mock
 
@@ -262,6 +264,35 @@ class PrivacyTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     release.package('Release', output, patterns)
             self.assertFalse(output.exists())
+
+    def test_packaged_support_profile_links_resolve_to_exact_profile_bytes(self):
+        def content(root, name):
+            if name == 'docs/SUPPORT.md' or name.startswith('profiles/'):
+                return (root / name).read_bytes()
+            if name.endswith('.png'):
+                return self.png()
+            return b'public package fixture\n'
+
+        lock = {'package': 'Fixture', 'version': '1.0', 'packageSha256': '0' * 64}
+        with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as patches:
+            for name, value in (('check_repository', None), ('generated_docs', []), ('dependencies', lock),
+                                ('binary_evidence', {}), ('source_manifest', {}), ('run', '')):
+                patches.enter_context(mock.patch.object(release, name, return_value=value))
+            patches.enter_context(mock.patch.object(release, 'read_public_file', side_effect=content))
+            patches.enter_context(contextlib.redirect_stdout(io.StringIO()))
+            output = pathlib.Path(directory) / 'package.zip'
+            release.package('Release', output)
+            with zipfile.ZipFile(output) as archive:
+                support = archive.read('docs/SUPPORT.md').decode('utf-8')
+                links = re.findall(r'\]\((\.\./profiles/[^)#]+\.json)\)', support)
+                self.assertTrue(links)
+                manifest = json.loads(archive.read('release-manifest.json'))
+                for link in links:
+                    name = posixpath.normpath('docs/' + link)
+                    with self.subTest(profile=name):
+                        self.assertIn(name, archive.namelist())
+                        self.assertEqual(archive.read(name), (release.ROOT / name).read_bytes())
+                        self.assertEqual(manifest['files'][name], release.digest(archive.read(name)))
 
     def test_release_cli_loads_default_policy_and_rejects_missing_explicit_policy(self):
         with tempfile.TemporaryDirectory() as directory:

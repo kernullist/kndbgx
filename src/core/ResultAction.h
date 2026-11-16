@@ -99,7 +99,7 @@ inline std::optional<ResultAddress> BoundResultAddress(const StoredResult &sourc
     {
         const auto space = row.Get(L"addressSpace").AsString(L"");
         const auto kind = row.Get(L"kind").AsString(L"");
-        const bool callback = (field == L"routine" && kind == L"RoutineObservation") ||
+        const bool callback = (field == L"routine" && RoutineRecordKind(kind)) ||
                               ((field == L"preRoutine" || field == L"postRoutine") && kind == L"ObjectCallbackRegistration");
         if ((field != L"address" && !callback) || (callback && !space.empty() && space != L"virtual"))
         {

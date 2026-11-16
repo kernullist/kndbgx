@@ -7,6 +7,11 @@
 
 namespace kncore
 {
+inline bool RoutineRecordKind(std::wstring_view kind)
+{
+    return kind == L"RoutineObservation" || kind == L"RegistryHive" || kind == L"KernelTimer" || kind == L"QueuedDpc";
+}
+
 inline bool ResultHasTargetAddresses(const Result &source)
 {
     return !source.Consistency.starts_with(L"immutable-file") && source.Source != L"HostDumpMetadata" &&
@@ -33,7 +38,7 @@ inline std::optional<std::wstring> AddressFieldSpace(const knjson::Value &row, c
         return std::nullopt;
     }
     const auto kind = row.Get(L"kind").AsString(L"");
-    if ((kind == L"RoutineObservation" && field == L"routine") ||
+    if ((RoutineRecordKind(kind) && field == L"routine") ||
         (kind == L"ObjectCallbackRegistration" && (field == L"preRoutine" || field == L"postRoutine")))
     {
         const auto space = explicitSpace.IsString() ? explicitSpace.AsString(L"") : inheritedSpace;
