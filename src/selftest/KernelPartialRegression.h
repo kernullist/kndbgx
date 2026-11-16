@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CollectorRegression.h"
+#include "QueueReadRegression.h"
 #include "../core/KernelSymbolProfile.h"
 #include "../core/NamespaceWalk.h"
 #include "../core/TimerDpc.h"
@@ -9,6 +10,7 @@ namespace knself
 {
 template <typename Check> void RunKernelPartialRegression(Check check)
 {
+    RunQueueReadRegression(check);
     using namespace kncore;
     constexpr uint64_t base = 0xffff800000000000ULL;
     const TargetArchitecture architecture{0x8664, 8, 48, {}};

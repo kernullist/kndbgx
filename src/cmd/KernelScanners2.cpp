@@ -6,6 +6,7 @@
 #include "../core/KernelAnalysis.h"
 #include "../core/PeIdentity.h"
 #include "../core/TimerDpc.h"
+#include "../core/QueueRead.h"
 #include "../core/Piddb.h"
 #include "../core/AlpcPorts.h"
 #include "../util/FileReader.h"
@@ -153,7 +154,8 @@ void CpuQueues(Ctx &ctx, bool timers)
     ULONG stride = 0;
     const bool hasStride = layout.TypeSize(timers ? L"_KTIMER_TABLE_ENTRY" : L"_KDPC_DATA", &stride);
     if (!link || link->Size != (timers ? 16u : 8u) || !queue || !entries || !entries->LeafElementSize || !hasStride ||
-        *entries->LeafElementSize != stride || !list || list->Size != (timers ? 16u : 8u) || !routine || routine->Size != 8)
+        stride == 0 || *entries->LeafElementSize != stride || !list || list->Size != (timers ? 16u : 8u) ||
+        !list->ValidFor(stride) || !routine || routine->Size != 8)
     {
         ctx.Out.Fail(kncore::Status::Unavailable, L"PDB queue dimensions or link form unavailable");
         return;
@@ -176,7 +178,16 @@ void CpuQueues(Ctx &ctx, bool timers)
     const bool firstPrcbKnown = !ctx.Session.Cancelled() && ctx.Session.ReadProcessorBlock(0, &firstPrcb) &&
                                 architecture.KernelPointer(firstPrcb);
     uint64_t completedQueues = 0;
-    budget.StartTraversal(std::chrono::steady_clock::now(), std::chrono::seconds(30));
+    kncore::QueueReadMeter readMeter(ctx.Session);
+    kncore::QueueReadCache queueReader(readMeter, budget, architecture,
+        timers && (budget.Report.Consistency == L"stopped" || budget.Report.Consistency == L"dump"));
+    const auto prepareDpc = [&](uint64_t object)
+    {
+        queueReader.PrepareRecord(kncore::QueueReadCache::Dpc, object, {dpcType, routine, context, importance});
+    };
+    const uint32_t banksPerRead = (std::max)(1u, static_cast<uint32_t>(kncore::QueueReadCache::MaxRead / stride));
+    const auto traversalStart = std::chrono::steady_clock::now();
+    budget.StartTraversal(traversalStart, std::chrono::seconds(30));
     for (ULONG cpu = 0; cpu < count && CheckCollection(ctx, budget); ++cpu)
     {
         ULONG64 prcb = firstPrcb;
@@ -201,6 +212,21 @@ void CpuQueues(Ctx &ctx, bool timers)
                 continue;
             }
             const uint64_t head = prcb + listField->Offset;
+            const auto table = timers ? kncore::NestedField(queue, entries) : std::nullopt;
+            if (table && bank % banksPerRead == 0 && stride <= kncore::QueueReadCache::MaxRead &&
+                kncore::ValidRange(prcb, static_cast<uint64_t>(table->Offset) + table->Size))
+            {
+                const uint64_t address = prcb + table->Offset + static_cast<uint64_t>(bank) * stride;
+                queueReader.Prepare(kncore::QueueReadCache::Heads, address, (std::min)(banksPerRead, banks - bank) * stride);
+            }
+            const auto prepareTimer = [&](uint64_t node)
+            {
+                if (node >= link->Offset && architecture.KernelPointer(node - link->Offset))
+                {
+                    queueReader.PrepareRecord(kncore::QueueReadCache::Timer, node - link->Offset,
+                        {link, timerDpc, dueTime, period, signalState});
+                }
+            };
             auto visitor = [&](uint64_t node)
             {
                 if (node < link->Offset || !architecture.KernelPointer(node - link->Offset))
@@ -208,12 +234,12 @@ void CpuQueues(Ctx &ctx, bool timers)
                     return kncore::VisitDecision::Failed;
                 }
                 const uint64_t object = node - link->Offset;
-                const auto rawDpc = timers ? kncore::ReadField(ctx.Session, object, timerDpc) : std::optional<uint64_t>(object);
+                const auto rawDpc = timers ? kncore::ReadField(queueReader, object, timerDpc) : std::optional<uint64_t>(object);
                 std::optional<uint64_t> function;
-                const auto dpc = timers ? kncore::ValidatedTimerDpc(ctx.Session, architecture, object, rawDpc, timerKeys, dpcType) : rawDpc;
+                const auto dpc = timers ? kncore::ValidatedTimerDpc(queueReader, architecture, object, rawDpc, timerKeys, dpcType, prepareDpc) : rawDpc;
                 if (!timers)
                 {
-                    function = kncore::ReadField(ctx.Session, object, routine);
+                    function = kncore::ReadField(queueReader, object, routine);
                 }
                 else if (dpc && *dpc == 0)
                 {
@@ -221,7 +247,7 @@ void CpuQueues(Ctx &ctx, bool timers)
                 }
                 else if (dpc)
                 {
-                    function = kncore::ReadField(ctx.Session, *dpc, routine);
+                    function = kncore::ReadField(queueReader, *dpc, routine);
                     if (function == 0)
                     {
                         function.reset();
@@ -237,9 +263,9 @@ void CpuQueues(Ctx &ctx, bool timers)
                 row.Set(L"dpc", kncore::OptionalNumber(dpc, true));
                 if (timers)
                 {
-                    const auto due = kncore::ReadField(ctx.Session, object, dueTime);
-                    const auto interval = kncore::ReadField(ctx.Session, object, period);
-                    const auto signal = kncore::ReadField(ctx.Session, object, signalState);
+                    const auto due = kncore::ReadField(queueReader, object, dueTime);
+                    const auto interval = kncore::ReadField(queueReader, object, period);
+                    const auto signal = kncore::ReadField(queueReader, object, signalState);
                     row.Set(L"dueTimeRaw", kncore::OptionalNumber(due, true));
                     row.Set(L"periodMs", kncore::OptionalNumber(interval));
                     row.Set(L"signalState", kncore::OptionalNumber(signal));
@@ -250,8 +276,8 @@ void CpuQueues(Ctx &ctx, bool timers)
                 }
                 if (dpc && *dpc != 0)
                 {
-                    const auto parameter = kncore::ReadField(ctx.Session, *dpc, context);
-                    const auto priority = kncore::ReadField(ctx.Session, *dpc, importance);
+                    const auto parameter = kncore::ReadField(queueReader, *dpc, context);
+                    const auto priority = kncore::ReadField(queueReader, *dpc, importance);
                     row.Set(L"deferredContext", kncore::OptionalNumber(parameter, true));
                     row.Set(L"importance", kncore::OptionalNumber(priority));
                     if (!parameter || !priority)
@@ -265,12 +291,16 @@ void CpuQueues(Ctx &ctx, bool timers)
                         !dpc ? L"Encoded DPC unavailable or invalid" : *dpc == 0 ? L"Verified encoded NULL DPC" : L"Verified encoded DPC"));
                     row.Set(L"decoderProfile", timerKeys ? knjson::Value(kncore::KernelSymbolProfile28000Id) : knjson::Value());
                 }
+                if (budget.Stopped)
+                {
+                    return kncore::VisitDecision::Failed;
+                }
                 EmitRow(ctx, budget, row);
                 return kncore::VisitDecision::Continue;
             };
             if (timers)
             {
-                if (kncore::WalkList(ctx.Session, head, architecture, budget, visitor))
+                if (kncore::WalkList(queueReader, head, architecture, budget, visitor, prepareTimer))
                 {
                     ++completedQueues;
                 }
@@ -278,12 +308,12 @@ void CpuQueues(Ctx &ctx, bool timers)
             else
             {
                 uint64_t first = 0;
-                if (!ctx.Session.ReadExact(kncore::AddressSpace::Virtual, head, &first))
+                if (!queueReader.ReadExact(kncore::AddressSpace::Virtual, head, &first))
                 {
                     ++budget.Report.Collected.Unreadable;
                     continue;
                 }
-                if (kncore::WalkChain(ctx.Session, first, 0, singleNext->Offset, architecture, budget, visitor))
+                if (kncore::WalkChain(queueReader, first, 0, singleNext->Offset, architecture, budget, visitor))
                 {
                     ++completedQueues;
                 }
@@ -309,6 +339,13 @@ void CpuQueues(Ctx &ctx, bool timers)
     budget.Report.Analysis = knjson::Value::MakeObject();
     budget.Report.Analysis.Set(L"expectedQueues", knjson::Value(std::to_wstring(static_cast<uint64_t>(count) * banks)));
     budget.Report.Analysis.Set(L"completedQueues", knjson::Value(std::to_wstring(completedQueues)));
+    budget.Report.Analysis.Set(L"readRequests", knjson::Value(std::to_wstring(readMeter.Requests)));
+    budget.Report.Analysis.Set(L"requestedBytes", knjson::Value(std::to_wstring(readMeter.Bytes)));
+    budget.Report.Analysis.Set(L"cachedReads", knjson::Value(std::to_wstring(queueReader.CacheHits)));
+    budget.Report.Analysis.Set(L"readMilliseconds", knjson::Value(std::to_wstring(
+        std::chrono::duration_cast<std::chrono::milliseconds>(readMeter.Elapsed).count())));
+    budget.Report.Analysis.Set(L"traversalMilliseconds", knjson::Value(std::to_wstring(
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - traversalStart).count())));
     FinishCollection(ctx, budget);
 }
 } // namespace

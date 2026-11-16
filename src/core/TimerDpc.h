@@ -25,7 +25,8 @@ inline uint64_t DecodeTimerDpc(uint64_t raw, uint64_t timer, const TimerDpcKeys 
 
 inline std::optional<uint64_t> ValidatedTimerDpc(TargetReader &reader, const TargetArchitecture &architecture, uint64_t timer,
                                                  std::optional<uint64_t> raw, const std::optional<TimerDpcKeys> &keys,
-                                                 const std::optional<FieldInfo> &type)
+                                                 const std::optional<FieldInfo> &type,
+                                                 const std::function<void(uint64_t)> &prepare = {})
 {
     if (!raw || !keys || !architecture.KernelPointer(timer) || !type || type->Size != 1 || type->BitOffset || type->BitWidth)
     {
@@ -40,6 +41,10 @@ inline std::optional<uint64_t> ValidatedTimerDpc(TargetReader &reader, const Tar
     if (!architecture.KernelPointer(dpc) || dpc % 8 != 0)
     {
         return {};
+    }
+    if (prepare)
+    {
+        prepare(dpc);
     }
     const auto observed = ReadField(reader, dpc, type);
     return observed && (*observed == 0x13 || *observed == 0x1a) ? std::optional<uint64_t>(dpc) : std::nullopt;
