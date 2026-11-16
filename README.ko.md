@@ -107,11 +107,11 @@ WinDbg를 대상에 연결하고 메모리를 조사하기 전에 대상을 중�
 
 ![하이브 GetCellRoutine 15개와 커널 소유 모듈](docs/screenshots/registry-hive-routines.png)
 
-`!alpc`는 객체 네임스페이스를 순회해 ALPC 포트를 찾는다. **Row details**에서 소유 프로세스 식별 정보, 연결 포트와 네임스페이스 깊이를 함께 확인한다.
+`!alpc`는 검증된 28000.2952 커널의 전역 포트 목록을 순회한다. 이름 없는 클라이언트·서버 통신 포트도 포함하며, 포트 유형·소유 PID/이미지·연결 이름·상대 포트를 표시한다. 정상적인 무명 포트는 **Unnamed**, 이름을 읽지 못한 포트는 **Name unavailable**로 구분한다.
 
 ![선택한 ALPC 포트와 System 소유자 정보](docs/screenshots/alpc-ports.png)
 
-*위 ALPC 이미지는 순회 개선 전 9개 포트만 보관한 Partial 캡처다. 현재 구현은 필요한 헤더·이름만 읽고 전체 순회에 120초 제한을 적용한다. 28000.2952 VM에서는 캐시를 비운 뒤 이름 있는 포트 169개를 모두 확인했다. 이름 없는 포트·private namespace·shadow directory는 포함하지 않는다.* [하이브와 ALPC 조사](docs/UX.md#inspect-hives-and-alpc-ports)
+*위 ALPC 이미지는 전역 포트 목록 지원 전의 Partial 캡처다. 현재 전역 순회는 120초·65,536개 제한을 적용한다. 목록에서 분리됐거나 아직 등록되지 않은 객체는 포함하지 않는다. 전역 목록 프로필이 없으면 무명 포트 수집 공백을 명시하고, 레이아웃을 검증할 수 있는 경우 이름 기반 순회 결과를 표시한다.* [하이브와 ALPC 조사](docs/UX.md#inspect-hives-and-alpc-ports)
 
 ### 다른 콜백과 서비스 테이블
 
@@ -487,7 +487,7 @@ Previous/Next는 성공적으로 읽은 범위를 기준으로 이동한다. 주
 | `!nmi` | 등록된 NMI 콜백을 순회하고 가능한 함수 정보를 해석한다.<br>Experimental · x64 커널·덤프 | `!nmi`<br>예제: `!nmi` |
 | `!hal` | 검증된 HAL 디스패치 포인터와 소유 모듈을 확인한다.<br>Experimental · x64 커널·덤프 | `!hal`<br>예제: `!hal` |
 | `!hive` | 레지스트리 하이브의 GetCellRoutine 주소와 소유 모듈을 나열한다.<br>Experimental · x64 커널·덤프 | `!hive`<br>예제: `!hive` |
-| `!alpc` | 제한된 객체 네임스페이스 순회로 ALPC 포트를 찾고 소유자·연결 정보를 확인한다.<br>Experimental · x64 커널·덤프 | `!alpc`<br>예제: `!alpc` |
+| `!alpc` | 검증된 이름 있는 포트·무명 포트의 유형, 소유자와 연결 관계를 표시한다. 수집 범위와 제한을 함께 확인한다.<br>Experimental · x64 커널·덤프 | `!alpc`<br>예제: `!alpc` |
 | `!fwtable` | 대상 레이아웃을 알 수 있을 때 등록된 펌웨어 테이블 공급자를 확인한다.<br>Experimental · x64 커널·덤프 | `!fwtable`<br>예제: `!fwtable` |
 | `!etw` | 대상의 ETW 로거 메타데이터를 확인한다. 추적을 시작하거나 InfinityHook 여부를 판정하지 않는다.<br>Experimental · x64 커널·덤프 | `!etw`<br>예제: `!etw` |
 

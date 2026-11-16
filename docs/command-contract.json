@@ -1159,7 +1159,7 @@
   {
     "name": "!alpc",
     "group": "Kernel",
-    "summary": "ALPC port namespace walk",
+    "summary": "list verified named and unnamed ALPC ports, owners and connection endpoints",
     "grammar": "!alpc",
     "support": "Experimental",
     "capability": "KernelX64",

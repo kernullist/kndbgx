@@ -38,6 +38,7 @@
 #include "PiddbRegression.h"
 #include "CommandRecordRegression.h"
 #include "KernelPartialRegression.h"
+#include "AlpcRegression.h"
 
 #include <cstdio>
 #include <string>
@@ -712,6 +713,7 @@ int wmain(int argc, wchar_t **argv)
     knself::RunPiddbRegression(Check);
     knself::RunCommandRecordRegression(Check);
     knself::RunKernelPartialRegression(Check);
+    knself::RunAlpcRegression(Check);
     knself::RunMemoryRegression(Check);
     knself::RunMemoryExportRegression(Check);
     knself::RunPlatformPostureRegression(Check);

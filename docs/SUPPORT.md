@@ -23,7 +23,7 @@ Kernel collection requires a matching image/PDB and validated field metadata. A 
 The source includes these compiled fallback profiles:
 
 - NT image **26100.8655 x64**: [callbacks](../profiles/nt-26100.8655-callbacks-x64.json), [additional symbol/layout coverage](../profiles/nt-26100.8655-symbols-x64.json) and [native SSDT](../profiles/nt-26100.8655-x64.json).
-- NT image **28000.2952 x64**: [callbacks](../profiles/nt-28000.2952-callbacks-x64.json), [PiDDB records](../profiles/nt-28000.2952-piddb-x64.json), and [additional layouts, timer DPC decoding, object namespace decoding and SSDT descriptors](../profiles/nt-28000.2952-symbols-x64.json).
+- NT image **28000.2952 x64**: [callbacks](../profiles/nt-28000.2952-callbacks-x64.json), [PiDDB records](../profiles/nt-28000.2952-piddb-x64.json), and [additional layouts, timer DPC decoding, named/unnamed ALPC ports, object names and SSDT descriptors](../profiles/nt-28000.2952-symbols-x64.json).
 - Win32k image with PDB **2414214E-C1ED-F9F3-CE5F-1595CCD37B1B**, age 1: [registered Shadow SSDT entry thunks](../profiles/win32k-28000.2952-services-x64.json). The matching NT descriptor and win32k table/limit are checked independently; per-session dispatch targets and the filtered table are excluded.
 - CI image with PDB **F660C9DA-4538-E0B7-62AA-C762F4FA8CDB**, age 1: [kernel hash-cache records](../profiles/ci-28000.2952-hash-cache-x64.json), observed with that 28000.2952 target. CI identity is checked independently of NT identity.
 
@@ -32,6 +32,8 @@ These profiles identify individual images, which can differ from the OS build nu
 Routine annotation can load the owning module's PDB through the current WinDbg symbol path. Verified names retain their provenance; missing or rejected names use `module+RVA` when ownership is known. A pending symbol load can delay cancellation. Use [Context details > Symbols](UX.md#context-symbols-and-waits) to inspect one module's identity and type availability.
 
 Shadow SSDT and timer DPCs on other images can remain unverified. PiDDB, CI cache, encoded DPC and Shadow SSDT decoding require their reviewed image/PDB and code profiles. Timer metadata remains visible when its DPC cannot be decoded. Callback coverage includes declared notify, object and registry families, not every callback mechanism in Windows. Object flags are the operation mask; notify context and registry flags have different meanings.
+
+ALPC global-list decoding also requires its reviewed NT profile and matching PDB fields, including port-state bitfields. It includes unnamed endpoints linked in `AlpcpPortList`; detached/freed objects and objects not yet linked are outside its scope. Other kernels can retain named-namespace observations with an explicit unnamed-port coverage gap. A missing name header is verified unnamed; unreadable or contradictory name metadata stays unknown.
 
 ## Interpretation limits
 

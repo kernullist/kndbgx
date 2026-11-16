@@ -8,7 +8,7 @@
   "timestamp": "0xe1a9f520",
   "imageSize": "0x1459000",
   "pdbGuid": "4660396c-2030-4c03-9af4-5fc6b15adf98",
-  "scope": "Host-silo ETW storage/selectors, NMI callbacks, unloaded-driver ring and firmware providers, encoded timer DPCs, registered shadow service descriptor and object namespace decoding",
+  "scope": "Host-silo ETW storage/selectors, NMI callbacks, unloaded-driver ring and firmware providers, encoded timer DPCs, registered shadow service descriptor and object namespace decoding, initialized named and unnamed ALPC ports",
   "families": {
     "HostSilo": [
       {
@@ -199,6 +199,80 @@
         "offset": "0x11",
         "bytes": "83e103488d15358349000fb60c11482bc1c3"
       }
+    ],
+    "AlpcPorts": [
+      {
+        "symbol": "AlpcpInitializePort",
+        "rva": "0xa324c0",
+        "offset": "0x2c",
+        "bytes": "488bd9"
+      },
+      {
+        "symbol": "AlpcpInitializePort",
+        "rva": "0xa324c0",
+        "offset": "0xab",
+        "bytes": "8b81a0010000"
+      },
+      {
+        "symbol": "AlpcpInitializePort",
+        "rva": "0xa324c0",
+        "offset": "0xbc",
+        "bytes": "8d0c1233c883e10633c8"
+      },
+      {
+        "symbol": "AlpcpInitializePort",
+        "rva": "0xa324c0",
+        "offset": "0x12c",
+        "bytes": "488b0555214e00488d0d46214e00483908"
+      },
+      {
+        "symbol": "AlpcpInitializePort",
+        "rva": "0xa324c0",
+        "offset": "0x160",
+        "bytes": "4889430848890b4889184883c8ff48891d13214e00"
+      },
+      {
+        "symbol": "AlpcpDestroyPort",
+        "rva": "0xa33314",
+        "offset": "0x13",
+        "bytes": "488bd9"
+      },
+      {
+        "symbol": "AlpcpDestroyPort",
+        "rva": "0xa33314",
+        "offset": "0x4a",
+        "bytes": "488b1348395a087558488b4308483918754f48891048894208"
+      },
+      {
+        "symbol": "AlpcpCreateClientPort",
+        "rva": "0x922240",
+        "offset": "0x4a0",
+        "bytes": "ba02000000488bcfe8d3fd1000"
+      },
+      {
+        "symbol": "AlpcpAcceptConnectPort",
+        "rva": "0xa31860",
+        "offset": "0x40e",
+        "bytes": "4533c0418d5003498bcfe843080000"
+      },
+      {
+        "symbol": "AlpcpCreateConnectionPort",
+        "rva": "0xa30660",
+        "offset": "0xc6",
+        "bytes": "be01000000"
+      },
+      {
+        "symbol": "AlpcpCreateConnectionPort",
+        "rva": "0xa30660",
+        "offset": "0xf2",
+        "bytes": "8bd6488b5c2460488bcbe85f1d0000"
+      },
+      {
+        "symbol": "AlpcpCreatePort",
+        "rva": "0xa31760",
+        "offset": "0x1e",
+        "bytes": "488b15a3f55800"
+      }
     ]
   },
   "records": {
@@ -249,12 +323,32 @@
       "argumentsOffset": "0x18",
       "requiredCompanion": "win32k-28000.2952-services-x64.json",
       "serviceIdBase": "0x1000"
+    },
+    "AlpcPorts": {
+      "listRva": "0xf14740",
+      "objectTypeRva": "0xfc0d28",
+      "portListEntry": "0x0",
+      "communicationInfo": "0x10",
+      "ownerProcess": "0x18",
+      "state": "0x1a0",
+      "initializedBit": 0,
+      "typeBits": [
+        1,
+        2
+      ],
+      "types": {
+        "1": "Connection",
+        "2": "Client communication",
+        "3": "Server communication"
+      },
+      "scope": "Initialized ports in AlpcpPortList; no pool scan or discovery of detached objects."
     }
   },
   "limitations": [
     "Other images and changed/unreadable code windows are not decoded.",
     "Shadow SSDT covers registered win32k entry thunks, not per-session dispatch destinations or the filtered table.",
-    "Namespace traversal follows root hash buckets; unnamed objects, private namespaces and shadow directories are excluded.",
-    "Other ETW silos are not covered."
+    "Fallback namespace traversal follows root hash buckets; unnamed objects, private namespaces and shadow directories are excluded.",
+    "Other ETW silos are not covered.",
+    "ALPC global-list enumeration requires the AlpcPorts family and matching PDB layouts; detached, freed and not-yet-linked objects are excluded."
   ]
 }

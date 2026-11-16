@@ -1117,7 +1117,7 @@ const std::vector<CommandSpec> &CommandSpecs()
         {L"!alpc",
          {},
          L"Kernel",
-         L"ALPC port namespace walk",
+         L"list verified named and unnamed ALPC ports, owners and connection endpoints",
          L"!alpc",
          Effect::TargetRead,
          Capability::KernelX64,

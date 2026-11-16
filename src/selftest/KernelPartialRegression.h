@@ -261,7 +261,7 @@ template <typename Check> void RunKernelPartialRegression(Check check)
     const ModuleIdentity nt{L"{4660396C-2030-4C03-9AF4-5FC6B15ADF98}", 1, 0x8664, 0xe1a9f520, 0x1459000, base, true};
     const ModuleIdentity win32k{L"{2414214E-C1ED-F9F3-CE5F-1595CCD37B1B}", 1, 0x8664, 0xeaa9257b, 0xca000, base, true};
     for (const auto family : {KernelLayoutFamily::TimerDpc, KernelLayoutFamily::ShadowService, KernelLayoutFamily::Win32kService,
-                              KernelLayoutFamily::ObjectTypes, KernelLayoutFamily::ObjectNames})
+                              KernelLayoutFamily::ObjectTypes, KernelLayoutFamily::ObjectNames, KernelLayoutFamily::AlpcPorts})
     {
         const auto identity = family == KernelLayoutFamily::Win32kService ? win32k : nt;
         ByteFixture code;

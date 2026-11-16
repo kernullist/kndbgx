@@ -45,7 +45,8 @@ enum class KernelLayoutFamily
     CiHash,
     TimerDpc,
     ShadowService,
-    Win32kService
+    Win32kService,
+    AlpcPorts
 };
 
 inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFamily family, bool build28000 = false)
@@ -71,6 +72,19 @@ inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFami
     }
     if (build28000 && family != KernelLayoutFamily::Piddb)
     {
+        static const std::array<CallbackCodeWindow, 12> alpc = {{
+            {L"AlpcpInitializePort", 0xa324c0, 0x2c, L"488bd9"},
+            {L"AlpcpInitializePort", 0xa324c0, 0xab, L"8b81a0010000"},
+            {L"AlpcpInitializePort", 0xa324c0, 0xbc, L"8d0c1233c883e10633c8"},
+            {L"AlpcpInitializePort", 0xa324c0, 0x12c, L"488b0555214e00488d0d46214e00483908"},
+            {L"AlpcpInitializePort", 0xa324c0, 0x160, L"4889430848890b4889184883c8ff48891d13214e00"},
+            {L"AlpcpDestroyPort", 0xa33314, 0x13, L"488bd9"},
+            {L"AlpcpDestroyPort", 0xa33314, 0x4a, L"488b1348395a087558488b4308483918754f48891048894208"},
+            {L"AlpcpCreateClientPort", 0x922240, 0x4a0, L"ba02000000488bcfe8d3fd1000"},
+            {L"AlpcpAcceptConnectPort", 0xa31860, 0x40e, L"4533c0418d5003498bcfe843080000"},
+            {L"AlpcpCreateConnectionPort", 0xa30660, 0xc6, L"be01000000"},
+            {L"AlpcpCreateConnectionPort", 0xa30660, 0xf2, L"8bd6488b5c2460488bcbe85f1d0000"},
+            {L"AlpcpCreatePort", 0xa31760, 0x1e, L"488b15a3f55800"}}};
         static const std::array<CallbackCodeWindow, 8> timer = {{
             {L"KeSetTimerEx", 0x34fdc0, 0x2f, L"488b15b212c700498bef48332d9815c7008bca480fcd4833ef448af048d3cd4833ea"},
             {L"KeSetTimerEx", 0x34fdc0, 0xe4, L"48896f30"},
@@ -114,6 +128,8 @@ inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFami
              L"8b06488d79188901488b460848894108488b461048894110488d412848897f0848893f48894008488900488b4910e82f07b2ff488b05f0a66c00483928751348892f4889470848893848893ddaa66c00"}}};
         switch (family)
         {
+        case KernelLayoutFamily::AlpcPorts:
+            return alpc;
         case KernelLayoutFamily::ObjectTypes:
             return types;
         case KernelLayoutFamily::ObjectNames:
@@ -199,6 +215,7 @@ inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFami
     case KernelLayoutFamily::TimerDpc:
     case KernelLayoutFamily::ShadowService:
     case KernelLayoutFamily::Win32kService:
+    case KernelLayoutFamily::AlpcPorts:
         return {};
     }
     return {};
@@ -219,6 +236,7 @@ inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbol
     }
     if (build28000 && family != KernelLayoutFamily::Piddb)
     {
+        static const std::pair<const wchar_t *, uint32_t> alpc[] = {{L"AlpcpPortList", 0xf14740}, {L"AlpcPortObjectType", 0xfc0d28}};
         static const std::pair<const wchar_t *, uint32_t> types[] = {{L"ObTypeIndexTable", 0xfc1960}, {L"ObHeaderCookie", 0xfc0f90}};
         static const std::pair<const wchar_t *, uint32_t> names[] = {{L"ObpInfoMaskToOffset", 0xf145e0}};
         static const std::pair<const wchar_t *, uint32_t> timer[] = {{L"KiWaitNever", 0xfc10a8}, {L"KiWaitAlways", 0xfc1398}};
@@ -229,6 +247,8 @@ inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbol
         static const std::pair<const wchar_t *, uint32_t> firmware[] = {{L"ExpFirmwareTableProviderListHead", 0xf03940}};
         switch (family)
         {
+        case KernelLayoutFamily::AlpcPorts:
+            return alpc;
         case KernelLayoutFamily::ObjectTypes:
             return types;
         case KernelLayoutFamily::ObjectNames:
@@ -280,6 +300,7 @@ inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbol
     case KernelLayoutFamily::TimerDpc:
     case KernelLayoutFamily::ShadowService:
     case KernelLayoutFamily::Win32kService:
+    case KernelLayoutFamily::AlpcPorts:
         return {};
     }
     return {};

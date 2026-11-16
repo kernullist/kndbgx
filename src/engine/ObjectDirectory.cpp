@@ -342,6 +342,26 @@ unsigned ObjectDirectoryWalker::DecodeTypeIndex(ULONG64 header)
     return static_cast<unsigned char>(raw ^ cookie ^ (header >> 8));
 }
 
+kncore::NamespaceLayout ResolveNamespaceLayout(LayoutResolver &layout)
+{
+    kncore::NamespaceLayout fields;
+    fields.Buckets = layout.Field(L"nt", L"_OBJECT_DIRECTORY", L"HashBuckets");
+    fields.Next = layout.Field(L"nt", L"_OBJECT_DIRECTORY_ENTRY", L"ChainLink");
+    fields.Object = layout.Field(L"nt", L"_OBJECT_DIRECTORY_ENTRY", L"Object");
+    fields.Body = layout.Field(L"nt", L"_OBJECT_HEADER", L"Body");
+    fields.Type = layout.Field(L"nt", L"_OBJECT_HEADER", L"TypeIndex");
+    fields.Mask = layout.Field(L"nt", L"_OBJECT_HEADER", L"InfoMask");
+    fields.Parent = layout.Field(L"nt", L"_OBJECT_HEADER_NAME_INFO", L"Directory");
+    const auto name = layout.Field(L"nt", L"_OBJECT_HEADER_NAME_INFO", L"Name");
+    fields.Length = kncore::NestedField(name, layout.Field(L"nt", L"_UNICODE_STRING", L"Length"));
+    fields.Maximum = kncore::NestedField(name, layout.Field(L"nt", L"_UNICODE_STRING", L"MaximumLength"));
+    fields.Buffer = kncore::NestedField(name, layout.Field(L"nt", L"_UNICODE_STRING", L"Buffer"));
+    ULONG nameSize = 0;
+    layout.TypeSize(L"_OBJECT_HEADER_NAME_INFO", &nameSize);
+    fields.NameInfoSize = nameSize;
+    return fields;
+}
+
 bool ObjectDirectoryWalker::VisitNamespace(const NamespaceVisitor &visitor, unsigned selectedType, int maxDepth, std::wstring *error)
 {
     kncore::WalkBudget budget;
@@ -365,21 +385,7 @@ bool ObjectDirectoryWalker::VisitNamespace(const NamespaceVisitor &visitor, unsi
             budget.Stop(kncore::Status::Unavailable, L"NamespaceDecoderProfileUnavailable");
             break;
         }
-        kncore::NamespaceLayout fields;
-        fields.Buckets = layout_.Field(L"nt", L"_OBJECT_DIRECTORY", L"HashBuckets");
-        fields.Next = layout_.Field(L"nt", L"_OBJECT_DIRECTORY_ENTRY", L"ChainLink");
-        fields.Object = layout_.Field(L"nt", L"_OBJECT_DIRECTORY_ENTRY", L"Object");
-        fields.Body = layout_.Field(L"nt", L"_OBJECT_HEADER", L"Body");
-        fields.Type = layout_.Field(L"nt", L"_OBJECT_HEADER", L"TypeIndex");
-        fields.Mask = layout_.Field(L"nt", L"_OBJECT_HEADER", L"InfoMask");
-        fields.Parent = layout_.Field(L"nt", L"_OBJECT_HEADER_NAME_INFO", L"Directory");
-        const auto name = layout_.Field(L"nt", L"_OBJECT_HEADER_NAME_INFO", L"Name");
-        fields.Length = kncore::NestedField(name, layout_.Field(L"nt", L"_UNICODE_STRING", L"Length"));
-        fields.Maximum = kncore::NestedField(name, layout_.Field(L"nt", L"_UNICODE_STRING", L"MaximumLength"));
-        fields.Buffer = kncore::NestedField(name, layout_.Field(L"nt", L"_UNICODE_STRING", L"Buffer"));
-        ULONG nameSize = 0;
-        layout_.TypeSize(L"_OBJECT_HEADER_NAME_INFO", &nameSize);
-        fields.NameInfoSize = nameSize;
+        const auto fields = ResolveNamespaceLayout(layout_);
         kncore::NamespaceReadMeter measured(session_);
         kncore::WalkNamedNamespace(measured, architecture_, fields, rootDirectory_, *cookie, *offsets, directoryType,
                                   selectedType, static_cast<unsigned>(maxDepth), budget, visitor);

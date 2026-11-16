@@ -1450,6 +1450,11 @@ await check("T-UI-RECORDS semantic collector fields survive sparse routines and 
         ["!alpc", { kind: "AlpcPort", name: "\\RPC Control\\Example", address: "0xffff800000002000", owner: { pid: "4", image: "System" },
             ownerProcess: "0xffff800000003000", connectionPort: "0x0", depth: "1" },
             { "Name": "\\RPC Control\\Example", "Owner / PID": "4", "Owner / Image": "System" }],
+        ["!alpc", { kind: "AlpcPort", name: null, nameState: "Unnamed", portType: "Client communication",
+            connectionName: "\\RPC Control\\Example", owner: { pid: "8", image: "client.exe" }, peerPort: "0xffff800000004000" },
+            { "Name": "Unnamed", "Port Type": "Client communication", "Connection Name": "\\RPC Control\\Example" }],
+        ["!alpc", { kind: "AlpcPort", name: null, nameState: "Unknown", address: "0xffff800000002000" },
+            { "Name": "Name unavailable" }],
         ["!fwtable", { kind: "RoutineObservation", family: "FirmwareProvider", provider: "ACPI", routine: "0xffff800000002000",
             symbol: "nt!ExpGetAcpiTable", signature: "0x41435049", record: "0xffff800000003000" }, { "Provider": "ACPI" }],
         ["!devstack", { kind: "Device", driverName: "\\Driver\\ACPI", device: "0xffff800000002000", type: "0x32", stackSize: "3",
@@ -1477,6 +1482,14 @@ await check("T-UI-RECORDS semantic collector fields survive sparse routines and 
         for (const [label, value] of Object.entries(cells))
         {
             assert.equal(tableCell(app, 0, label), value, command + ": " + label);
+        }
+        if (command === "!alpc" && row.name === null)
+        {
+            app.nodes.get("result-rows").children[0].fire("click");
+            const fields = app.nodes.get("detail-fields").children;
+            const index = fields.findIndex(field => field.textContent === "name");
+            assert.equal(fields[index + 1].textContent, cells.Name);
+            assert.equal(JSON.parse(app.nodes.get("result-detail").textContent).name, null);
         }
         if (command === "!cihash")
         {

@@ -7,6 +7,7 @@
 #include "../core/PeIdentity.h"
 #include "../core/TimerDpc.h"
 #include "../core/Piddb.h"
+#include "../core/AlpcPorts.h"
 #include "../util/FileReader.h"
 
 #include <dbgeng.h>
@@ -326,6 +327,7 @@ void ScanTimer(Ctx &ctx)
 
 void ScanAlpc(Ctx &ctx)
 {
+    CollectorWalk collection;
     knengine::ObjectDirectoryWalker walker(ctx.Session);
     knengine::LayoutResolver layout(ctx.Session);
     kncore::TargetArchitecture architecture;
@@ -343,6 +345,71 @@ void ScanAlpc(Ctx &ctx)
     std::vector<ProcRow> processes;
     CmdText processReport;
     CollectProcesses(ctx.Session, layout, &processes, processReport);
+    if (layout.VerifyProfile(kncore::KernelLayoutFamily::AlpcPorts) &&
+        layout.VerifyProfile(kncore::KernelLayoutFamily::ObjectTypes) && layout.VerifyProfile(kncore::KernelLayoutFamily::ObjectNames))
+    {
+        kncore::WalkBudget budget;
+        if (!BeginCollection(ctx, budget, architecture, L"TargetMemory:AlpcpPortList"))
+        {
+            return;
+        }
+        kncore::AlpcPortLayout fields;
+        fields.Names = knengine::ResolveNamespaceLayout(layout);
+        fields.Links = layout.Field(L"nt", L"_ALPC_PORT", L"PortListEntry");
+        fields.Communication = communicationField;
+        fields.Owner = ownerField;
+        fields.State = layout.Field(L"nt", L"_ALPC_PORT", L"u1.State");
+        fields.Initialized = layout.Field(L"nt", L"_ALPC_PORT", L"u1.s1.Initialized");
+        fields.Type = layout.Field(L"nt", L"_ALPC_PORT", L"u1.s1.Type");
+        fields.Connection = indirectConnection;
+        fields.Server = layout.Field(L"nt", L"_ALPC_COMMUNICATION_INFO", L"ServerCommunicationPort");
+        fields.Client = layout.Field(L"nt", L"_ALPC_COMMUNICATION_INFO", L"ClientCommunicationPort");
+        const auto head = layout.Address(L"nt", L"AlpcpPortList");
+        const auto rootAddress = layout.Address(L"nt", L"ObpRootDirectoryObject");
+        const auto cookie = layout.Address(L"nt", L"ObHeaderCookie");
+        const auto offsets = layout.Address(L"nt", L"ObpInfoMaskToOffset");
+        const auto headShape = layout.Symbol(L"nt", L"AlpcpPortList");
+        const bool listStorage = headShape ? kncore::PiddbFieldMatches(headShape, 0, 16, kncore::FieldKind::Composite)
+                                          : layout.PublicOnlySymbol(L"nt", L"AlpcpPortList");
+        uint64_t root = 0;
+        unsigned directoryType = 0;
+        if (!head || !rootAddress || !cookie || !offsets || !listStorage || !walker.ResolveTypeIndex(L"Directory", &directoryType) ||
+            !ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *rootAddress, &root))
+        {
+            budget.Stop(ctx.Session.Cancelled() ? kncore::Status::Cancelled : kncore::Status::Unavailable,
+                        ctx.Session.Cancelled() ? L"Cancelled" : L"AlpcPortSymbolsUnavailable");
+        }
+        else
+        {
+            std::map<uint64_t, const ProcRow *> owners;
+            for (const auto &process : processes)
+            {
+                owners[process.Eprocess] = &process;
+            }
+            kncore::NamespaceReadMeter measured(ctx.Session);
+            kncore::CollectAlpcPorts(measured, architecture, fields, *head, root, *cookie, *offsets, typeIndex, directoryType, budget,
+                [&](knjson::Value row)
+                {
+                    uint64_t ownerAddress = 0;
+                    kncore::ParseUnsigned(row.Get(L"ownerProcess").AsString(L""), 16, &ownerAddress);
+                    const auto owner = owners.find(ownerAddress);
+                    row.Set(L"owner", owner != owners.end() ? owner->second->ToJson() : knjson::Value());
+                    if (owner == owners.end() || !owner->second->PidKnown || !owner->second->ImageKnown)
+                    {
+                        ++budget.Report.Collected.Unknown;
+                    }
+                    EmitRow(ctx, budget, row);
+                });
+            budget.Report.Analysis.Set(L"portTargetReads", knjson::Value(std::to_wstring(measured.Requests)));
+            budget.Report.Analysis.Set(L"portRequestedBytes", knjson::Value(std::to_wstring(measured.Bytes)));
+            kncore::AttachAlpcConnectionNames(budget.Report);
+        }
+        budget.Report.Limitations.Push(knjson::Value(L"Initialized ports linked in AlpcpPortList only; detached, freed and not-yet-linked "
+            L"objects are outside this collection. Names follow verified parent directories, at most 32 components and 4096 directories. "
+            L"Blocking debugger calls can exceed the shared 120-second traversal bound."));
+        FinishCollection(ctx, budget);
+        return;
+    }
     knjson::Value rows = knjson::Value::MakeArray();
     uint64_t unknown = 0;
     std::wstring error;
@@ -357,6 +424,8 @@ void ScanAlpc(Ctx &ctx)
             row.Set(L"kind", knjson::Value(L"AlpcPort"));
             row.Set(L"address", knjson::Value(kncore::Hex(body)));
             row.Set(L"name", path.empty() ? knjson::Value() : knjson::Value(path));
+            row.Set(L"nameState", knjson::Value(path.empty() ? L"Unknown" : L"Named"));
+            row.Set(L"source", knjson::Value(L"ObjectNamespace"));
             row.Set(L"depth", knjson::Value(std::to_wstring(depth)));
             const auto owner = kncore::ReadField(ctx.Session, body, ownerField);
             const auto connection =
@@ -397,10 +466,16 @@ void ScanAlpc(Ctx &ctx)
     ctx.Out.Details.CommandId = command;
     ctx.Out.Details.Rows = rows;
     ctx.Out.Details.Collected.Unknown += unknown;
+    ++ctx.Out.Details.Collected.Unknown;
+    auto gap = knjson::Value::MakeObject();
+    gap.Set(L"kind", knjson::Value(L"CoverageGap"));
+    gap.Set(L"scope", knjson::Value(L"UnnamedAlpcPorts"));
+    gap.Set(L"reason", knjson::Value(L"Reviewed global ALPC port-list profile unavailable; only named namespace ports were collected"));
+    ctx.Out.Details.Rows.Push(gap);
     ctx.Out.Details.Limitations.Push(
         knjson::Value(L"Root object namespace hash buckets only, depth 16; unnamed ports, private namespaces and shadow directories "
                        L"are outside this enumeration."));
-    if (unknown != 0 && ctx.Out.Details.State == kncore::Status::Success)
+    if (ctx.Out.Details.Collected.Unknown != 0 && ctx.Out.Details.State == kncore::Status::Success)
     {
         ctx.Out.Details.State = kncore::Status::Partial;
         ctx.Out.Details.Collected.Complete = false;

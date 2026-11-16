@@ -913,7 +913,7 @@
     { commands: "drvobj", kinds: "DriverDispatch Driver", fields: "name major handler symbol ownership driverName device driverObject object start size" },
     { commands: "devstack", kinds: "Device DeviceAttachment", fields: "driverName device type stackSize flags driverObject link attachedFrom attachedTo" },
     { commands: "etw", kinds: "EtwLoggerContext EtwSession", fields: "name loggerId loggerStatus loggerMode eventsLost logFile clockType rawClock object clockRepresentation" },
-    { commands: "alpc", kinds: "AlpcPort", fields: "name owner.pid owner.image address connectionPort ownerProcess depth" },
+    { commands: "alpc", kinds: "AlpcPort", fields: "name portType owner.pid owner.image connectionName address peerPort connectionPort nameState ownerProcess" },
     { commands: "minifilter", kinds: "Minifilter", fields: "name altitude family major routine symbol module ownership filter object frame" },
     { commands: "dds dqs dps", kinds: "MemoryPointer", fields: "address pointer symbol symbolSource readable width" },
     { commands: "?", kinds: "ExpressionValue", fields: "expression value symbol symbolSource unsigned signed" },
@@ -1906,6 +1906,10 @@
       }
     }
     var field = path.join(".");
+    if (row && row.kind === "AlpcPort" && field === "name" && value == null)
+    {
+      return row.nameState === "Unnamed" ? "Unnamed" : "Name unavailable";
+    }
     if (!path.length)
     {
       return observationSummary(row);
@@ -3539,7 +3543,7 @@
           var term = document.createElement("dt");
           var value = document.createElement("dd");
           term.textContent = key;
-          var full = scalar(row[key]);
+          var full = row.kind === "AlpcPort" && key === "name" ? displayField(row[key], [key], row) : scalar(row[key]);
           value.textContent = full.length > 512 ? full.slice(0, 512) + "... (see raw record)" : full;
           bindCopyValue(value, function ()
           {

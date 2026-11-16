@@ -12,9 +12,12 @@
 #include "EngineCore.h"
 #include "LayoutResolver.h"
 #include "../core/Walker.h"
+#include "../core/NamespaceWalk.h"
 
 namespace knengine
 {
+kncore::NamespaceLayout ResolveNamespaceLayout(LayoutResolver &layout);
+
 // Visits every candidate object BODY under the given root path segment
 // (the directory object itself is resolved by name, e.g. L"Driver").
 // Return false from the callback to stop the walk early.

@@ -99,7 +99,7 @@ Run `!mapper` to display individual records from `!unloaded`, `!piddb` and `!cih
 
 ### Registry hives and ALPC owners
 
-Run `!hive` to compare registry root paths, backing-file names, flags and file sizes. Routine symbols remain available. `!alpc` displays named-port paths and owner PID/image alongside port addresses. The bounded namespace walk excludes unnamed ports; inspect coverage before treating it as a complete inventory. [Hive and ALPC workflow](docs/UX.md#inspect-hives-and-alpc-ports)
+Run `!hive` to compare registry root paths, backing-file names, flags and file sizes. Routine symbols remain available. On the reviewed 28000.2952 kernel, `!alpc` walks the global list of initialized ports, including unnamed client/server endpoints. It shows port type, owner PID/image, connection name and peer address. `Unnamed` is distinct from an unreadable name. Without that profile, named-namespace observations remain available when their layouts can be verified, with an explicit unnamed-port coverage gap. [Hive and ALPC workflow](docs/UX.md#inspect-hives-and-alpc-ports)
 
 ### Other callback and service-table surfaces
 
@@ -462,7 +462,7 @@ These collectors are Experimental and need an x64 kernel target with usable symb
 | `!nmi` | Walk registered NMI callbacks and resolve their routines where possible.<br>Experimental · Kernel x64 / dump | `!nmi`<br>Examples: `!nmi` |
 | `!hal` | Inspect verified HAL dispatch pointers and their owning modules.<br>Experimental · Kernel x64 / dump | `!hal`<br>Examples: `!hal` |
 | `!hive` | List registry hive paths, backing files, flags, sizes and GetCellRoutine observations.<br>Experimental · Kernel x64 / dump | `!hive`<br>Examples: `!hive` |
-| `!alpc` | Find ALPC ports through a bounded object-namespace walk; inspect owner and connection fields.<br>Experimental · Kernel x64 / dump | `!alpc`<br>Examples: `!alpc` |
+| `!alpc` | List verified named and unnamed ALPC ports with type, owner and connection endpoints; inspect coverage limits.<br>Experimental · Kernel x64 / dump | `!alpc`<br>Examples: `!alpc` |
 | `!fwtable` | Inspect registered firmware-table providers when their target layout is known.<br>Experimental · Kernel x64 / dump | `!fwtable`<br>Examples: `!fwtable` |
 | `!etw` | Inspect target ETW logger metadata; does not start a trace or establish an InfinityHook verdict.<br>Experimental · Kernel x64 / dump | `!etw`<br>Examples: `!etw` |
 
