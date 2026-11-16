@@ -888,7 +888,11 @@
   // Field paths, not display labels, identify columns. Records remain unmodified.
   var tableProfiles = [
     { commands: "callbacks", kinds: "ObjectCallbackRegistration", fields: "callbackType preRoutine postRoutine flags preSymbol postSymbol routine symbol module family ownership slot objectType active reason scope" },
-    { commands: "nmi gdt dpc timer fwtable hal hive", kinds: "RoutineObservation CallbackTable", fields: "family routine symbol symbolSource module ownership slot cpu vector objectType operations handler address reason" },
+    { commands: "nmi gdt hal", kinds: "RoutineObservation CallbackTable", fields: "family routine symbol module ownership context slot cpu vector objectType operations handler address reason" },
+    { commands: "hive", kinds: "RegistryHive", fields: "rootPath filePath fileUserName hive flags fileSize routine symbol ownership" },
+    { commands: "timer", kinds: "KernelTimer", fields: "cpu dueTimeRaw periodMs signalState object routine symbol decode queue" },
+    { commands: "dpc", kinds: "QueuedDpc", fields: "cpu queue routine symbol module importance deferredContext object ownership" },
+    { commands: "fwtable", kinds: "", fields: "provider routine symbol module ownership signature record" },
     { commands: "idt", kinds: "IdtGate", fields: "cpu vector routine symbol symbolSource module ownership type dpl present validGate slot" },
     { commands: "ssdt", kinds: "", fields: "family index routine symbol symbolSource module ownership slot encoding" },
     { commands: "process procscan dml_proc", kinds: "Process", fields: "eprocess pid image dtb createTime" },
@@ -906,19 +910,24 @@
     { commands: "vad", kinds: "Vad", fields: "start end pageProtection executableByVad object process.pid process.image protectionIndex" },
     { commands: "handles", kinds: "ProcessHandle", fields: "ownerPid targetPid handle object typeIndex grantedAccess crossProcess" },
     { commands: "hiddenproc", kinds: "ProcessCrossView", fields: "pid observation activeList.image cidTable.image activeList.eprocess cidTable.eprocess activeList.createTime cidTable.createTime kernel.image host.image kernel.eprocess kernel.createTime host.createTime" },
-    { commands: "drvobj devstack", kinds: "DriverDispatch Driver Device DeviceAttachment", fields: "major handler symbol ownership driverObject device object name start size" },
-    { commands: "etw", kinds: "EtwLoggerContext EtwSession", fields: "loggerId name object clockType rawClock clockRepresentation module ownership" },
-    { commands: "alpc", kinds: "AlpcPort", fields: "address ownerProcess owner connectionPort depth" },
+    { commands: "drvobj", kinds: "DriverDispatch Driver", fields: "name major handler symbol ownership driverName device driverObject object start size" },
+    { commands: "devstack", kinds: "Device DeviceAttachment", fields: "driverName device type stackSize flags driverObject link attachedFrom attachedTo" },
+    { commands: "etw", kinds: "EtwLoggerContext EtwSession", fields: "name loggerId loggerStatus loggerMode eventsLost logFile clockType rawClock object clockRepresentation" },
+    { commands: "alpc", kinds: "AlpcPort", fields: "name owner.pid owner.image address connectionPort ownerProcess depth" },
     { commands: "minifilter", kinds: "Minifilter", fields: "name altitude family major routine symbol module ownership filter object frame" },
     { commands: "dds dqs dps", kinds: "MemoryPointer", fields: "address pointer symbol symbolSource readable width" },
     { commands: "?", kinds: "ExpressionValue", fields: "expression value symbol symbolSource unsigned signed" },
     { commands: "vtop kpage", kinds: "PageTranslation", fields: "va symbol pa dtb pageSize writable executable error entries" },
     { commands: "module", kinds: "ModulePeObservation", fields: "module base symbol size timestamp sections" },
-    { commands: "unloaded", kinds: "UnloadedDriver", fields: "name StartAddress EndAddress CurrentTime index record ringNextIndex" },
+    { commands: "unloaded", kinds: "UnloadedDriver", fields: "name StartAddress EndAddress CurrentTime timeBasis index record ringNextIndex" },
     { commands: "piddb", kinds: "PiDDBEntry", fields: "name timeDateStamp loadStatus loadStatusClass entry reason" },
+    { commands: "cihash", kinds: "CiHashEntry", fields: "name hash secondaryHash cacheStatusRaw entry reason" },
     { commands: "token", kinds: "ProcessToken", fields: "process.pid tokenTypeName mandatoryLabelRid privilegesPresent privilegesEnabled privilegesEnabledByDefault address AuthenticationId TokenId SessionId" },
-    { commands: "mapper", kinds: "", fields: "commandId status coverage.complete coverage.visitedEntries coverage.unknownEntries coverage.unreadableEntries coverage.stopReason" },
+    { commands: "mapper", kinds: "", fields: "sourceCommand name timeDateStamp loadStatus hash StartAddress EndAddress cacheStatusRaw entry" },
+    { commands: "wnf", kinds: "WnfNameDecode", fields: "encoded lifetimeName scopeName permanentData ownerTagText sequence version" },
+    { commands: "etl-import", kinds: "EtwEvent", fields: "providerName eventId taskName opcodeName pid tid timestampFileTime payloadBytes provider" },
     { commands: "pool bigpool", kinds: "BigPoolAllocation", fields: "address symbol tag size nonPaged" },
+    { commands: "payload", kinds: "", fields: "address tag size wxObserved rangeClassified inspectedPages totalPages unavailablePages ownership mode" },
     { commands: "ioctl", kinds: "IoctlDecode", fields: "code deviceType function method access" },
     { commands: "ntstatus", kinds: "NtStatusDecode", fields: "value name severity facility code" },
     { commands: "diag-catalog diagnose triage", kinds: "DiagnosticRecipe DiagnosticStep HostDiagnostic", fields: "id name category recipe command status description reason" }
@@ -932,7 +941,7 @@
       return row.expression + " (deferred)";
     }
     if (row && path.length === 1 && path[0] === "major" &&
-        (row.family === "Minifilter.PreOperation" || row.family === "Minifilter.PostOperation") &&
+        (row.kind === "DriverDispatch" || row.family === "Minifilter.PreOperation" || row.family === "Minifilter.PostOperation") &&
         typeof row.majorName === "string" && row.majorName)
     {
       // The grid uses the name; the immutable record retains the numeric major.
@@ -989,6 +998,12 @@
       id: "ID", cpu: "CPU", irql: "IRQL", rawBytes: "Raw bytes", ruleId: "Rule", addressSpace: "Address space",
       smep: "SMEP", smap: "SMAP", la57: "LA57", registerSource: "Read from", unavailableReason: "Why unavailable",
       callbackType: "Callback type", preRoutine: "Routine / Pre", postRoutine: "Post callback", preSymbol: "Symbol / Pre", postSymbol: "Post symbol" };
+    names.dueTimeRaw = "Due time (raw 100 ns)";
+    names.periodMs = "Period (ms)";
+    names.wxObserved = "W+X observed";
+    names.cacheStatusRaw = "Cache status (raw)";
+    names.hash = "Hash (20 bytes)";
+    names.secondaryHash = "Secondary hash (20 bytes)";
     return path.length ? path.map(function (key)
     {
       var label = Object.prototype.hasOwnProperty.call(names, key) ? names[key] :
@@ -1041,6 +1056,16 @@
     var layout = state.tableLayout;
     var changed = false;
     var wasLimited = layout.limited;
+    var command = firstToken(state.resultMeta.commandId || state.resultCommand).replace(/^!/, "").toLowerCase();
+    var recordWidths = {
+      cihash: { name: 520, hash: 320, secondaryHash: 320 },
+      mapper: { name: 480, hash: 320 },
+      hive: { rootPath: 360, filePath: 400, fileUserName: 480 },
+      alpc: { name: 360 },
+      etw: { name: 360, logFile: 440 },
+      drvobj: { major: 240, name: 320, driverName: 240 },
+      devstack: { driverName: 240 }
+    };
     function visit(value, path, descend)
     {
       var key = JSON.stringify(path);
@@ -1060,6 +1085,11 @@
           var column = { key: key, path: path, label: columnLabel(path), visible: false,
             width: field === "rawBytes" ? 300 : wide ? 280 : address ? 172 : narrow ? 96 : 160,
             css: address ? "row-address" : "row-value" };
+          if (state.resultCollection === "rows" && Object.prototype.hasOwnProperty.call(recordWidths, command) &&
+              Object.prototype.hasOwnProperty.call(recordWidths[command], field))
+          {
+            column.width = recordWidths[command][field];
+          }
           if (state.resultMeta.commandId === "breakpoints" && state.resultCollection === "rows" && field === "enabled")
           {
             column.width = 176;
@@ -1193,8 +1223,10 @@
         layout.kinds.indexOf("RecordReference") < 0;
       column.visible = index < (callbackColumns ? 6 : 9) && (rank(column) < 200 || layout.columns.length <= 3) &&
         (!callbackColumns || priority.indexOf(column.path.join(".")) >= 0);
-      if (state.resultCollection === "rows" && layout.kinds.indexOf("PiDDBEntry") >= 0 &&
-          firstToken(state.resultMeta.commandId || state.resultCommand).replace(/^!/, "").toLowerCase() === "piddb")
+      var command = firstToken(state.resultMeta.commandId || state.resultCommand).replace(/^!/, "").toLowerCase();
+      if (state.resultCollection === "rows" &&
+          ((layout.kinds.indexOf("PiDDBEntry") >= 0 && command === "piddb") ||
+           (layout.kinds.indexOf("CiHashEntry") >= 0 && command === "cihash")))
       {
         column.visible = priority.indexOf(column.path.join(".")) >= 0;
       }

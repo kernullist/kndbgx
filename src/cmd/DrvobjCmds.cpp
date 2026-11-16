@@ -1,5 +1,7 @@
 #include "CollectorSupport.h"
 #include "../core/ObjectRead.h"
+#include "../core/KernelAnalysis.h"
+#include <tuple>
 #include "../engine/ObjectDirectory.h"
 
 namespace kncmd
@@ -82,12 +84,38 @@ bool DriverObject(Ctx &ctx, knengine::LayoutResolver &layout, uint64_t *address)
     return true;
 }
 
+knjson::Value DeviceRow(Ctx &ctx, knengine::LayoutResolver &layout, uint64_t device,
+                       const kncore::TargetArchitecture &architecture, kncore::WalkBudget &budget)
+{
+    auto row = knjson::Value::MakeObject();
+    row.Set(L"kind", knjson::Value(L"Device"));
+    row.Set(L"device", knjson::Value(kncore::Hex(device)));
+    for (const auto &[label, field, hex] : {std::tuple(L"type", L"DeviceType", true), std::tuple(L"flags", L"Flags", true),
+                                         std::tuple(L"stackSize", L"StackSize", false)})
+    {
+        const auto value = kncore::ReadField(ctx.Session, device, layout.Field(L"nt", L"_DEVICE_OBJECT", field));
+        row.Set(label, kncore::OptionalNumber(value, hex));
+        if (!value)
+        {
+            ++budget.Report.Collected.Unknown;
+        }
+    }
+    const auto driver = kncore::ReadField(ctx.Session, device, layout.Field(L"nt", L"_DEVICE_OBJECT", L"DriverObject"));
+    const auto name = driver && architecture.KernelPointer(*driver) ?
+        RecordUnicode(ctx.Session, layout, *driver, layout.Field(L"nt", L"_DRIVER_OBJECT", L"DriverName")) : knjson::Value();
+    row.Set(L"driverObject", kncore::OptionalNumber(driver, true));
+    row.Set(L"driverName", name);
+    if (name.IsNull())
+    {
+        ++budget.Report.Collected.Unknown;
+    }
+    return row;
+}
+
 void DeviceChain(Ctx &ctx, knengine::LayoutResolver &layout, uint64_t first, const wchar_t *nextName,
                  const kncore::TargetArchitecture &architecture, kncore::WalkBudget &budget)
 {
     const auto next = layout.Field(L"nt", L"_DEVICE_OBJECT", nextName);
-    const auto deviceType = layout.Field(L"nt", L"_DEVICE_OBJECT", L"DeviceType");
-    const auto driver = layout.Field(L"nt", L"_DEVICE_OBJECT", L"DriverObject");
     if (!next || next->Size != architecture.PointerBytes)
     {
         budget.Stop(kncore::Status::Unavailable, L"DeviceChainLayoutUnavailable");
@@ -101,19 +129,9 @@ void DeviceChain(Ctx &ctx, knengine::LayoutResolver &layout, uint64_t first, con
                           {
                               return kncore::VisitDecision::Failed;
                           }
-                          const auto type = kncore::ReadField(ctx.Session, device, deviceType);
-                          const auto owner = kncore::ReadField(ctx.Session, device, driver);
-                          auto row = knjson::Value::MakeObject();
-                          row.Set(L"kind", knjson::Value(L"Device"));
-                          row.Set(L"device", knjson::Value(kncore::Hex(device)));
-                          row.Set(L"type", kncore::OptionalNumber(type, true));
-                          row.Set(L"driverObject", kncore::OptionalNumber(owner, true));
+                          auto row = DeviceRow(ctx, layout, device, architecture, budget);
                           row.Set(L"link", knjson::Value(nextName));
                           budget.Report.Rows.Push(row);
-                          if (!type || !owner)
-                          {
-                              ++budget.Report.Collected.Unknown;
-                          }
                           ctx.Out.AddLine(L"[device] " + row.Write());
                           return kncore::VisitDecision::Continue;
                       });
@@ -181,6 +199,7 @@ void ScanDrvobj(Ctx &ctx)
         row.Set(L"kind", knjson::Value(L"DriverDispatch"));
         row.Set(L"driverObject", knjson::Value(kncore::Hex(object)));
         row.Set(L"major", knjson::Value(std::to_wstring(index)));
+        row.Set(L"majorName", knjson::Value(kncore::IrpMajorName(index)));
         row.Set(L"handler", kncore::OptionalNumber(handler, true));
         std::wstring ownership = L"Unknown";
         if (handler && *handler != 0)
@@ -271,10 +290,9 @@ void ScanDevstack(Ctx &ctx)
                 }
                 break;
             }
-            auto row = knjson::Value::MakeObject();
-            row.Set(L"kind", knjson::Value(L"DeviceAttachment"));
-            row.Set(L"device", knjson::Value(kncore::Hex(current)));
-            row.Set(L"attachedTo", knjson::Value(kncore::Hex(*lower)));
+            auto row = DeviceRow(ctx, layout, *lower, architecture, budget);
+            row.Set(L"attachedFrom", knjson::Value(kncore::Hex(current)));
+            row.Set(L"link", knjson::Value(L"AttachedTo"));
             budget.Report.Rows.Push(row);
             ctx.Out.AddLine(L"[device.down] " + row.Write());
             current = *lower;

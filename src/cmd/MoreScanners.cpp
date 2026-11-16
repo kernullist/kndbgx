@@ -25,13 +25,19 @@ void ScanNmi(Ctx &ctx)
     }
     auto next = layout.Field(L"nt", L"_KNMI_HANDLER_CALLBACK", L"Next");
     auto routine = layout.Field(L"nt", L"_KNMI_HANDLER_CALLBACK", L"Callback");
+    auto context = layout.Field(L"nt", L"_KNMI_HANDLER_CALLBACK", L"Context");
     bool compatible = true;
-    if ((!next || !routine) && layout.VerifyProfile(kncore::KernelLayoutFamily::Nmi))
+    if ((!next || !routine || !context) && layout.VerifyProfile(kncore::KernelLayoutFamily::Nmi))
     {
         compatible = layout.CanProfileField(L"nt", L"_KNMI_HANDLER_CALLBACK", L"Next") &&
                      layout.CanProfileField(L"nt", L"_KNMI_HANDLER_CALLBACK", L"Callback") && kncore::ApplyKernelProfileField(next, 0, 8) &&
-                     kncore::ApplyKernelProfileField(routine, 8, 8);
-        budget.Report.LayoutProfile = kncore::KernelSymbolProfileId;
+                     kncore::ApplyKernelProfileField(routine, 8, 8) &&
+                     layout.CanProfileField(L"nt", L"_KNMI_HANDLER_CALLBACK", L"Context") &&
+                     kncore::ApplyKernelProfileField(context, 0x10, 8);
+        if (const auto identity = layout.Identity(L"nt"))
+        {
+            budget.Report.LayoutProfile = kncore::KernelProfileName(*identity);
+        }
     }
     uint64_t first = 0;
     const bool headRead = ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *head, &first);
@@ -52,9 +58,11 @@ void ScanNmi(Ctx &ctx)
                           [&](uint64_t node)
                           {
                               const auto callback = kncore::ReadField(ctx.Session, node, routine);
-                              EmitRow(ctx, budget,
-                                      kncore::RoutineObservation(budget.Report, architecture, owners, L"Nmi.Callback", node, callback));
-                              if (!callback)
+                              auto row = kncore::RoutineObservation(budget.Report, architecture, owners, L"Nmi.Callback", node, callback);
+                              const auto parameter = kncore::ReadField(ctx.Session, node, context);
+                              row.Set(L"context", kncore::OptionalNumber(parameter, true));
+                              EmitRow(ctx, budget, row);
+                              if (!callback || !parameter)
                               {
                                   ++budget.Report.Collected.Unreadable;
                               }
@@ -222,6 +230,10 @@ void ScanEtwLoggers(Ctx &ctx)
             const auto clockType = layout.Field(L"nt", L"_WMI_LOGGER_CONTEXT", L"ClockType");
             const bool typeAbsent = !clockType && layout.CanProfileField(L"nt", L"_WMI_LOGGER_CONTEXT", L"ClockType");
             const auto idField = layout.Field(L"nt", L"_WMI_LOGGER_CONTEXT", L"LoggerId");
+            const auto fileField = layout.Field(L"nt", L"_WMI_LOGGER_CONTEXT", L"LogFileName");
+            const auto modeField = layout.Field(L"nt", L"_WMI_LOGGER_CONTEXT", L"LoggerMode");
+            const auto statusField = layout.Field(L"nt", L"_WMI_LOGGER_CONTEXT", L"LoggerStatus");
+            const auto lostField = layout.Field(L"nt", L"_WMI_LOGGER_CONTEXT", L"EventsLost");
             const bool knownSlots = loggerArray && loggerArray->Offset == 0x2c8 && clockField && clockField->Offset == 0x18 &&
                                     clockField->Size == 8 && kncore::EtwIntegerField(clockField) &&
                                     layout.VerifyProfile(kncore::KernelLayoutFamily::HostSilo);
@@ -230,6 +242,7 @@ void ScanEtwLoggers(Ctx &ctx)
                 UnknownScope(ctx, budget, L"ETW ClockType", L"Optional field absence is not established by the matched PDB");
             }
             budget.Report.Collected.Expected = table->Count;
+            budget.StartTraversal(std::chrono::steady_clock::now(), std::chrono::seconds(30));
             for (uint64_t index = 0; index < table->Count && CheckCollection(ctx, budget); ++index)
             {
                 ++budget.Report.Collected.Visited;
@@ -258,6 +271,15 @@ void ScanEtwLoggers(Ctx &ctx)
                 const bool known = nameField && kncore::ValidRange(logger, static_cast<uint64_t>(nameField->Offset) + nameField->Size) &&
                                    ReadUnicodeString(ctx.Session, layout, logger + nameField->Offset, &name);
                 row.Set(L"name", known ? knjson::Value(name) : knjson::Value());
+                row.Set(L"logFile", RecordUnicode(ctx.Session, layout, logger, fileField));
+                row.Set(L"loggerMode", kncore::OptionalNumber(kncore::ReadField(ctx.Session, logger, modeField), true));
+                row.Set(L"loggerStatus", kncore::OptionalNumber(kncore::ReadField(ctx.Session, logger, statusField), true));
+                row.Set(L"eventsLost", kncore::OptionalNumber(kncore::ReadField(ctx.Session, logger, lostField)));
+                if (row.Get(L"logFile").IsNull() || row.Get(L"loggerMode").IsNull() || row.Get(L"loggerStatus").IsNull() ||
+                    row.Get(L"eventsLost").IsNull())
+                {
+                    ++budget.Report.Collected.Unknown;
+                }
                 const auto clock = kncore::ReadEtwClock(ctx.Session, architecture, logger, clockField, clockType, typeAbsent, knownSlots);
                 const auto id = kncore::ReadField(ctx.Session, logger, idField);
                 row.Set(L"loggerId", kncore::OptionalNumber(id));
@@ -350,7 +372,12 @@ void DecodeWnf(Ctx &ctx)
         row.Set(L"encoded", knjson::Value(kncore::Hex(raw)));
         row.Set(L"version", knjson::Value(std::to_wstring(version)));
         row.Set(L"lifetime", knjson::Value(std::to_wstring(lifetime)));
+        row.Set(L"lifetimeName", knjson::Value(kLifetime[lifetime]));
         row.Set(L"scope", knjson::Value(std::to_wstring(dataScope)));
+        row.Set(L"scopeName", knjson::Value(dataScope < 6 ? kScope[dataScope] : L"Unknown"));
+        row.Set(L"permanentData", knjson::Value(permanentData != 0));
+        row.Set(L"ownerTag", knjson::Value(kncore::Hex(ownerTag)));
+        row.Set(L"ownerTagText", knjson::Value(ownerAscii));
         row.Set(L"sequence", knjson::Value(std::to_wstring(sequence)));
         out.Details.Rows.Push(row);
         out.Details.Source = L"InputDecoder";

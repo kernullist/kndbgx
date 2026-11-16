@@ -1,0 +1,145 @@
+{
+  "schema": "kndbgx.symbol-profile.v1",
+  "support": "Experimental",
+  "machine": "0x8664",
+  "pdbAge": 1,
+  "runtimeImplementation": "src/core/KernelSymbolProfile.h; these documents cannot enable other images",
+  "id": "NT-28000.2952-symbols-PDB-4660396C-age1",
+  "timestamp": "0xe1a9f520",
+  "imageSize": "0x1459000",
+  "pdbGuid": "4660396c-2030-4c03-9af4-5fc6b15adf98",
+  "scope": "Host-silo ETW storage/selectors, NMI callbacks, unloaded-driver ring and firmware providers",
+  "families": {
+    "HostSilo": [
+      {
+        "symbol": "PsGetServerSiloGlobals",
+        "rva": "0x2baea0",
+        "offset": "0x0",
+        "bytes": "4885c97509488d0594ead000"
+      },
+      {
+        "symbol": "PsGetServerSiloGlobals",
+        "rva": "0x2baea0",
+        "offset": "0xe",
+        "bytes": "488b81e0050000c3"
+      },
+      {
+        "symbol": "EtwpFreeLoggerContext",
+        "rva": "0x93cfa0",
+        "offset": "0x294",
+        "bytes": "488b85c802000033d2488bcb4ac704f801000000"
+      },
+      {
+        "symbol": "EtwpGetLoggerTimeStamp",
+        "rva": "0x2fcd60",
+        "offset": "0x10",
+        "bytes": "488b41184885c00f85bb000000"
+      },
+      {
+        "symbol": "EtwpGetLoggerTimeStamp",
+        "rva": "0x2fcd60",
+        "offset": "0xd8",
+        "bytes": "4883e801742f4883e8010f842a0300004883f8010f8519030000"
+      }
+    ],
+    "Nmi": [
+      {
+        "symbol": "KeRegisterNmiCallback",
+        "rva": "0x5f4d30",
+        "offset": "0xf",
+        "bytes": "488bfa488bf1ba2000000041b84b4e4d498d4a20e8d8666300488bd8"
+      },
+      {
+        "symbol": "KeRegisterNmiCallback",
+        "rva": "0x5f4d30",
+        "offset": "0x39",
+        "bytes": "4889730848897b1048895b18e8e663c2ff488b15ef679500488d0de06795004889138ad048891ddc679500"
+      },
+      {
+        "symbol": "KiProcessNMI",
+        "rva": "0x5fb830",
+        "offset": "0x92",
+        "bytes": "488b1da7fc9400418aff4885db7420488b4308408ad7488b4b10"
+      },
+      {
+        "symbol": "KiProcessNMI",
+        "rva": "0x5fb830",
+        "offset": "0xb1",
+        "bytes": "488b1b400af84885db75e5"
+      }
+    ],
+    "Unloaded": [
+      {
+        "symbol": "MiRememberUnloadedDriver",
+        "rva": "0x9a4200",
+        "offset": "0x2a",
+        "bytes": "488b0d2f5c55004885c90f84a50000008b05285c550083f8320f83ca000000488d1480488d3cd1"
+      },
+      {
+        "symbol": "MiRememberUnloadedDriver",
+        "rva": "0x9a4200",
+        "offset": "0x7a",
+        "bytes": "48894708"
+      },
+      {
+        "symbol": "MiRememberUnloadedDriver",
+        "rva": "0x9a4200",
+        "offset": "0xb0",
+        "bytes": "0fb706488d4c24406689074c03f50fb746026689470248896f104c897718e8bdd68aff48894720ff058b5b5500"
+      },
+      {
+        "symbol": "MiRememberUnloadedDriver",
+        "rva": "0x9a4200",
+        "offset": "0xe8",
+        "bytes": "bad0070000448bc8b94000000041b84d6d4454e8e0a59dff488905595b5500"
+      }
+    ],
+    "Firmware": [
+      {
+        "symbol": "ExpRegisterFirmwareTableInformationHandler",
+        "rva": "0x839120",
+        "offset": "0xe1",
+        "bytes": "ba38000000b90001000041b841524654e81a223f00488bc84885c07459"
+      },
+      {
+        "symbol": "ExpRegisterFirmwareTableInformationHandler",
+        "rva": "0x839120",
+        "offset": "0xfe",
+        "bytes": "8b06488d79188901488b460848894108488b461048894110488d412848897f0848893f48894008488900488b4910e82f07b2ff488b05f0a66c00483928751348892f4889470848893848893ddaa66c00"
+      }
+    ]
+  },
+  "records": {
+    "Nmi": {
+      "next": "0x0",
+      "callback": "0x8",
+      "context": "0x10"
+    },
+    "Unloaded": {
+      "capacity": 50,
+      "stride": "0x28",
+      "name": "0x0",
+      "start": "0x10",
+      "end": "0x18",
+      "time": "0x20",
+      "timeBasis": "KeQueryUnbiasedInterruptTimePrecise; raw 100 ns, not UTC"
+    },
+    "Firmware": {
+      "signature": "0x0",
+      "routine": "0x8",
+      "driver": "0x10",
+      "list": "0x18"
+    },
+    "NativeSSDT": {
+      "tableRva": "0xe7a90",
+      "limitRva": "0xe8238",
+      "entries": 490,
+      "entryBytes": 4,
+      "encoding": "x64 signed relative shift 4; native table only"
+    }
+  },
+  "limitations": [
+    "Other images and changed/unreadable code windows are not decoded.",
+    "Shadow SSDT and other ETW silos are not covered."
+  ]
+}

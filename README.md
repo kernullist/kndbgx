@@ -95,23 +95,11 @@ Run `!module fvevol` for target-memory PE and section observations. `/disk` is a
 
 ### Driver load history
 
-Run `!mapper` to keep the `!unloaded`, `!piddb` and `!cihash` collections together. Select a child record to inspect its status and coverage, or run that command separately for its own table. **Export** retains nested records that exceed the on-screen page budget.
-
-![Three driver-history collection records with explicit partial coverage](docs/screenshots/driver-history-coverage.png)
-
-*These three rows are child collections, not three suspicious drivers. This guest has unverified unloaded-driver/CI metadata; the nested PiDDB record exceeds the display budget. Missing records do not prove history erasure or manual mapping.* [History workflow](docs/UX.md#inspect-driver-history)
+Run `!mapper` to display individual records from `!unloaded`, `!piddb` and `!cihash` together, identified by **Source Command**. Capture info and exports retain each collection's coverage and profile. `!cihash` displays names, two raw hashes and cached raw status when its CI image profile is verified. Missing records do not prove history erasure or manual mapping. [History workflow](docs/UX.md#inspect-driver-history)
 
 ### Registry hives and ALPC owners
 
-Run `!hive` to associate each observed hive's `GetCellRoutine` with a symbol and module. Sort **Routine** or **Symbol** to compare registrations, then follow a current address into Disassembly.
-
-![Fifteen hive GetCellRoutine registrations and their kernel ownership](docs/screenshots/registry-hive-routines.png)
-
-Run `!alpc` to walk the object namespace for ALPC ports. **Row details** exposes the owner process identity, connection port and namespace depth together.
-
-![ALPC port records with the selected System owner's identity](docs/screenshots/alpc-ports.png)
-
-*The hive capture completed with 15 rows. The ALPC capture retained nine ports before its walk budget was reached; it is not an inventory of all communication endpoints.* [Hive and ALPC workflow](docs/UX.md#inspect-hives-and-alpc-ports)
+Run `!hive` to compare registry root paths, backing-file names, flags and file sizes. Routine symbols remain available. `!alpc` displays named-port paths and owner PID/image alongside port addresses. The bounded namespace walk excludes unnamed ports; inspect coverage before treating it as a complete inventory. [Hive and ALPC workflow](docs/UX.md#inspect-hives-and-alpc-ports)
 
 ### Other callback and service-table surfaces
 
@@ -179,11 +167,7 @@ Run `!msrcheck` for LSTAR, CSTAR, STAR, FMASK and EFER on the verified current e
 
 ### DPC queues and timers
 
-Run `!dpc` for per-CPU DPC queues or `!timer` for timer tables. Read **CPU**, **Queue**, **Routine** and **Decode** together, and compare completed queues with the expected queue count.
-
-![189 timer observations with all 1024 queues fully read](docs/screenshots/timer-coverage.png)
-
-*This capture has 189 rows and 189 unknown observations. All 1,024 queues were fully read, but unavailable routine decoding keeps the result Partial. Encoded timer DPC pointers are not interpreted as routine addresses without verification. Active/completed work outside the declared queues is not covered.* [Queue workflow](docs/UX.md#inspect-dpc-queues-and-timers)
+Run `!dpc` for per-CPU routine, context and importance observations. `!timer` displays raw due time, period in milliseconds, signal state and timer object even when its DPC cannot be decoded. Compare completed queues with expected queues. Encoded DPCs remain Unknown, and active/completed work outside these queues is not covered. [Queue workflow](docs/UX.md#inspect-dpc-queues-and-timers)
 
 ### Host and target security observations
 
@@ -204,16 +188,7 @@ Run `!hv` to see **HostCpuidObservation** and **TargetControlRegister** as separ
 
 ### ETW logger metadata
 
-Run `!etw` for the target host silo's logger metadata, including logger IDs and clock representation when available. Use **Capture info / View output** to distinguish missing layouts from an empty inventory.
-
-<details>
-<summary>See this guest's unresolved ETW metadata scope</summary>
-
-![ETW storage/type relationship left unverified](docs/screenshots/etw-coverage.png)
-
-This capture has zero rows and one unknown observation because the storage/type relationship could not be verified. It does not show that ETW is inactive. The command neither starts tracing nor substitutes host loggers for guest data. [ETW workflow](docs/UX.md#inspect-etw-logger-metadata)
-
-</details>
+Run `!etw` for the target host silo's logger names, IDs, modes, status, lost-event counts, log files and clock representation. Use **Capture info / View output** to distinguish missing layouts from an empty inventory. The command neither starts tracing nor substitutes host loggers for guest data. [ETW workflow](docs/UX.md#inspect-etw-logger-metadata)
 
 ## Save and compare snapshots
 
@@ -482,11 +457,11 @@ These collectors are Experimental and need an x64 kernel target with usable symb
 | `!module` | Read loaded PE identity and section metadata; /disk adds a file comparison only in verified local KD.<br>Experimental · Kernel x64 / dump | `!module [module] [/disk]`<br>Examples: `!module fvevol`<br>`!module fvevol /disk` |
 | `!unloaded` | Inspect retained MmUnloadedDrivers entries; missing history does not establish erasure.<br>Experimental · Kernel x64 / dump | `!unloaded`<br>Examples: `!unloaded` |
 | `!piddb` | Show verified PiDDB driver names, raw PE timestamps and cached load-result NTSTATUS values. Entry decoding currently supports the 28000.2952 x64 profile.<br>Experimental · Kernel x64 / dump | `!piddb`<br>Examples: `!piddb` |
-| `!cihash` | Inspect kernel CI hash-bucket metadata when the required layout is available.<br>Experimental · Kernel x64 / dump | `!cihash`<br>Examples: `!cihash` |
-| `!mapper` | Collect !unloaded, !piddb and !cihash together, preserving each child result and its coverage.<br>Experimental · Kernel x64 / dump | `!mapper`<br>Examples: `!mapper` |
+| `!cihash` | Show verified CI cache names, two raw 20-byte hashes and cached raw status.<br>Experimental · Kernel x64 / dump | `!cihash`<br>Examples: `!cihash` |
+| `!mapper` | Show individual !unloaded, !piddb and !cihash records together, preserving source and collection coverage.<br>Experimental · Kernel x64 / dump | `!mapper`<br>Examples: `!mapper` |
 | `!nmi` | Walk registered NMI callbacks and resolve their routines where possible.<br>Experimental · Kernel x64 / dump | `!nmi`<br>Examples: `!nmi` |
 | `!hal` | Inspect verified HAL dispatch pointers and their owning modules.<br>Experimental · Kernel x64 / dump | `!hal`<br>Examples: `!hal` |
-| `!hive` | List registry-hive GetCellRoutine addresses and owning modules.<br>Experimental · Kernel x64 / dump | `!hive`<br>Examples: `!hive` |
+| `!hive` | List registry hive paths, backing files, flags, sizes and GetCellRoutine observations.<br>Experimental · Kernel x64 / dump | `!hive`<br>Examples: `!hive` |
 | `!alpc` | Find ALPC ports through a bounded object-namespace walk; inspect owner and connection fields.<br>Experimental · Kernel x64 / dump | `!alpc`<br>Examples: `!alpc` |
 | `!fwtable` | Inspect registered firmware-table providers when their target layout is known.<br>Experimental · Kernel x64 / dump | `!fwtable`<br>Examples: `!fwtable` |
 | `!etw` | Inspect target ETW logger metadata; does not start a trace or establish an InfinityHook verdict.<br>Experimental · Kernel x64 / dump | `!etw`<br>Examples: `!etw` |
@@ -545,7 +520,7 @@ Page commands require an x64 kernel target. Big-pool commands require a live ker
 | `!msrcheck` | Read LSTAR/CSTAR/STAR/FMASK/EFER on the verified selected CPU; other CPUs remain Unknown.<br>Experimental · Kernel x64 / dump | `!msrcheck`<br>Examples: `!msrcheck` |
 | `!cr` | Read saved per-CPU CR0, CR4 and CR8 values and decoded flags.<br>Experimental · Kernel x64 / dump | `!cr`<br>Examples: `!cr` |
 | `!dpc` | Walk declared per-CPU DPC queues; does not measure latency or cover completed work.<br>Experimental · Kernel x64 / dump | `!dpc`<br>Examples: `!dpc` |
-| `!timer` | Walk timer queues and retain queue totals and decoding gaps; encoded DPC values may remain Unknown.<br>Experimental · Kernel x64 / dump | `!timer`<br>Examples: `!timer` |
+| `!timer` | Show timer due values, periods, signal states and queue coverage; encoded DPC values may remain Unknown.<br>Experimental · Kernel x64 / dump | `!timer`<br>Examples: `!timer` |
 | `!hv` | Show host CPUID/hypervisor observations separately from available debuggee CR4 state.<br>Experimental · Host CPUID; target CR4 if available | `!hv`<br>Examples: `!hv` |
 | `!ci` | Read public CI/HVCI flags in verified local KD; /host explicitly queries the debugger host.<br>Experimental · Local KD, or explicit /host | `!ci [/host]`<br>Examples: `!ci`<br>`!ci /host` |
 | `!byovd` | Compare local driver-file SHA-256 values with an operator-provided catalog. /status reads catalog metadata only.<br>Experimental · Verified local KD x64 | `!byovd [/status]`<br>Examples: `!byovd /status`<br>`!byovd` |

@@ -33,12 +33,18 @@ void ScanHive(Ctx &ctx)
     const auto head = SymbolAddress(ctx.Session, layout, L"nt", L"CmpHiveListHead");
     const auto link = layout.Field(L"nt", L"_CMHIVE", L"HiveList");
     const auto routine = kncore::NestedField(layout.Field(L"nt", L"_CMHIVE", L"Hive"), layout.Field(L"nt", L"_HHIVE", L"GetCellRoutine"));
+    const auto rootPath = layout.Field(L"nt", L"_CMHIVE", L"HiveRootPath");
+    const auto filePath = layout.Field(L"nt", L"_CMHIVE", L"FileFullPath");
+    const auto userPath = layout.Field(L"nt", L"_CMHIVE", L"FileUserName");
+    const auto flags = layout.Field(L"nt", L"_CMHIVE", L"Flags");
+    const auto fileSize = layout.Field(L"nt", L"_CMHIVE", L"ActualFileSize");
     if (!head || !link || link->Size != 16)
     {
         ctx.Out.Fail(kncore::Status::Unavailable, L"Hive list layout or symbol unavailable");
         return;
     }
     const auto owners = knengine::CollectOwnershipIndex(ctx.Session);
+    budget.StartTraversal(std::chrono::steady_clock::now(), std::chrono::seconds(30));
     kncore::WalkList(ctx.Session, *head, architecture, budget,
                      [&](uint64_t entry)
                      {
@@ -49,6 +55,26 @@ void ScanHive(Ctx &ctx)
                          const auto object = entry - link->Offset;
                          auto row = kncore::RoutineObservation(budget.Report, architecture, owners, L"Hive.GetCellRoutine", object,
                                                                kncore::ReadField(ctx.Session, object, routine));
+                         row.Set(L"kind", knjson::Value(L"RegistryHive"));
+                         row.Set(L"hive", knjson::Value(kncore::Hex(object)));
+                         for (const auto &named : {std::pair(L"rootPath", rootPath), std::pair(L"filePath", filePath),
+                                                  std::pair(L"fileUserName", userPath)})
+                         {
+                             const auto value = RecordUnicode(ctx.Session, layout, object, named.second);
+                             row.Set(named.first, value);
+                             if (value.IsNull())
+                             {
+                                 ++budget.Report.Collected.Unknown;
+                             }
+                         }
+                         const auto observedFlags = kncore::ReadField(ctx.Session, object, flags);
+                         const auto observedSize = kncore::ReadField(ctx.Session, object, fileSize);
+                         row.Set(L"flags", kncore::OptionalNumber(observedFlags, true));
+                         row.Set(L"fileSize", kncore::OptionalNumber(observedSize));
+                         if (!observedFlags || !observedSize)
+                         {
+                             ++budget.Report.Collected.Unknown;
+                         }
                          EmitRow(ctx, budget, row);
                          return kncore::VisitDecision::Continue;
                      });
@@ -83,6 +109,12 @@ void CpuQueues(Ctx &ctx, bool timers)
     const auto routine = layout.Field(L"nt", L"_KDPC", L"DeferredRoutine");
     const auto link = layout.Field(L"nt", timers ? L"_KTIMER" : L"_KDPC", timers ? L"TimerListEntry" : L"DpcListEntry");
     const auto timerDpc = layout.Field(L"nt", L"_KTIMER", L"Dpc");
+    const auto dueTime = layout.Field(L"nt", L"_KTIMER", L"DueTime");
+    const auto period = layout.Field(L"nt", L"_KTIMER", L"Period");
+    const auto signalState = kncore::NestedField(layout.Field(L"nt", L"_KTIMER", L"Header"),
+                                                layout.Field(L"nt", L"_DISPATCHER_HEADER", L"SignalState"));
+    const auto context = layout.Field(L"nt", L"_KDPC", L"DeferredContext");
+    const auto importance = layout.Field(L"nt", L"_KDPC", L"Importance");
     const auto queue = layout.Field(L"nt", L"_KPRCB", timers ? L"TimerTable" : L"DpcData");
     const auto entries = timers ? layout.Field(L"nt", L"_KTIMER_TABLE", L"TimerEntries") : queue;
     const auto list = timers ? layout.Field(L"nt", L"_KTIMER_TABLE_ENTRY", L"Entry") : DpcSingleHead(layout);
@@ -112,7 +144,7 @@ void CpuQueues(Ctx &ctx, bool timers)
     const bool firstPrcbKnown = !ctx.Session.Cancelled() && ctx.Session.ReadProcessorBlock(0, &firstPrcb) &&
                                 architecture.KernelPointer(firstPrcb);
     uint64_t completedQueues = 0;
-    budget.StartTraversal();
+    budget.StartTraversal(std::chrono::steady_clock::now(), std::chrono::seconds(30));
     for (ULONG cpu = 0; cpu < count && CheckCollection(ctx, budget); ++cpu)
     {
         ULONG64 prcb = firstPrcb;
@@ -151,24 +183,58 @@ void CpuQueues(Ctx &ctx, bool timers)
                 {
                     function = kncore::ReadField(ctx.Session, object, routine);
                 }
+                else if (rawDpc && *rawDpc == 0)
+                {
+                    function = 0;
+                }
                 else if (rawDpc && architecture.KernelPointer(*rawDpc))
                 {
                     // A plain canonical DPC pointer is read through and the
                     // routine is accepted only when its ownership resolves;
                     // anything else keeps the unverified-decode caveat.
                     const auto candidate = kncore::ReadField(ctx.Session, *rawDpc, routine);
-                    if (candidate && architecture.KernelPointer(*candidate))
+                    if (candidate && architecture.KernelPointer(*candidate) && owners.Find(*candidate, budget.Report.Stamp).Image)
                     {
                         function = candidate;
                         routineViaDpc = true;
                     }
                 }
                 auto row = kncore::RoutineObservation(budget.Report, architecture, owners, timers ? L"Timer.Dpc" : L"Dpc.DeferredRoutine",
-                                                      object, function);
+                                                      object, function, timers ? kncore::RoutinePresence::Optional : kncore::RoutinePresence::Required);
+                row.Set(L"kind", knjson::Value(timers ? L"KernelTimer" : L"QueuedDpc"));
+                row.Set(L"object", knjson::Value(kncore::Hex(object)));
                 row.Set(L"cpu", knjson::Value(std::to_wstring(cpu)));
                 row.Set(L"queue", knjson::Value(std::to_wstring(bank)));
                 row.Set(L"rawDpc", kncore::OptionalNumber(rawDpc, true));
-                if (timers && !routineViaDpc)
+                if (timers)
+                {
+                    const auto due = kncore::ReadField(ctx.Session, object, dueTime);
+                    const auto interval = kncore::ReadField(ctx.Session, object, period);
+                    const auto signal = kncore::ReadField(ctx.Session, object, signalState);
+                    row.Set(L"dueTimeRaw", kncore::OptionalNumber(due, true));
+                    row.Set(L"periodMs", kncore::OptionalNumber(interval));
+                    row.Set(L"signalState", kncore::OptionalNumber(signal));
+                    if (!due || !interval || !signal)
+                    {
+                        ++budget.Report.Collected.Unknown;
+                    }
+                }
+                else
+                {
+                    const auto parameter = kncore::ReadField(ctx.Session, object, context);
+                    const auto priority = kncore::ReadField(ctx.Session, object, importance);
+                    row.Set(L"deferredContext", kncore::OptionalNumber(parameter, true));
+                    row.Set(L"importance", kncore::OptionalNumber(priority));
+                    if (!parameter || !priority)
+                    {
+                        ++budget.Report.Collected.Unknown;
+                    }
+                }
+                if (timers && rawDpc && *rawDpc == 0)
+                {
+                    row.Set(L"decode", knjson::Value(L"No DPC associated with this timer"));
+                }
+                else if (timers && !routineViaDpc)
                 {
                     row.Set(L"decode", knjson::Value(L"Raw timer Dpc may be encoded; no unverified pointer decoder applied"));
                 }
@@ -203,6 +269,11 @@ void CpuQueues(Ctx &ctx, bool timers)
     }
     budget.Report.Limitations.Push(
         knjson::Value(L"Queues are transient; completed/active work outside these declared queues is not covered."));
+    if (timers)
+    {
+        budget.Report.Limitations.Push(knjson::Value(L"DueTime is the raw kernel timer value in 100-nanosecond units, not a UTC date. "
+            L"Period is in milliseconds; zero denotes a one-shot timer. Encoded DPC values remain undecoded."));
+    }
     budget.Report.Analysis = knjson::Value::MakeObject();
     budget.Report.Analysis.Set(L"expectedQueues", knjson::Value(std::to_wstring(static_cast<uint64_t>(count) * banks)));
     budget.Report.Analysis.Set(L"completedQueues", knjson::Value(std::to_wstring(completedQueues)));
@@ -245,7 +316,7 @@ void ScanAlpc(Ctx &ctx)
     uint64_t unknown = 0;
     std::wstring error;
     walker.VisitNamespace(
-        [&](ULONG64 body, unsigned type, int depth)
+        [&](ULONG64 body, unsigned type, int depth, const std::wstring &path)
         {
             if (type != typeIndex)
             {
@@ -254,6 +325,7 @@ void ScanAlpc(Ctx &ctx)
             auto row = knjson::Value::MakeObject();
             row.Set(L"kind", knjson::Value(L"AlpcPort"));
             row.Set(L"address", knjson::Value(kncore::Hex(body)));
+            row.Set(L"name", path.empty() ? knjson::Value() : knjson::Value(path));
             row.Set(L"depth", knjson::Value(std::to_wstring(depth)));
             const auto owner = kncore::ReadField(ctx.Session, body, ownerField);
             const auto connection =
@@ -275,7 +347,7 @@ void ScanAlpc(Ctx &ctx)
                 }
             }
             row.Set(L"owner", process);
-            if (!owner || !connection || (*connection != 0 && !architecture.KernelPointer(*connection)) || process.IsNull())
+            if (path.empty() || !owner || !connection || (*connection != 0 && !architecture.KernelPointer(*connection)) || process.IsNull())
             {
                 ++unknown;
             }
@@ -284,7 +356,7 @@ void ScanAlpc(Ctx &ctx)
             {
                 const std::wstring image = process.IsNull() ? L"Unknown" : process.Get(L"image").AsString(L"Unknown");
                 const std::wstring pid = process.IsNull() ? L"?" : process.Get(L"pid").AsString(L"?");
-                ctx.Out.AddLine(L"[alpc] address=" + kncore::Hex(body) + L" owner=" + image + L" pid=" + pid);
+                ctx.Out.AddLine(L"[alpc] name=" + path + L" address=" + kncore::Hex(body) + L" owner=" + image + L" pid=" + pid);
             }
             return !ctx.Session.Cancelled();
         },
@@ -296,7 +368,7 @@ void ScanAlpc(Ctx &ctx)
     ctx.Out.Details.Collected.Unknown += unknown;
     ctx.Out.Details.Limitations.Push(
         knjson::Value(L"Named object namespace only, depth 16; unnamed ALPC ports are outside this enumeration."));
-    if (unknown != 0)
+    if (unknown != 0 && ctx.Out.Details.State == kncore::Status::Success)
     {
         ctx.Out.Details.State = kncore::Status::Partial;
         ctx.Out.Details.Collected.Complete = false;

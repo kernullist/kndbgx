@@ -56,6 +56,16 @@ For matched x64 kernel dumps, `tools/test-symbol-dump.py` and `tools/test-callba
 
 On the intended target, compare reads with native WinDbg across process/thread changes and reconnects; check missing pages, incomplete lists, cancellation and slow symbol/engine calls. Compare IRP observations with native `!irp`, `!devstack` and `!drvobj`. Verify floating-window input, docking, DPI and accessibility on the intended desktop. The snapshot-driver sample's signing, guest loading and Driver Verifier checks are separate from extension validation. Record unperformed checks explicitly; [SUPPORT.md](SUPPORT.md) defines the supported claims.
 
+### Command record tables
+
+Audit the compiled registry against both collector rows and default UI columns. A list link, tree node or nested collection envelope is not a substitute for the command's record identity. Keep structural fields in row details where they remain useful for navigation.
+
+`CommandRecordRegression.h` covers CI cache payloads, counted names, unreadable memory, cycles, traversal limits, cancellation, profile rejection and flattened mapper coverage. `test-ui-faults.mjs` checks command-specific fields, including zero/false values and missing routine symbols. These synthetic checks do not prove a private layout on another image.
+
+For live read validation, retain the loaded DLL hash and exact NT/CI image identities. Compare CI names/hashes/status, hive paths/flags/sizes, timer objects/due values, driver dispatch names/handlers and native SSDT entries with independent WinDbg reads. Compare device stack membership with `!devstack`, and distinguish verified empty NMI/DPC lists from unavailable layouts. Inspect actual rendered tables and address navigation as well as exported JSON.
+
+The command-table audit exercised one stopped 28000.2952 x64 VMware target. Its CI and mapper collections contained 113 and 266 records; hive, timer, ETW logger and firmware collections contained 15, 192, 37 and 2 records. Native SSDT contained 490 entries. Encoded timer DPCs and Shadow SSDT remained unverified; the ALPC namespace walk retained nine named ports before its traversal budget. These are bounded observations, not an all-command runtime or cross-version certification. Full release-matrix, reconnect, target resume and nonempty NMI/DPC checks remain separate validations.
+
 ## Publication boundary
 
 `python tools/release.py check-privacy` scans tracked and visible untracked files for known credential patterns, personal/build paths and raw session addresses/process IDs in Markdown. Diagnostics print categories rather than matched values. The scan cannot establish that arbitrary sensitive prose or unknown credential formats are absent; review public files and commit messages too.

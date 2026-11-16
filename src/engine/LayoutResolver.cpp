@@ -290,7 +290,8 @@ bool LayoutResolver::PublicOnlySymbol(const wchar_t *module, const wchar_t *symb
 
 bool LayoutResolver::VerifyProfile(kncore::KernelLayoutFamily family)
 {
-    const auto identity = Identity(L"nt");
+    const auto module = family == kncore::KernelLayoutFamily::CiHash ? L"ci" : L"nt";
+    const auto identity = Identity(module);
     if (!identity)
     {
         return false;
@@ -298,7 +299,7 @@ bool LayoutResolver::VerifyProfile(kncore::KernelLayoutFamily family)
     const auto reason = kncore::VerifyKernelProfile(session_, *identity, family,
                                                     [&](const wchar_t *name)
                                                     {
-                                                        return Address(L"nt", name);
+                                                        return Address(module, name);
                                                     });
     const bool verified = std::wstring_view(reason) == L"Verified";
     if (!verified)
@@ -370,6 +371,10 @@ std::optional<kncore::FieldInfo> LayoutResolver::ProfileSymbol(const wchar_t *mo
     ULONG64 base = 0;
     const auto identity = Identity(module);
     const auto address = Address(module, symbolName);
+    if (identity)
+    {
+        field.Source = kncore::KernelProfileName(*identity);
+    }
     const std::wstring qualified = ModuleKey(module) + L"!" + symbolName;
     if (!identity || !address || !field.ValidFor(field.Size) || field.Size > identity->ImageSize ||
         *address - identity->Base > identity->ImageSize - field.Size ||

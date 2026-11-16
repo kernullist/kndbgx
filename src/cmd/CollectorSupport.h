@@ -68,6 +68,15 @@ inline std::optional<uint64_t> SymbolAddress(knengine::DbgSession &, knengine::L
     return layout.Address(module, name);
 }
 
+inline knjson::Value RecordUnicode(knengine::DbgSession &session, knengine::LayoutResolver &layout, uint64_t object,
+                                   const std::optional<kncore::FieldInfo> &field)
+{
+    std::wstring value;
+    return field && field->Kind == kncore::FieldKind::Composite && field->Size == 16 &&
+           kncore::ValidRange(object, static_cast<uint64_t>(field->Offset) + field->Size) &&
+           ReadUnicodeString(session, layout, object + field->Offset, &value) ? knjson::Value(value) : knjson::Value();
+}
+
 template <typename Callback> bool EachProcessor(knengine::DbgSession &session, Callback callback)
 {
     return knengine::ForEachProcessor(

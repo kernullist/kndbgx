@@ -1,6 +1,8 @@
 #include "CollectorSupport.h"
 #include "../core/ObjectRead.h"
 #include "../core/Piddb.h"
+#include "../core/CiHash.h"
+#include "../core/HistoryRows.h"
 #include "../util/SnapshotStore.h"
 
 #include <windows.h>
@@ -261,7 +263,10 @@ void ScanUnloadedDrivers(Ctx &ctx)
             recordSize = 0x28;
             // The next-write index wraps; it is not the number of occupied slots.
             count = table == 0 && *nextIndex == 0 ? 0 : 50;
-            budget.Report.LayoutProfile = kncore::KernelSymbolProfileId;
+            if (const auto identity = layout.Identity(L"nt"))
+            {
+                budget.Report.LayoutProfile = kncore::KernelProfileName(*identity);
+            }
         }
     }
     if (!known || count > 4096 || !name || !start || !end || !time || recordSize == 0 || recordSize > 4096 || !name->ValidFor(recordSize) ||
@@ -309,6 +314,8 @@ void ScanUnloadedDrivers(Ctx &ctx)
             row.Set(L"StartAddress", kncore::OptionalNumber(from, true));
             row.Set(L"EndAddress", kncore::OptionalNumber(to, true));
             row.Set(L"CurrentTime", kncore::OptionalNumber(when, true));
+            row.Set(L"timeBasis", knjson::Value(budget.Report.LayoutProfile == kncore::KernelSymbolProfile28000Id ?
+                L"UnbiasedInterruptTime100ns" : L"RawKernelValue"));
             const bool identityComplete = named && !text.empty() && nameLength && from && to && when && *when != 0 &&
                 architecture.KernelPointer(*from) && architecture.KernelPointer(*to) && *from < *to;
             row.Set(L"identityComplete", knjson::Value(identityComplete));
@@ -391,14 +398,27 @@ void ScanCiHash(Ctx &ctx)
     }
     knengine::LayoutResolver layout(ctx.Session);
     const auto root = SymbolAddress(ctx.Session, layout, L"ci", L"g_KernelHashBucketList");
-    auto row = knjson::Value::MakeObject();
-    row.Set(L"kind", knjson::Value(L"CiHashRoot"));
-    row.Set(L"address", kncore::OptionalNumber(root, true));
     const auto type = layout.Symbol(L"ci", L"g_KernelHashBucketList");
-    row.Set(L"typedRootValue", root ? kncore::OptionalNumber(kncore::ReadField(ctx.Session, *root, type), true) : knjson::Value());
-    EmitRow(ctx, budget, row);
-    UnknownScope(ctx, budget, L"CiHashBuckets",
-                 L"No verified bucket/record schema; no list count or erasure conclusion can be inferred from the root");
+    if (root && kncore::ProfilePointerStorageAllowed(type, layout.PublicOnlySymbol(L"ci", L"g_KernelHashBucketList"), 8) &&
+        layout.VerifyProfile(kncore::KernelLayoutFamily::CiHash))
+    {
+        budget.Report.LayoutProfile = kncore::CiHashProfileId;
+        kncore::CollectCiHashEntries(ctx.Session, architecture, *root, budget);
+        for (size_t i = 0; i < budget.Report.Rows.Items().size() && i < 256; ++i)
+        {
+            ctx.Out.AddLine(budget.Report.Rows.Items()[i].Write());
+        }
+    }
+    else
+    {
+        auto row = knjson::Value::MakeObject();
+        row.Set(L"kind", knjson::Value(L"CiHashRoot"));
+        row.Set(L"address", kncore::OptionalNumber(root, true));
+        EmitRow(ctx, budget, row);
+        UnknownScope(ctx, budget, L"CiHashBuckets", L"Exact CI image, root storage or record code profile unavailable");
+    }
+    budget.Report.Limitations.Push(knjson::Value(L"CI cache names, two raw 20-byte hashes and raw cached status are observations. "
+        L"Hash algorithm, current signature trust, module residency and history erasure are not established."));
     FinishCollection(ctx, budget);
 }
 
@@ -408,6 +428,7 @@ void ScanMapper(Ctx &ctx)
         {L"!unloaded", ScanUnloadedDrivers}, {L"!piddb", ScanPiddb}, {L"!cihash", ScanCiHash}};
     ctx.Out.Details.Source = L"Composite:MapperHistoryObservations";
     ctx.Out.Details.Collected.Complete = true;
+    ctx.Out.Details.Collected.StopReason = L"AllCollectionsComplete";
     for (const auto &[name, handler] : collectors)
     {
         if (ctx.Session.Cancelled())
@@ -420,12 +441,10 @@ void ScanMapper(Ctx &ctx)
         const std::vector<std::wstring> args = {name};
         Ctx nested{ctx.Session, args, child};
         handler(nested);
-        ctx.Out.Details.Rows.Push(child.Details.ToJson());
         ctx.Out.AddLine(child.Text());
-        if (child.Details.State != kncore::Status::Success || !child.Details.Collected.Complete)
+        if (!kncore::AppendHistoryCollection(ctx.Out.Details, child.Details))
         {
-            ctx.Out.Details.State = kncore::Status::Partial;
-            ctx.Out.Details.Collected.Complete = false;
+            break;
         }
     }
 }

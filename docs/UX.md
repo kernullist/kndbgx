@@ -206,11 +206,7 @@ This later capture has ten rows and five unknown observations. **Read from** ide
 
 ### Inspect ETW logger metadata
 
-Run `!etw` to inspect logger contexts in the target's host silo when its layout can be verified. Compare **name**, **loggerId**, **rawClock**, **clockType** and **clockRepresentation**. Integer clock selectors are decoded only with a verified profile; other values retain their raw representation.
-
-![ETW coverage gap with the unresolved storage and type relationship in saved output](screenshots/etw-coverage.png)
-
-On this target the collector could not verify the global storage/type relationship, so it retained zero rows, one unknown observation and Partial status. **View output** exposes that reason. This capture does not demonstrate a successful logger inventory, and an empty table does not mean that ETW is inactive.
+Run `!etw` to inspect logger contexts in the target's host silo when its layout can be verified. Compare name, logger ID, status, mode, lost-event count and log file. Raw clock, clock type and representation remain available. Integer clock selectors and unused slot sentinels require a verified profile. An unsupported layout produces a diagnostic rather than an empty successful inventory.
 
 This is logger metadata, not an event trace or a system-wide ETW integrity verdict. It neither starts tracing nor substitutes the debugger host's logger list for a remote target. `etl-import` reads an existing host ETL file when recorded events are needed.
 
@@ -246,36 +242,30 @@ The private PiDDB payload is currently verified for x64 kernel 28000.2952 with P
 **Load status** is the cached NTSTATUS, not current module residency. **PE timestamp (raw)** is the PE header value, not load time; reproducible builds can use a hash there. PiDDB does not enumerate processes. See [Microsoft's reproducible PE description](https://learn.microsoft.com/en-us/dotnet/fundamentals/runtime-libraries/system-reflection-portableexecutable-debugdirectoryentrytype).
 
 1. Run `!mapper` from Library to collect `!unloaded`, `!piddb` and `!cihash` into one retained result.
-2. Read each child collection's **Command ID**, **Status**, **Coverage / Complete** and stop reason. The outer rows represent collections, not individual drivers.
-3. Run a child command separately for its own table. Open **Row details / Raw record** or export the composite result to inspect nested evidence.
+2. Read individual driver records in the table. **Source Command** distinguishes unloaded history, PiDDB entries and CI cache entries; these records are not deduplicated or equated.
+3. Inspect Capture info or exported `analysis.collections` for each collection's status, coverage, profile, limitations and record count. A partial child keeps the composite incomplete. A cancelled or stale child stops the remaining collection sequence.
 
-![Composite driver-history collections and an oversized nested record](screenshots/driver-history-coverage.png)
-
-The three-row screenshot is Partial. Unloaded-driver and CI field/ownership metadata remain unverified on this guest. The PiDDB child exceeds the UI page budget and is replaced by an export notice in that page; this is a display limit, not evidence that its retained result is empty. Export reads the full retained result while it remains available.
+`!cihash` shows cache name, two raw 20-byte hashes, raw cached status and entry address. Hash algorithms and the meaning of the cached status are not inferred. Record links remain in Row details; unsupported images produce an explicit diagnostic. `!unloaded` keeps its raw kernel time and a time-basis label; on the reviewed 28000.2952 image it is unbiased interrupt time in 100-nanosecond units, not a UTC timestamp.
 
 Unloaded-driver events, PiDDB records and CI hash buckets have different lifetimes and coverage. A missing entry or an unavailable private layout does not establish history erasure, manual mapping or a clean system. `!mapper` combines observations; it does not supply a malware verdict.
 
 ### Inspect hives and ALPC ports
 
-Run `!hive` to inspect the target hive list's `GetCellRoutine` pointers. Compare **Routine**, **Symbol**, **Module**, **Ownership** and **Slot**. The screenshot completed 15 rows resolving to `nt!HvpGetCellPaged`; it describes observed routine ownership, not the integrity of all registry contents.
+Run `!hive` to compare **Root Path**, **File Path**, **File User Name**, hive address, flags and file size. `GetCellRoutine` and its symbol remain available. Empty file names are valid for hives without a backing file; unreadable names remain Unknown. These observations do not establish the integrity of all registry contents.
 
-![Fifteen hive routine pointers with symbols and ownership](screenshots/registry-hive-routines.png)
+Run `!alpc` to compare the full named-port path, **Owner / PID**, **Owner / Image**, port address and connection port. Row details retain the owner EPROCESS, creation time and namespace depth when available.
 
-Run `!alpc`, select a row and enable **Row details**. Read the port address, connection port, namespace depth and **owner** object, including PID, image, EPROCESS and creation time when available.
+This walk covers named objects only, with depth 16 and a shared 30-second traversal budget. Ports outside the walked namespace and unreadable fields are not covered. An unresolved symbol for an object address does not by itself indicate corruption; use its typed fields and coverage.
 
-![An ALPC port's connection and owner identity](screenshots/alpc-ports.png)
-
-This namespace walk retained nine ports before reaching its budget. Ports outside the walked namespace and unreadable fields are not covered. An unresolved symbol for an object address does not by itself indicate corruption; use its typed fields and coverage.
-
-Related commands cover other registrations: `!nmi` walks the NMI callback chain, `!hal` inspects verified HAL dispatch function-pointer fields, and `!fwtable` inspects firmware-table providers. Missing private layouts remain gaps. The current guest's `!fwtable` attempt returned zero rows and one unknown observation with Partial status; no successful provider inventory is claimed here.
+Related commands cover other registrations: `!nmi` shows callback routines and contexts, `!hal` inspects verified HAL dispatch function-pointer fields, and `!fwtable` shows provider signatures such as ACPI and their routines. Missing private layouts remain gaps. A verified empty NMI list is distinct from an unavailable layout.
 
 ### Inspect DPC queues and timers
 
-Run `!dpc` for per-CPU DPC queues, or `!timer` for per-CPU timer-table entries. Compare **CPU**, **Queue**, **Routine** and **Decode**, then read the queue totals in the coverage banner or Capture info.
+Run `!dpc` for per-CPU DPC queues, including deferred routine, context and importance. `!timer` shows **CPU**, **Due time (raw 100 ns)**, **Period (ms)**, **Signal State** and timer object even when the DPC routine is unavailable. Zero period means one-shot; see [KeSetTimerEx units and optional DPC](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-kesettimerex). The raw due time is not a UTC date. Read queue totals in Capture info.
 
-![Timer records with explicit queue totals and unavailable DPC decoding](screenshots/timer-coverage.png)
+Encoded timer DPC pointers remain undecoded and keep routine coverage Partial. A verified null DPC is valid for a timer with no DPC. Active or completed work outside these transient queues is not covered, and neither command measures DPC latency. Both walks have a shared 30-second traversal budget; blocking debugger calls can exceed it.
 
-This timer capture retained 189 rows and 189 unknown observations. All 1,024 queues were fully read, but unavailable routine decoding keeps the result Partial. Encoded timer DPC pointers are not treated as decoded routine addresses without a verified representation. Active or completed work outside those transient queues is not covered, and neither command measures DPC latency.
+`!devstack` names the driver owning each observed device and shows type, stack size and flags. Lower devices use `attachedFrom` to identify the device above them. `!drvobj` displays IRP major names while preserving numeric codes in the raw record. `!payload` prioritizes observed W+X, inspected/total pages and range coverage; a first-page sample does not classify the entire allocation. `!etw` prioritizes logger name, status, mode, lost events and log file. WNF decoding includes readable lifetime/scope and owner-tag fields, while ETL import prioritizes provider/event/task/opcode identity.
 
 ### Distinguish host and target security state
 

@@ -156,6 +156,14 @@ void ScanSsdt(Ctx &ctx)
         expected = 489;
         profile = L"NT-26100.8655-PDB-11D7FE79-age1";
     }
+    else if (identity && kncore::CallbackProfile28000Identity(*identity) && table && limitAddress &&
+             *table - identity->Base == 0xe7a90 && *limitAddress - identity->Base == 0xe8238 &&
+             !tableType && !limitType && layout.PublicOnlySymbol(L"nt", L"KiServiceTable") &&
+             layout.PublicOnlySymbol(L"nt", L"KiServiceLimit"))
+    {
+        expected = 490;
+        profile = kncore::KernelSymbolProfile28000Id;
+    }
     uint32_t limit = 0;
     if (!expected || !table || !limitAddress || !architecture.KernelPointer(*table) ||
         !ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *limitAddress, &limit) || limit != *expected ||

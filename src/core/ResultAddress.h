@@ -54,12 +54,16 @@ inline std::optional<std::wstring> AddressFieldSpace(const knjson::Value &row, c
         L"entry", L"listEntry", L"readAddress", L"nextAddress", L"instructionPointer", L"win32Start", L"context",
         L"preRoutine", L"postRoutine", L"CompletionRoutine", L"CancelRoutine", L"DispatchRoutine", L"StartAddress", L"EndAddress",
         L"MdlAddress", L"UserBuffer", L"SystemBuffer", L"Thread", L"CurrentStackLocation", L"DeviceObject", L"FileObject",
-        L"Context", L"type3InputBuffer"};
+        L"Context", L"type3InputBuffer", L"hive", L"deferredContext", L"record", L"attachedFrom"};
     if (virtualFields.contains(field))
     {
         return explicitSpace.IsString() ? explicitSpace.AsString(L"") : inheritedSpace;
     }
     if (kind == L"PiDDBAvlNode" && (field == L"parent" || field == L"left" || field == L"right"))
+    {
+        return L"virtual";
+    }
+    if (kind == L"CiHashLink" && field == L"next")
     {
         return L"virtual";
     }

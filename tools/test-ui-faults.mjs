@@ -1428,6 +1428,71 @@ await check("T-UI-PIDDB driver identity and cached status replace topology colum
     assert.equal(tableCell(app, 0, "Cached result"), "Error");
 });
 
+await check("T-UI-RECORDS semantic collector fields survive sparse routines and zero values", async () =>
+{
+    const app = harness();
+    await app.boot();
+    const cases = [
+        ["!cihash", { kind: "CiHashEntry", name: "fixture.sys", hash: "ab".repeat(20), secondaryHash: "00".repeat(20),
+            cacheStatusRaw: "0x00000000", entry: "0xffff800000002000", topology: { kind: "CiHashLink", next: "0x0" } },
+            { "Name": "fixture.sys", "Hash (20 bytes)": "ab".repeat(20), "Cache status (raw)": "0x00000000" }],
+        ["!hive", { kind: "RegistryHive", rootPath: "\\REGISTRY\\MACHINE\\SYSTEM", filePath: "\\SystemRoot\\System32\\config\\SYSTEM",
+            fileUserName: "", hive: "0xffff800000002000", flags: "0x0", fileSize: "8192", routine: null, symbol: null },
+            { "Root Path": "\\REGISTRY\\MACHINE\\SYSTEM", "File Size": "8192" }],
+        ["!timer", { kind: "KernelTimer", cpu: "0", queue: "4", object: "0xffff800000002000", dueTimeRaw: "0x0000000000001234",
+            periodMs: "0", signalState: "0", routine: null, symbol: null, decode: "Encoded DPC" },
+            { "CPU": "0", "Due time (raw 100 ns)": "0x0000000000001234", "Period (ms)": "0", "Signal State": "0" }],
+        ["!dpc", { kind: "QueuedDpc", cpu: "2", queue: "0", routine: "0xffff800000002000", symbol: "sample!Deferred",
+            importance: "2", deferredContext: "0x0000000000000000" }, { "CPU": "2", "Importance": "2", "Symbol": "sample!Deferred" }],
+        ["!alpc", { kind: "AlpcPort", name: "\\RPC Control\\Example", address: "0xffff800000002000", owner: { pid: "4", image: "System" },
+            ownerProcess: "0xffff800000003000", connectionPort: "0x0", depth: "1" },
+            { "Name": "\\RPC Control\\Example", "Owner / PID": "4", "Owner / Image": "System" }],
+        ["!fwtable", { kind: "RoutineObservation", family: "FirmwareProvider", provider: "ACPI", routine: "0xffff800000002000",
+            symbol: "nt!ExpGetAcpiTable", signature: "0x41435049", record: "0xffff800000003000" }, { "Provider": "ACPI" }],
+        ["!devstack", { kind: "Device", driverName: "\\Driver\\ACPI", device: "0xffff800000002000", type: "0x32", stackSize: "3",
+            flags: "0x0", driverObject: "0xffff800000003000", link: "AttachedTo" }, { "Driver Name": "\\Driver\\ACPI", "Stack Size": "3" }],
+        ["!drvobj", { kind: "DriverDispatch", major: "14", majorName: "IRP_MJ_DEVICE_CONTROL", handler: "0xffff800000002000" },
+            { "Major": "IRP_MJ_DEVICE_CONTROL" }],
+        ["!payload", { kind: "BigPoolAllocation", address: "0xffff800000002000", tag: "Test", size: "8192", wxObserved: false,
+            rangeClassified: false, inspectedPages: "1", totalPages: "2", unavailablePages: "0", ownership: "Unknown" },
+            { "W+X observed": "No", "Range Classified": "No", "Inspected Pages": "1", "Total Pages": "2" }],
+        ["!etw", { kind: "EtwLoggerContext", name: "Example trace", loggerId: "3", loggerStatus: "0x0", loggerMode: "0x100",
+            eventsLost: "0", logFile: "", clockType: "1", rawClock: "0x1", object: "0xffff800000002000" },
+            { "Name": "Example trace", "Events Lost": "0", "Logger Mode": "0x100" }],
+        ["!mapper", { kind: "CiHashEntry", sourceCommand: "!cihash", name: "fixture.sys", hash: "ab".repeat(20),
+            cacheStatusRaw: "0x0", entry: "0xffff800000002000" }, { "Source Command": "!cihash", "Name": "fixture.sys" }],
+        ["!wnf decode 0", { kind: "WnfNameDecode", encoded: "0x0", lifetimeName: "Temporary", scopeName: "Process",
+            permanentData: false, ownerTagText: "TEST", sequence: "1", version: "1" },
+            { "Lifetime Name": "Temporary", "Scope Name": "Process", "Permanent Data": "No", "Owner Tag Text": "TEST" }],
+        ["etl-import example.etl", { kind: "EtwEvent", providerName: "ExampleProvider", eventId: "12", taskName: "Read",
+            opcodeName: "Start", pid: "4", tid: "8", timestampFileTime: "1234", payloadBytes: "0" },
+            { "Provider Name": "ExampleProvider", "Event ID": "12", "Task Name": "Read" }]
+    ];
+    for (const [command, row, cells] of cases)
+    {
+        await openTable(app, command, [row]);
+        for (const [label, value] of Object.entries(cells))
+        {
+            assert.equal(tableCell(app, 0, label), value, command + ": " + label);
+        }
+        if (command === "!cihash")
+        {
+            assert.equal(headers(app).some(label => /Topology|Next/.test(label)), false);
+            assert.equal(headers(app).length, 6);
+            assert.ok(Number(columnHandle(app, "Name").getAttribute("aria-valuenow")) >= 400);
+            assert.ok(Number(columnHandle(app, "Hash (20 bytes)").getAttribute("aria-valuenow")) >= 300);
+        }
+        if (command === "!hive")
+        {
+            assert.ok(Number(columnHandle(app, "File User Name").getAttribute("aria-valuenow")) >= 400);
+        }
+    }
+    await openTable(app, "!cihash", [{ kind: "CiHashEntry", name: null, hash: "ab".repeat(20), cacheStatusRaw: "0x0",
+        entry: "0xffff800000002000", reason: "CiHashNameUnavailable" }]);
+    assert.equal(tableCell(app, 0, "Name"), "Unknown");
+    assert.equal(tableCell(app, 0, "Reason"), "CiHashNameUnavailable");
+});
+
 await check("T-UI-STACK captured identity survives sorting, context changes and retained-result recall", async () =>
 {
     const app = harness({ breakpointAuto: false });
@@ -2842,7 +2907,7 @@ await check("T-UI-COLUMNS command-specific fields replace fixed summaries for de
         ["registers", { kind: "Register", name: "rax", type: "4", rawBytes: "00 00 00 00 00 00 00 00", context: { process: "4" } }, ["Name", "Raw bytes", "Type"]],
         ["!drvobj", { kind: "DriverDispatch", driverObject: "0xffff800000001000", major: "14", handler: "0xffff800000002000", ownership: "sample.sys" }, ["Major", "Handler", "Ownership", "Driver Object"]],
         ["!idt", { kind: "IdtGate", cpu: "0", vector: "14", family: "IDT", routine: "0xffff800000002000", module: "nt", ownership: "KnownModule", present: true }, ["CPU", "Vector", "Routine", "Module", "Ownership", "Present", "Family"]],
-        ["!etw", { kind: "EtwLoggerContext", loggerId: "2", name: "Logger", object: "0xffff800000002000", clockType: "Selector", rawClock: "0x1", clockRepresentation: "Qpc" }, ["Logger ID", "Name", "Object", "Clock Type", "Raw Clock", "Clock Representation"]],
+        ["!etw", { kind: "EtwLoggerContext", loggerId: "2", name: "Logger", object: "0xffff800000002000", clockType: "Selector", rawClock: "0x1", clockRepresentation: "Qpc" }, ["Name", "Logger ID", "Clock Type", "Raw Clock", "Object", "Clock Representation"]],
         ["!vad", { kind: "Vad", object: "0xffff800000004000", start: "0x10000", end: "0x11000", pageProtection: "0x4", executableByVad: false, process: { pid: "100", image: "sample.exe" } }, ["Start", "End", "Page Protection", "Executable By Vad", "Object", "Process / PID", "Process / Image", "Process"]],
         ["dt", { field: "Field", offset: "0x8", type: "unsigned long", size: "4", bitOffset: null, bitWidth: null }, ["Field", "Offset", "Type", "Size", "Bit Offset", "Bit Width"]],
         ["u", { address: "0xffff800000002008", bytes: "90", instruction: "nop" }, ["Address", "Bytes", "Instruction"]]
@@ -3551,7 +3616,7 @@ await check("T-UI-MINIFILTER Major displays, sorts and copies names while preser
         await openTable(app, command, [{ kind: "RoutineObservation", family: "Minifilter.PreOperation", major: "3" }], { id: command + "-legacy" });
         assert.equal(tableCell(app, 0, "Major"), "3");
         await openTable(app, "!drvobj", [{ kind: "DriverDispatch", major: "3", majorName: "READ" }]);
-        assert.equal(tableCell(app, 0, "Major"), "3");
+        assert.equal(tableCell(app, 0, "Major"), "READ");
         for (const majorName of ["", null, {}, []])
         {
             await openTable(app, command, [{ kind: "RoutineObservation", family: "Minifilter.PostOperation", major: "3", majorName }],

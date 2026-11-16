@@ -6,6 +6,22 @@ namespace kncore
 {
 inline constexpr wchar_t KernelSymbolProfileId[] = L"NT-26100.8655-symbols-PDB-11D7FE79-age1";
 inline constexpr wchar_t PiddbProfileId[] = L"NT-28000.2952-PiDDB-PDB-4660396C-age1";
+inline constexpr wchar_t KernelSymbolProfile28000Id[] = L"NT-28000.2952-symbols-PDB-4660396C-age1";
+inline constexpr wchar_t CiHashProfileId[] = L"CI-28000.2952-hash-cache-PDB-F660C9DA-age1";
+
+inline bool CiHashProfileIdentity(const ModuleIdentity &identity)
+{
+    return identity.Matched && identity.Machine == 0x8664 && identity.PdbAge == 1 && identity.Timestamp == 0x773f58da &&
+           identity.ImageSize == 0x11c000 &&
+           _wcsicmp(identity.PdbGuid.c_str(), L"{F660C9DA-4538-E0B7-62AA-C762F4FA8CDB}") == 0 &&
+           identity.Base != 0 && ValidRange(identity.Base, identity.ImageSize);
+}
+
+inline const wchar_t *KernelProfileName(const ModuleIdentity &identity)
+{
+    return CiHashProfileIdentity(identity) ? CiHashProfileId :
+           CallbackProfile28000Identity(identity) ? KernelSymbolProfile28000Id : KernelSymbolProfileId;
+}
 
 enum class KernelLayoutFamily
 {
@@ -16,11 +32,63 @@ enum class KernelLayoutFamily
     Nmi,
     Unloaded,
     Firmware,
-    Piddb
+    Piddb,
+    CiHash
 };
 
-inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFamily family)
+inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFamily family, bool build28000 = false)
 {
+    if (family == KernelLayoutFamily::CiHash)
+    {
+        // Cross-image calls can be relocated by the loader and are excluded.
+        static const std::array<CallbackCodeWindow, 5> ciHash = {{
+            {L"I_PEUpdateHashCache", 0x95888, 0x107, L"498b1e4885db742f488d4b1841b814000000498bd54c8b156dd8fbff"},
+            {L"I_PEUpdateHashCache", 0x95888, 0x128, L"4883f8140f84e2000000488b1bebd34c8d35ca960500"},
+            {L"I_PEUpdateHashCache", 0x95888, 0x14b, L"410fb717b9020100004883c25241b850454155"},
+            {L"I_PEUpdateHashCache", 0x95888, 0x172,
+             L"410f104500498bd70f114618418b4d10894e28488d4e08410f1004240f11462c418b44241089463c410fb7076683c0026689460a410fb707668901488d464848894610"},
+            {L"I_PEUpdateHashCache", 0x95888, 0x1c1, L"897e40c7464400000000498b06488906498936ff4500"}}};
+        return ciHash;
+    }
+    if (build28000 && family != KernelLayoutFamily::Piddb)
+    {
+        static const std::array<CallbackCodeWindow, 5> silo = {{
+            {L"PsGetServerSiloGlobals", 0x2baea0, 0, L"4885c97509488d0594ead000"},
+            {L"PsGetServerSiloGlobals", 0x2baea0, 0xe, L"488b81e0050000c3"},
+            {L"EtwpFreeLoggerContext", 0x93cfa0, 0x294, L"488b85c802000033d2488bcb4ac704f801000000"},
+            {L"EtwpGetLoggerTimeStamp", 0x2fcd60, 0x10, L"488b41184885c00f85bb000000"},
+            {L"EtwpGetLoggerTimeStamp", 0x2fcd60, 0xd8, L"4883e801742f4883e8010f842a0300004883f8010f8519030000"}}};
+        static const std::array<CallbackCodeWindow, 4> nmi = {{
+            {L"KeRegisterNmiCallback", 0x5f4d30, 0xf, L"488bfa488bf1ba2000000041b84b4e4d498d4a20e8d8666300488bd8"},
+            {L"KeRegisterNmiCallback", 0x5f4d30, 0x39,
+             L"4889730848897b1048895b18e8e663c2ff488b15ef679500488d0de06795004889138ad048891ddc679500"},
+            {L"KiProcessNMI", 0x5fb830, 0x92, L"488b1da7fc9400418aff4885db7420488b4308408ad7488b4b10"},
+            {L"KiProcessNMI", 0x5fb830, 0xb1, L"488b1b400af84885db75e5"}}};
+        static const std::array<CallbackCodeWindow, 4> unloaded = {{
+            {L"MiRememberUnloadedDriver", 0x9a4200, 0x2a,
+             L"488b0d2f5c55004885c90f84a50000008b05285c550083f8320f83ca000000488d1480488d3cd1"},
+            {L"MiRememberUnloadedDriver", 0x9a4200, 0x7a, L"48894708"},
+            {L"MiRememberUnloadedDriver", 0x9a4200, 0xb0,
+             L"0fb706488d4c24406689074c03f50fb746026689470248896f104c897718e8bdd68aff48894720ff058b5b5500"},
+            {L"MiRememberUnloadedDriver", 0x9a4200, 0xe8, L"bad0070000448bc8b94000000041b84d6d4454e8e0a59dff488905595b5500"}}};
+        static const std::array<CallbackCodeWindow, 2> firmware = {{
+            {L"ExpRegisterFirmwareTableInformationHandler", 0x839120, 0xe1, L"ba38000000b90001000041b841524654e81a223f00488bc84885c07459"},
+            {L"ExpRegisterFirmwareTableInformationHandler", 0x839120, 0xfe,
+             L"8b06488d79188901488b460848894108488b461048894110488d412848897f0848893f48894008488900488b4910e82f07b2ff488b05f0a66c00483928751348892f4889470848893848893ddaa66c00"}}};
+        switch (family)
+        {
+        case KernelLayoutFamily::HostSilo:
+            return silo;
+        case KernelLayoutFamily::Nmi:
+            return nmi;
+        case KernelLayoutFamily::Unloaded:
+            return unloaded;
+        case KernelLayoutFamily::Firmware:
+            return firmware;
+        default:
+            return {};
+        }
+    }
     // Reviewed insertion, comparison and lookup code establishes the private payload.
     static const std::array<CallbackCodeWindow, 6> piddb = {{
         {L"RtlInsertElementGenericTableFullAvl", 0x41a3b0, 0xbf, L"4c8bc6488d4f20498bd7e802103300"},
@@ -82,12 +150,39 @@ inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFami
         return firmware;
     case KernelLayoutFamily::Piddb:
         return piddb;
+    case KernelLayoutFamily::CiHash:
+        return {};
     }
     return {};
 }
 
-inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbols(KernelLayoutFamily family)
+inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbols(KernelLayoutFamily family, bool build28000 = false)
 {
+    static const std::pair<const wchar_t *, uint32_t> ciHash[] = {{L"g_KernelHashBucketList", 0xef090}};
+    if (family == KernelLayoutFamily::CiHash)
+    {
+        return ciHash;
+    }
+    if (build28000 && family != KernelLayoutFamily::Piddb)
+    {
+        static const std::pair<const wchar_t *, uint32_t> silo[] = {{L"PspHostSiloGlobals", 0xfc9940}};
+        static const std::pair<const wchar_t *, uint32_t> nmi[] = {{L"KiNmiCallbackListHead", 0xf4b570}};
+        static const std::pair<const wchar_t *, uint32_t> unloaded[] = {{L"MmUnloadedDrivers", 0xef9e60}, {L"MmLastUnloadedDriver", 0xef9e68}};
+        static const std::pair<const wchar_t *, uint32_t> firmware[] = {{L"ExpFirmwareTableProviderListHead", 0xf03940}};
+        switch (family)
+        {
+        case KernelLayoutFamily::HostSilo:
+            return silo;
+        case KernelLayoutFamily::Nmi:
+            return nmi;
+        case KernelLayoutFamily::Unloaded:
+            return unloaded;
+        case KernelLayoutFamily::Firmware:
+            return firmware;
+        default:
+            return {};
+        }
+    }
     static const std::pair<const wchar_t *, uint32_t> types[] = {{L"ObTypeIndexTable", 0xfc6840}, {L"ObHeaderCookie", 0xfc5e8c}};
     static const std::pair<const wchar_t *, uint32_t> names[] = {{L"ObpInfoMaskToOffset", 0xf0f280}};
     static const std::pair<const wchar_t *, uint32_t> protection[] = {{L"MmProtectToValue", 0x14320}};
@@ -114,6 +209,8 @@ inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbol
         return firmware;
     case KernelLayoutFamily::Piddb:
         return piddb;
+    case KernelLayoutFamily::CiHash:
+        return ciHash;
     }
     return {};
 }
@@ -121,19 +218,21 @@ inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbol
 template <typename Resolve>
 const wchar_t *VerifyKernelProfile(TargetReader &reader, const ModuleIdentity &identity, KernelLayoutFamily family, Resolve resolve)
 {
-    const bool matched = family == KernelLayoutFamily::Piddb ? CallbackProfile28000Identity(identity) : CallbackProfileIdentity(identity);
-    if (!matched || KernelProfileWindows(family).empty())
+    const bool build28000 = CallbackProfile28000Identity(identity);
+    const bool matched = family == KernelLayoutFamily::CiHash ? CiHashProfileIdentity(identity) :
+                         family == KernelLayoutFamily::Piddb ? build28000 : CallbackProfileIdentity(identity);
+    if (!matched || KernelProfileWindows(family, build28000).empty())
     {
         return L"NoMatchingKernelProfile";
     }
-    for (const auto &[name, rva] : KernelProfileSymbols(family))
+    for (const auto &[name, rva] : KernelProfileSymbols(family, build28000))
     {
         if (rva >= identity.ImageSize || resolve(name) != identity.Base + rva)
         {
             return L"KernelProfileSymbolMismatch";
         }
     }
-    for (const auto &window : KernelProfileWindows(family))
+    for (const auto &window : KernelProfileWindows(family, build28000))
     {
         const size_t digits = std::wcslen(window.Bytes);
         const size_t count = digits / 2;

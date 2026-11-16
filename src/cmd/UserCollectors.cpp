@@ -443,7 +443,10 @@ void ScanFwtable(Ctx &ctx)
                      layout.CanProfileField(L"nt", L"_SYSTEM_FIRMWARE_TABLE_HANDLER", L"ProviderSignature") &&
                      kncore::ApplyKernelProfileField(links, 0x18, 16) && kncore::ApplyKernelProfileField(callback, 8, 8) &&
                      kncore::ApplyKernelProfileField(signature, 0, 4);
-        budget.Report.LayoutProfile = kncore::KernelSymbolProfileId;
+        if (const auto identity = layout.Identity(L"nt"))
+        {
+            budget.Report.LayoutProfile = kncore::KernelProfileName(*identity);
+        }
     }
     if (!compatible || !head || !links || links->Size != 16 || !callback || callback->Size != 8)
     {
@@ -465,6 +468,18 @@ void ScanFwtable(Ctx &ctx)
                                                                    kncore::ReadField(ctx.Session, record, callback));
                              const auto provider = kncore::ReadField(ctx.Session, record, signature);
                              row.Set(L"signature", kncore::OptionalNumber(provider, true));
+                             std::wstring providerName;
+                             if (provider)
+                             {
+                                 // Provider signatures use the API's multi-character constant order.
+                                 for (int shift = 24; shift >= 0; shift -= 8)
+                                 {
+                                     const auto ch = static_cast<wchar_t>((*provider >> shift) & 0xff);
+                                     providerName += ch >= 0x20 && ch <= 0x7e ? ch : L'.';
+                                 }
+                             }
+                             row.Set(L"provider", provider ? knjson::Value(providerName) : knjson::Value());
+                             row.Set(L"record", knjson::Value(kncore::Hex(record)));
                              if (!provider)
                              {
                                  ++budget.Report.Collected.Unknown;

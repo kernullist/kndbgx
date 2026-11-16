@@ -362,20 +362,27 @@ bool ObjectDirectoryWalker::VisitNamespace(const NamespaceVisitor &visitor, int 
             budget.Stop(kncore::Status::Unavailable, L"ObjectCookieDecodeNotCorroboratedByRootType");
             break;
         }
-        std::vector<std::pair<ULONG64, int>> pending{{rootDirectory_, 0}};
+        struct Directory
+        {
+            ULONG64 Body;
+            int Depth;
+            std::wstring Path;
+        };
+        std::vector<Directory> pending{{rootDirectory_, 0, L"\\"}};
         std::set<ULONG64> directories;
         bool depthLimited = false;
+        budget.StartTraversal(std::chrono::steady_clock::now(), std::chrono::seconds(30));
         while (!pending.empty() && !budget.Stopped)
         {
             const auto current = pending.back();
             pending.pop_back();
-            if (!directories.insert(current.first).second)
+            if (!directories.insert(current.Body).second)
             {
                 budget.Stop(kncore::Status::Partial, L"RepeatedDirectory");
                 break;
             }
-            Entries(current.first, budget,
-                    [&](ULONG64 body)
+            EntriesNamed(current.Body, budget,
+                    [&](ULONG64 body, const std::wstring &name)
                     {
                         if (body < headerBody->Offset)
                         {
@@ -383,11 +390,13 @@ bool ObjectDirectoryWalker::VisitNamespace(const NamespaceVisitor &visitor, int 
                             return false;
                         }
                         const auto type = DecodeTypeIndex(body - headerBody->Offset);
+                        const std::wstring path = name.empty() || current.Path.empty() ? std::wstring() :
+                            current.Path + (current.Path == L"\\" ? L"" : L"\\") + name;
                         if (type == directoryType)
                         {
-                            if (current.second < maxDepth)
+                            if (current.Depth < maxDepth)
                             {
-                                pending.emplace_back(body, current.second + 1);
+                                pending.push_back({body, current.Depth + 1, path});
                             }
                             else
                             {
@@ -399,7 +408,7 @@ bool ObjectDirectoryWalker::VisitNamespace(const NamespaceVisitor &visitor, int 
                         {
                             ++budget.Report.Collected.Unknown;
                         }
-                        return visitor(body, type, current.second);
+                        return visitor(body, type, current.Depth, path);
                     });
         }
         if (!budget.Stopped && (depthLimited || budget.Report.Collected.Unknown != 0))

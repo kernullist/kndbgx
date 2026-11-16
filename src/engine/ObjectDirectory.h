@@ -43,7 +43,7 @@ class ObjectDirectoryWalker
     // Recursively walks the whole namespace from the root. The visitor
     // is invoked for every non-directory object with its decoded type
     // index; sub-directories are descended up to maxDepth levels.
-    typedef std::function<bool(ULONG64 body, unsigned typeIndex, int depth)> NamespaceVisitor;
+    typedef std::function<bool(ULONG64 body, unsigned typeIndex, int depth, const std::wstring &path)> NamespaceVisitor;
 
     bool VisitNamespace(const NamespaceVisitor &visitor, int maxDepth, std::wstring *error);
 

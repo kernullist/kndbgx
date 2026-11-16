@@ -1,0 +1,63 @@
+{
+  "schema": "kndbgx.symbol-profile.v1",
+  "support": "Experimental",
+  "machine": "0x8664",
+  "pdbAge": 1,
+  "runtimeImplementation": "src/core/KernelSymbolProfile.h; these documents cannot enable other images",
+  "id": "CI-28000.2952-hash-cache-PDB-F660C9DA-age1",
+  "timestamp": "0x773f58da",
+  "imageSize": "0x11c000",
+  "pdbGuid": "f660c9da-4538-e0b7-62aa-c762f4fa8cdb",
+  "scope": "CI kernel hash cache names, two raw hashes and cached raw status",
+  "root": {
+    "symbol": "g_KernelHashBucketList",
+    "rva": "0xef090",
+    "storage": "Pointer to singly linked cache record"
+  },
+  "record": {
+    "minimumBytes": "0x48",
+    "next": "0x0",
+    "name": "0x8",
+    "hash": "0x18",
+    "secondaryHash": "0x2c",
+    "hashBytes": 20,
+    "cacheStatusRaw": "0x40"
+  },
+  "windows": [
+    {
+      "symbol": "I_PEUpdateHashCache",
+      "rva": "0x95888",
+      "offset": "0x107",
+      "bytes": "498b1e4885db742f488d4b1841b814000000498bd54c8b156dd8fbff"
+    },
+    {
+      "symbol": "I_PEUpdateHashCache",
+      "rva": "0x95888",
+      "offset": "0x128",
+      "bytes": "4883f8140f84e2000000488b1bebd34c8d35ca960500"
+    },
+    {
+      "symbol": "I_PEUpdateHashCache",
+      "rva": "0x95888",
+      "offset": "0x14b",
+      "bytes": "410fb717b9020100004883c25241b850454155"
+    },
+    {
+      "symbol": "I_PEUpdateHashCache",
+      "rva": "0x95888",
+      "offset": "0x172",
+      "bytes": "410f104500498bd70f114618418b4d10894e28488d4e08410f1004240f11462c418b44241089463c410fb7076683c0026689460a410fb707668901488d464848894610"
+    },
+    {
+      "symbol": "I_PEUpdateHashCache",
+      "rva": "0x95888",
+      "offset": "0x1c1",
+      "bytes": "897e40c7464400000000498b06488906498936ff4500"
+    }
+  ],
+  "limitations": [
+    "Hash algorithm and cached status semantics are not inferred.",
+    "No current signature verdict, residency or history-erasure inference.",
+    "Cross-image call instructions can be loader relocated and are excluded from code windows."
+  ]
+}
