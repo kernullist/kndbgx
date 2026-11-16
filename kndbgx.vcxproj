@@ -119,6 +119,7 @@
     <ClCompile Include="src\engine\DataModel.cpp" />
     <ClCompile Include="src\cmd\MemoryCmds.cpp" />
     <ClCompile Include="src\cmd\ScannerCmds.cpp" />
+    <ClCompile Include="src\cmd\Win32kPolicyCmd.cpp" />
     <ClCompile Include="src\cmd\CallbacksCmds.cpp" />
     <ClCompile Include="src\cmd\PoolCmds.cpp" />
     <ClCompile Include="src\cmd\MoreScanners.cpp" />

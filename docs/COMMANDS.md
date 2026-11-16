@@ -89,7 +89,7 @@ Session availability (Modes), together with Capability and the handler's checks:
 | `!handles [/owner-pid PID] [/target-pid PID] [/json path]` |  | `/target <value>`, `/owner <value>`, `/target-pid <value>`, `/owner-pid <value>`, `/json <value>` | KernelX64 | LiveKernel | Experimental | TargetRead, HostFileWrite |
 | `!token [process]` |  |  | KernelX64 | DumpAndLive | Experimental | TargetRead |
 | `!callbacks` |  |  | KernelX64 | DumpAndLive | Experimental | TargetRead |
-| `!ssdt` |  |  | KernelX64 | DumpAndLive | Experimental | TargetRead |
+| `!ssdt [/policy [pid\|eprocess\|image]]` |  | `/policy` | KernelX64 | DumpAndLive | Experimental | TargetRead |
 | `!idt` |  |  | KernelX64 | DumpAndLive | Experimental | TargetRead |
 | `!msrcheck` |  |  | KernelX64 | DumpAndLive | Experimental | TargetRead |
 | `!cr` |  |  | KernelX64 | DumpAndLive | Experimental | TargetRead |

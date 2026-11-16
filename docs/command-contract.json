@@ -978,14 +978,19 @@
   {
     "name": "!ssdt",
     "group": "Kernel",
-    "summary": "list native SSDT and verified per-session shadow/filtered dispatch targets",
-    "grammar": "!ssdt",
+    "summary": "list service dispatch targets or process filter policies and service decisions",
+    "grammar": "!ssdt [/policy [pid|eprocess|image]]",
     "support": "Experimental",
     "capability": "KernelX64",
     "targetModes": "DumpAndLive",
     "effectMask": 1,
     "aliases": [],
-    "options": []
+    "options": [
+      {
+        "name": "/policy",
+        "takesValue": false
+      }
+    ]
   },
   {
     "name": "!idt",

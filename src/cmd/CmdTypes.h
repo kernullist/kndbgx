@@ -86,6 +86,7 @@ void EvaluateExpression(Ctx &ctx);
 // ---- handlers implemented in ScannerCmds.cpp ----
 void ScanProcessList(Ctx &ctx);
 void ScanSsdt(Ctx &ctx);
+void ScanWin32kPolicy(Ctx &ctx, const std::wstring &selector);
 void ScanIdt(Ctx &ctx);
 void ScanMsrCheck(Ctx &ctx);
 void ScanControlRegisters(Ctx &ctx);

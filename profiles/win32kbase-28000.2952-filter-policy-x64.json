@@ -1,0 +1,127 @@
+{
+  "schema": "kndbgx.symbol-profile.v1",
+  "support": "Experimental",
+  "id": "WIN32KBASE-28000.2952-filter-policy",
+  "machine": "0x8664",
+  "pdbAge": 1,
+  "pdbGuid": "49ec72d0-0d46-ef4d-3193-c271992d24aa",
+  "timestamp": "0xd072766b",
+  "imageSize": "0x33f000",
+  "runtimeImplementation": "src/core/Win32kPolicyProfile.h and Win32kPolicy.h; this document cannot enable additional images",
+  "requiredImages": [
+    "NT-28000.2952-PDB-4660396C-age1",
+    "WIN32K-28000.2952-PDB-2414214E-age1"
+  ],
+  "codeProfiles": [
+    {
+      "name": "predicate",
+      "size": 108,
+      "sha256": "42c0194ffdb3417c7cca42345d2af50b47b4944a103d6281c884cd709f399851",
+      "calls": [
+        [
+          20,
+          "nt",
+          4755632
+        ],
+        [
+          42,
+          "win32k",
+          21808
+        ]
+      ]
+    },
+    {
+      "name": "handler",
+      "size": 457,
+      "sha256": "2485997f03e9b6c4a345be819d3ed314fed4561e2edf2d5c12c3616d2133a114",
+      "calls": [
+        [
+          56,
+          "nt",
+          4755632
+        ],
+        [
+          130,
+          "nt",
+          4577216
+        ],
+        [
+          145,
+          "nt",
+          4748128
+        ],
+        [
+          180,
+          "nt",
+          3980400
+        ],
+        [
+          192,
+          "nt",
+          5012496
+        ],
+        [
+          212,
+          "win32k",
+          21808
+        ]
+      ]
+    },
+    {
+      "name": "userSession",
+      "size": 147,
+      "sha256": "28a9194d72ec6d2090d6dc1eb8a10348252f384ff728222ea7e3ca18089ae640",
+      "calls": [
+        [
+          14,
+          "nt",
+          4577216
+        ],
+        [
+          29,
+          "nt",
+          2930432
+        ],
+        [
+          105,
+          "nt",
+          4577216
+        ],
+        [
+          142,
+          "nt",
+          5519600
+        ]
+      ]
+    }
+  ],
+  "processFields": {
+    "Win32KFilterSet": "0x6e8",
+    "MitigationFlags": "0x750",
+    "Session": "0x2e8",
+    "Flags3": "0x5fc"
+  },
+  "mitigationBits": {
+    "DisallowWin32kSystemCalls": 12,
+    "AuditDisallowWin32kSystemCalls": 13,
+    "EnableFilteredWin32kAPIs": 14,
+    "AuditFilteredWin32kAPIs": 15
+  },
+  "sessionId": "PsGetProcessSessionIdEx: NULL Session or Flags3 bit 12 yields no session; otherwise Session+8",
+  "bitmap": "W32GetUserSessionState returns *sessionRoot; bitmap pointer is at userState+0x11510+set*8",
+  "predicate": "Set >= 7 returns true; NULL bitmap returns false; otherwise byte[index/8] & (1 << (index%8))",
+  "decision": "A selected service is blocked only with enforcement. Audit alone permits dispatch. A clear bit permits dispatch. Unknown evidence is not permission.",
+  "verification": "Matched identities and symbols, full normalized predicate/handler/session helper hashes with destination checks, exact NT accessor bytes, filtered NT descriptor, per-session helper bindings, all 1497 filtered entries and wrappers. Recheck process identity, policy flags, session bindings and bitmap contents.",
+  "limits": {
+    "processes": 4096,
+    "sessionSlots": 256,
+    "services": 1497,
+    "bitmapBytes": 188,
+    "seconds": 120
+  },
+  "scope": "Filtered-service policy only. GUI conversion mitigation and calling-thread RestrictedGuiThread routing are separate. No syscall execution, context switch or security setting change.",
+  "references": [
+    "https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_process_mitigation_system_call_filter_policy",
+    "https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-process_mitigation_system_call_disable_policy"
+  ]
+}

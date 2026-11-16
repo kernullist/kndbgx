@@ -131,6 +131,18 @@ void ScanProcessList(Ctx &ctx)
 
 void ScanSsdt(Ctx &ctx)
 {
+    if (ctx.Args.size() > 1)
+    {
+        if (_wcsicmp(ctx.Args[1].c_str(), L"/policy") == 0 && ctx.Args.size() <= 3)
+        {
+            ScanWin32kPolicy(ctx, ctx.Args.size() == 3 ? ctx.Args[2] : L"");
+        }
+        else
+        {
+            ctx.Out.Fail(kncore::Status::InvalidInput, L"Usage: !ssdt [/policy [pid|eprocess|image]]");
+        }
+        return;
+    }
     CollectorWalk collection;
     kncore::WalkBudget budget;
     kncore::TargetArchitecture architecture;

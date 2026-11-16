@@ -89,6 +89,15 @@ inline std::wstring SnapshotKey(const knjson::Value &row, bool crossSession)
         }
         return tuple.Write();
     };
+    if (kind == L"Win32kProcessPolicy" || kind == L"Win32kServicePolicy")
+    {
+        if (crossSession || text(L"eprocess").empty() || text(L"pid").empty() || text(L"createTime").empty() ||
+            (kind == L"Win32kServicePolicy" && text(L"index").empty()))
+        {
+            return {};
+        }
+        return key({text(L"pid"), text(L"createTime"), text(L"eprocess"), text(L"sessionId"), text(L"sessionState"), text(L"index")});
+    }
     if (kind == L"Process")
     {
         return crossSession || text(L"pid").empty() || text(L"createTime").empty() || text(L"eprocess").empty()

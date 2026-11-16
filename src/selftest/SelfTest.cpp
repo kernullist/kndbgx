@@ -40,6 +40,7 @@
 #include "KernelPartialRegression.h"
 #include "AlpcRegression.h"
 #include "Win32kDispatchRegression.h"
+#include "Win32kPolicyRegression.h"
 
 #include <cstdio>
 #include <string>
@@ -716,6 +717,7 @@ int wmain(int argc, wchar_t **argv)
     knself::RunKernelPartialRegression(Check);
     knself::RunAlpcRegression(Check);
     knself::RunWin32kDispatchRegression(Check);
+    knself::RunWin32kPolicyRegression(Check);
     knself::RunMemoryRegression(Check);
     knself::RunMemoryExportRegression(Check);
     knself::RunPlatformPostureRegression(Check);

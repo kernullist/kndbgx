@@ -105,7 +105,7 @@ Run `!hive` to compare registry root paths, backing-file names, flags and file s
 
 Use `!nmi` for the NMI callback chain, `!hal` for HAL dispatch function pointers and `!fwtable` for registered firmware-table providers. Each result carries the available routine/module evidence and layout gaps; these commands do not modify registrations.
 
-`!ssdt` collects native, per-session Shadow SSDT and conditional filtered dispatch observations when their layout, code and extent can be verified. Open **View output** when the table is empty.
+`!ssdt` collects native, per-session Shadow SSDT and conditional filtered dispatch observations when their layout, code and extent can be verified. `!ssdt /policy` lists process filter policies; append a PID, EPROCESS address or unambiguous image name for service-level filter decisions. Open **View output** when the table is empty.
 
 <details>
 <summary>See why an empty SSDT result is still Partial</summary>
@@ -516,7 +516,7 @@ Page commands require an x64 kernel target. Big-pool commands require a live ker
 | Command / aliases | Purpose and availability | Syntax and examples |
 |---|---|---|
 | `!idt` | Inspect per-CPU IDT gates, handler addresses and modules; compare matching vectors across CPUs.<br>Experimental · Kernel x64 / dump | `!idt`<br>Examples: `!idt` |
-| `!ssdt` | Read native, per-session Shadow SSDT and conditional filtered dispatch targets with service names and IDs; inspect per-table coverage.<br>Experimental · Kernel x64 / dump | `!ssdt`<br>Examples: `!ssdt` |
+| `!ssdt` | Read service dispatch targets or process filter policies and service-level decisions.<br>Experimental · Kernel x64 / dump | `!ssdt [/policy [pid\|eprocess\|image]]`<br>Examples: `!ssdt`, `!ssdt /policy`, `!ssdt /policy pid:PID` |
 | `!msrcheck` | Read LSTAR/CSTAR/STAR/FMASK/EFER on the verified selected CPU; other CPUs remain Unknown.<br>Experimental · Kernel x64 / dump | `!msrcheck`<br>Examples: `!msrcheck` |
 | `!cr` | Read saved per-CPU CR0, CR4 and CR8 values and decoded flags.<br>Experimental · Kernel x64 / dump | `!cr`<br>Examples: `!cr` |
 | `!dpc` | Walk declared per-CPU DPC queues; does not measure latency or cover completed work.<br>Experimental · Kernel x64 / dump | `!dpc`<br>Examples: `!dpc` |

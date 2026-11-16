@@ -1433,6 +1433,14 @@ await check("T-UI-RECORDS semantic collector fields survive sparse routines and 
     const app = harness();
     await app.boot();
     const cases = [
+        ["!ssdt /policy", { kind: "Win32kProcessPolicy", pid: "100", image: "sample.exe", session: "0",
+            filterMode: "Enforce", filterSet: "3", blockedServices: "1496", allowedServices: "1", auditServices: "0",
+            unknownServices: "0", win32kDisable: false },
+            { "PID": "100", "Filter Mode": "Enforce", "Filter Set": "3", "Blocked Services": "1496", "Allowed Services": "1" }],
+        ["!ssdt /policy 100", { kind: "Win32kServicePolicy", pid: "100", image: "sample.exe", session: "0",
+            filterMode: "Audit only", filterSet: "3", filterDecision: "Audit only", serviceId: "0x1000",
+            serviceName: "NtUserGetThreadState", filterBit: true, entryRoutine: "0xffff800000002000" },
+            { "PID": "100", "Filter Decision": "Audit only", "Service ID": "0x1000", "Service Name": "NtUserGetThreadState" }],
         ["!cihash", { kind: "CiHashEntry", name: "fixture.sys", hash: "ab".repeat(20), secondaryHash: "00".repeat(20),
             cacheStatusRaw: "0x00000000", entry: "0xffff800000002000", topology: { kind: "CiHashLink", next: "0x0" } },
             { "Name": "fixture.sys", "Hash (20 bytes)": "ab".repeat(20), "Cache status (raw)": "0x00000000" }],
@@ -1483,6 +1491,10 @@ await check("T-UI-RECORDS semantic collector fields survive sparse routines and 
     for (const [command, row, cells] of cases)
     {
         await openTable(app, command, [row]);
+        if (row.kind === "Win32kServicePolicy")
+        {
+            assert.deepEqual(headers(app).slice(1, 5), ["Service Name", "Filter Decision", "Service ID", "PID"]);
+        }
         for (const [label, value] of Object.entries(cells))
         {
             assert.equal(tableCell(app, 0, label), value, command + ": " + label);

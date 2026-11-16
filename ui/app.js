@@ -894,7 +894,7 @@
     { commands: "dpc", kinds: "QueuedDpc", fields: "cpu queue routine symbol module importance deferredContext object ownership" },
     { commands: "fwtable", kinds: "", fields: "provider routine symbol module ownership signature record" },
     { commands: "idt", kinds: "IdtGate", fields: "cpu vector routine symbol symbolSource module ownership type dpl present validGate slot" },
-    { commands: "ssdt", kinds: "", fields: "family session serviceId serviceName symbol routine dispatchState entryRoutine ownership index slot" },
+    { commands: "ssdt", kinds: "", fields: "pid image filterMode filterSet filterDecision session serviceId serviceName blockedServices allowedServices auditServices unknownServices win32kDisable family symbol routine dispatchState entryRoutine ownership index slot" },
     { commands: "process procscan dml_proc", kinds: "Process", fields: "eprocess pid image dtb createTime" },
     { commands: "threads thread", kinds: "Thread", fields: "tid ethread process.pid process.image start startSymbol win32Start win32StartSymbol startOwner win32StartOwner" },
     { commands: "lm modules", kinds: "Module", fields: "name base symbol size path moduleIdentity" },
@@ -1176,6 +1176,8 @@
     });
     var preferred = state.resultCollection === "findings" ? "severity ruleId message reason address module source file line" :
       command === "callbacks" && layout.callbackRegistrations ? "callbackType preRoutine postRoutine flags preSymbol postSymbol" :
+      command === "ssdt" && layout.kinds.indexOf("Win32kServicePolicy") >= 0 ?
+        "serviceName filterDecision serviceId pid session image filterMode filterSet filterBit entryRoutine policyReason" :
       (profile ? profile.fields : "name image pid tid address routine module symbol value status message reason");
     var priority = preferred.split(" ");
     if (layout.kinds.length > 1 && !(command === "callbacks" && layout.callbackRegistrations && state.resultCollection === "rows"))
