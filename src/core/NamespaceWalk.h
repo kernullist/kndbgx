@@ -16,10 +16,14 @@ class NamespaceReadMeter final : public TargetReader
     {
         ++Requests;
         Bytes += length;
-        return reader_.Read(space, address, length);
+        const auto start = std::chrono::steady_clock::now();
+        auto result = reader_.Read(space, address, length);
+        Elapsed += std::chrono::steady_clock::now() - start;
+        return result;
     }
     uint64_t Requests = 0;
     uint64_t Bytes = 0;
+    std::chrono::steady_clock::duration Elapsed{};
 
   private:
     TargetReader &reader_;
@@ -58,29 +62,42 @@ inline bool KernelReadRange(const TargetArchitecture &architecture, uint64_t add
     return size != 0 && ValidRange(address, size) && architecture.KernelPointer(address) && architecture.KernelPointer(address + size - 1);
 }
 
-inline bool ReadNamespaceName(TargetReader &reader, const TargetArchitecture &architecture, const NamespaceLayout &layout, uint64_t header,
-                              uint64_t parent, unsigned char offset, std::wstring *name)
+struct NamespaceNamePart
 {
-    if (offset < layout.NameInfoSize || header < offset || !KernelReadRange(architecture, header - offset, layout.NameInfoSize))
+    uint64_t Parent = 0;
+    std::wstring Name;
+};
+
+inline std::optional<NamespaceNamePart> ReadNamespaceNamePart(TargetReader &reader, const TargetArchitecture &architecture,
+    const NamespaceLayout &layout, uint64_t header, unsigned char offset, std::optional<uint64_t> expectedParent = {},
+    WalkBudget *budget = nullptr)
+{
+    if (offset < layout.NameInfoSize || header < offset || !KernelReadRange(architecture, header - offset, layout.NameInfoSize) ||
+        (budget && !CheckWalkDeadline(*budget)))
     {
-        return false;
+        return {};
     }
     const auto extent =
         std::max({layout.Parent->Offset + 8, layout.Length->Offset + 2, layout.Maximum->Offset + 2, layout.Buffer->Offset + 8});
     const auto block = reader.Read(AddressSpace::Virtual, header - offset, extent);
+    if (budget && !CheckWalkDeadline(*budget))
+    {
+        return {};
+    }
     const auto directory = BlockValue(block, layout.Parent->Offset, 8);
     const auto length = BlockValue(block, layout.Length->Offset, 2);
     const auto maximum = BlockValue(block, layout.Maximum->Offset, 2);
     const auto buffer = BlockValue(block, layout.Buffer->Offset, 8);
-    if (!directory || *directory != parent || !length || !maximum || !buffer || *length == 0 || *length > *maximum || *length > 2048 ||
+    if (!directory || (expectedParent && *directory != *expectedParent) || !KernelReadRange(architecture, *directory, 1) ||
+        *directory % 8 != 0 || !length || !maximum || !buffer || *length == 0 || *length > *maximum || *length > 2048 ||
         *length % 2 != 0 || !KernelReadRange(architecture, *buffer, *length))
     {
-        return false;
+        return {};
     }
     const auto text = reader.Read(AddressSpace::Virtual, *buffer, static_cast<size_t>(*length));
-    if (!ExactBytes(text, static_cast<size_t>(*length)))
+    if ((budget && !CheckWalkDeadline(*budget)) || !ExactBytes(text, static_cast<size_t>(*length)))
     {
-        return false;
+        return {};
     }
     std::wstring result(static_cast<size_t>(*length / 2), L'\0');
     std::memcpy(result.data(), text.Bytes.data(), static_cast<size_t>(*length));
@@ -89,18 +106,29 @@ inline bool ReadNamespaceName(TargetReader &reader, const TargetArchitecture &ar
         const auto unit = result[i];
         if (unit == 0 || unit == L'\\' || (unit >= 0xdc00 && unit <= 0xdfff))
         {
-            return false;
+            return {};
         }
         if (unit >= 0xd800 && unit <= 0xdbff)
         {
             if (++i >= result.size() || result[i] < 0xdc00 || result[i] > 0xdfff)
             {
-                return false;
+                return {};
             }
         }
     }
-    *name = std::move(result);
-    return true;
+    return NamespaceNamePart{*directory, std::move(result)};
+}
+
+inline bool ReadNamespaceName(TargetReader &reader, const TargetArchitecture &architecture, const NamespaceLayout &layout, uint64_t header,
+                              uint64_t parent, unsigned char offset, std::wstring *name)
+{
+    const auto part = ReadNamespaceNamePart(reader, architecture, layout, header, offset, parent);
+    if (part && name)
+    {
+        *name = part->Name;
+        return true;
+    }
+    return false;
 }
 
 template <typename Visitor>

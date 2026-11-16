@@ -6,6 +6,31 @@
 
 namespace knself
 {
+class AlpcShortRecordReader final : public kncore::TargetReader
+{
+  public:
+    AlpcShortRecordReader(kncore::TargetReader &source, size_t prefix) : source_(source), prefix_(prefix)
+    {
+    }
+
+    kncore::ReadResult Read(kncore::AddressSpace space, uint64_t address, size_t length) override
+    {
+        auto result = source_.Read(space, address, length);
+        if (length == 0x1bc)
+        {
+            result.Bytes.resize(prefix_);
+            result.Valid.resize(prefix_);
+            result.Transferred = std::count(result.Valid.begin(), result.Valid.end(), 1);
+            result.State = prefix_ == 0 ? kncore::Status::Unavailable : kncore::Status::Partial;
+        }
+        return result;
+    }
+
+  private:
+    kncore::TargetReader &source_;
+    size_t prefix_;
+};
+
 template <typename Check> void RunAlpcRegression(Check check)
 {
     using namespace kncore;
@@ -83,7 +108,7 @@ template <typename Check> void RunAlpcRegression(Check check)
         memory.Put(ports[i] + 0x18, owner);
         memory.Put(ports[i] + 0x1a0, i * 2 + 1, 4);
     }
-    const auto collect = [&](ByteFixture &source, WalkBudget &budget, const std::function<void()> &onRow = {})
+    const auto collect = [&](TargetReader &source, WalkBudget &budget, const std::function<void()> &onRow = {})
     {
         CollectAlpcPorts(source, architecture, layout, head, root, cookie, offsets, 45, 3, budget,
                          [&](const knjson::Value &row)
@@ -111,12 +136,99 @@ template <typename Check> void RunAlpcRegression(Check check)
               rows[2].Get(L"portType").AsString(L"") == L"Server communication" && rows[1].Get(L"peerPort").AsString(L"") == Hex(server) &&
               rows[2].Get(L"peerPort").AsString(L"") == Hex(client),
           "alpc.client-server-directions-and-peers-are-distinct");
-    check(memory.LargestRead <= 0x38 && memory.Reads < 40, "alpc.small-field-reads-avoid-speculative-page-fetches");
+    check(memory.LargestRead == 0x1bc && memory.Reads < 30,
+        "alpc.bounded-record-combines-header-and-state-without-page-fetches");
     for (const auto *name : {L"peerPort", L"serverPort", L"clientPort", L"communicationInfo"})
     {
         check(AddressFieldSpace(rows[1], name, L"virtual") == L"virtual", "alpc.endpoint-addresses-remain-navigable");
     }
     check(!AddressFieldSpace(rows[1], L"portStateRaw", L"virtual"), "alpc.state-bits-are-not-addresses");
+
+    WalkBudget sharedDeadline;
+    const auto start = std::chrono::steady_clock::now();
+    StartAlpcTraversal(sharedDeadline, start);
+    StartAlpcTraversal(sharedDeadline, start + std::chrono::seconds(30));
+    check(sharedDeadline.Deadline == start + std::chrono::seconds(180) && sharedDeadline.MaxNodes == 65536 &&
+        full.Report.Analysis.Get(L"traversalLimitMs").AsString(L"") == L"180000",
+        "alpc.extended-serial-deadline-is-shared-and-never-renewed");
+    check(full.Report.Analysis.Get(L"record").Get(L"readRequests").AsString(L"") == L"3" &&
+        full.Report.Analysis.Get(L"record").Get(L"requestedBytes").AsString(L"") == L"1332" &&
+        full.Report.Analysis.Get(L"state").Get(L"readRequests").AsString(L"") == L"0" &&
+        full.Report.Analysis.Get(L"name").Get(L"readRequests").AsString(L"") == L"5" &&
+        full.Report.Analysis.Get(L"communication").Get(L"readRequests").AsString(L"") == L"3" &&
+        full.Report.Analysis.Get(L"name").Get(L"readElapsedMs").IsString(),
+        "alpc.phase-metrics-count-single-descriptor-name-reads");
+    for (const size_t prefix : {size_t(0), size_t(0x38)})
+    {
+        auto shortMemory = memory;
+        shortMemory.Reads = 0;
+        AlpcShortRecordReader shortReader(shortMemory, prefix);
+        WalkBudget recovered;
+        collect(shortReader, recovered);
+        check(recovered.Report.State == Status::Success && recovered.Report.Collected.Complete &&
+            recovered.Report.Rows.Write() == full.Report.Rows.Write() &&
+            recovered.Report.Analysis.Get(L"record").Get(L"readRequests").AsString(L"") == (prefix == 0 ? L"6" : L"3") &&
+            recovered.Report.Analysis.Get(L"state").Get(L"readRequests").AsString(L"") == L"3",
+            "alpc.failed-or-short-record-falls-back-with-identical-fields");
+        for (const unsigned cancelRead : {5u, 6u, 7u})
+        {
+            shortMemory.Reads = 0;
+            WalkBudget cancelled;
+            cancelled.Cancelled = [&]()
+            {
+                return shortMemory.Reads >= cancelRead;
+            };
+            collect(shortReader, cancelled);
+            check(cancelled.Report.State == Status::Cancelled && shortMemory.Reads == cancelRead &&
+                !cancelled.Report.Collected.Complete, "alpc.record-recovery-stops-without-extra-reads-after-cancellation");
+        }
+    }
+    auto cachedMemory = memory;
+    cachedMemory.Reads = 0;
+    WalkBudget cached;
+    cached.Report.Consistency = L"stopped";
+    collect(cachedMemory, cached);
+    check(cached.Report.Rows.Write() == full.Report.Rows.Write() && cachedMemory.Reads + 2 == memory.Reads &&
+        cached.Report.Analysis.Get(L"communicationCacheHits").AsString(L"") == L"2" &&
+        cached.Report.Analysis.Get(L"communicationCacheEntries").AsString(L"") == L"1" &&
+        cached.Report.Analysis.Get(L"communication").Get(L"readRequests").AsString(L"") == L"1",
+        "alpc.stopped-collection-reuses-complete-shared-endpoints-with-identical-rows");
+    cachedMemory.Put(info, 0);
+    WalkBudget nextCapture;
+    nextCapture.Report.Consistency = L"dump";
+    collect(cachedMemory, nextCapture);
+    check(nextCapture.Report.Rows.Items()[0].Get(L"connectionPort").AsString(L"") == Hex(0) &&
+        nextCapture.Report.Analysis.Get(L"communication").Get(L"readRequests").AsString(L"") == L"1",
+        "alpc.communication-cache-is-never-reused-across-collections");
+
+    cachedMemory = memory;
+    WalkBudget running;
+    running.Report.Consistency = L"live-nonatomic";
+    collect(cachedMemory, running,
+        [&]()
+        {
+            cachedMemory.Put(info, 0);
+        });
+    check(running.Report.Rows.Items()[0].Get(L"connectionPort").AsString(L"") == Hex(connection) &&
+        running.Report.Rows.Items()[1].Get(L"connectionPort").AsString(L"") == Hex(0) &&
+        running.Report.Analysis.Get(L"communicationCacheHits").AsString(L"") == L"0" &&
+        running.Report.Analysis.Get(L"communication").Get(L"readRequests").AsString(L"") == L"3",
+        "alpc.running-target-rereads-shared-communication-fields");
+
+    cachedMemory = memory;
+    cachedMemory.Bytes.erase(info + 8);
+    WalkBudget partialInfo;
+    partialInfo.Report.Consistency = L"stopped";
+    collect(cachedMemory, partialInfo,
+        [&]()
+        {
+            cachedMemory.Put(info + 8, server);
+        });
+    check(partialInfo.Report.State == Status::Partial && partialInfo.Report.Rows.Items()[0].Get(L"serverPort").IsNull() &&
+        partialInfo.Report.Rows.Items()[1].Get(L"serverPort").AsString(L"") == Hex(server) &&
+        partialInfo.Report.Analysis.Get(L"communication").Get(L"readRequests").AsString(L"") == L"2" &&
+        partialInfo.Report.Analysis.Get(L"communicationCacheHits").AsString(L"") == L"1",
+        "alpc.partial-communication-read-is-not-cached-or-filled-with-zero");
 
     auto broken = memory;
     broken.Put(head, head);
@@ -162,6 +274,14 @@ template <typename Check> void RunAlpcRegression(Check check)
               noState.Report.Rows.Items()[1].Get(L"peerPort").IsNull(),
           "alpc.invalid-kind-does-not-invent-an-endpoint-direction");
     broken = memory;
+    broken.Bytes.erase(client + 0x1a0);
+    WalkBudget missingState;
+    collect(broken, missingState);
+    check(missingState.Report.State == Status::Partial && missingState.Report.Rows.Items()[1].Get(L"portStateRaw").IsNull() &&
+        missingState.Report.Rows.Items()[1].Get(L"portType").IsNull() && missingState.Report.Rows.Items()[1].Get(L"peerPort").IsNull() &&
+        missingState.Report.Analysis.Get(L"state").Get(L"readRequests").AsString(L"") == L"1",
+        "alpc.unreadable-state-remains-unknown-after-narrow-retry");
+    broken = memory;
     broken.Put(client + 0x10, 0x1000);
     WalkBudget badInfo;
     collect(broken, badInfo);
@@ -191,11 +311,11 @@ template <typename Check> void RunAlpcRegression(Check check)
           "alpc.port-count-bound-is-global");
     broken = memory;
     WalkBudget timed;
-    timed.StartTraversal(std::chrono::steady_clock::now() - std::chrono::seconds(121), std::chrono::seconds(120));
+    StartAlpcTraversal(timed, std::chrono::steady_clock::now() - std::chrono::seconds(181));
     const auto before = broken.Reads;
     collect(broken, timed);
     check(timed.Report.Collected.StopReason == L"GlobalWalkBudget" && broken.Reads == before, "alpc.expired-budget-is-not-renewed");
-    for (const unsigned cancelRead : {1u, 5u, 8u})
+    for (const unsigned cancelRead : {1u, 5u, 6u, 7u, 8u, 9u})
     {
         broken = memory;
         broken.Reads = 0;
@@ -210,7 +330,7 @@ template <typename Check> void RunAlpcRegression(Check check)
             return cancelled;
         };
         collect(broken, cancel);
-        check(cancel.Report.State == Status::Cancelled && !cancel.Report.Collected.Complete,
+        check(cancel.Report.State == Status::Cancelled && !cancel.Report.Collected.Complete && broken.Reads == cancelRead,
               "alpc.cancellation-during-metadata-or-record-reads-is-preserved");
     }
     layout.Type->BitOffset = 2;

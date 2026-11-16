@@ -364,6 +364,7 @@ void ScanTimer(Ctx &ctx)
 
 void ScanAlpc(Ctx &ctx)
 {
+    const auto setupStart = std::chrono::steady_clock::now();
     CollectorWalk collection;
     knengine::ObjectDirectoryWalker walker(ctx.Session);
     knengine::LayoutResolver layout(ctx.Session);
@@ -381,7 +382,9 @@ void ScanAlpc(Ctx &ctx)
     const bool allowIndirect = !connectionField && layout.CanProfileField(L"nt", L"_ALPC_PORT", L"ConnectionPort");
     std::vector<ProcRow> processes;
     CmdText processReport;
+    const auto inventoryStart = std::chrono::steady_clock::now();
     CollectProcesses(ctx.Session, layout, &processes, processReport);
+    const auto inventoryElapsed = std::chrono::steady_clock::now() - inventoryStart;
     if (layout.VerifyProfile(kncore::KernelLayoutFamily::AlpcPorts) &&
         layout.VerifyProfile(kncore::KernelLayoutFamily::ObjectTypes) && layout.VerifyProfile(kncore::KernelLayoutFamily::ObjectNames))
     {
@@ -424,6 +427,7 @@ void ScanAlpc(Ctx &ctx)
                 owners[process.Eprocess] = &process;
             }
             kncore::NamespaceReadMeter measured(ctx.Session);
+            const auto setupElapsed = std::chrono::steady_clock::now() - setupStart;
             kncore::CollectAlpcPorts(measured, architecture, fields, *head, root, *cookie, *offsets, typeIndex, directoryType, budget,
                 [&](knjson::Value row)
                 {
@@ -439,11 +443,17 @@ void ScanAlpc(Ctx &ctx)
                 });
             budget.Report.Analysis.Set(L"portTargetReads", knjson::Value(std::to_wstring(measured.Requests)));
             budget.Report.Analysis.Set(L"portRequestedBytes", knjson::Value(std::to_wstring(measured.Bytes)));
+            budget.Report.Analysis.Set(L"portReadElapsedMs", knjson::Value(std::to_wstring(
+                std::chrono::duration_cast<std::chrono::milliseconds>(measured.Elapsed).count())));
+            budget.Report.Analysis.Set(L"setupElapsedMs", knjson::Value(std::to_wstring(
+                std::chrono::duration_cast<std::chrono::milliseconds>(setupElapsed).count())));
+            budget.Report.Analysis.Set(L"processInventoryElapsedMs", knjson::Value(std::to_wstring(
+                std::chrono::duration_cast<std::chrono::milliseconds>(inventoryElapsed).count())));
             kncore::AttachAlpcConnectionNames(budget.Report);
         }
         budget.Report.Limitations.Push(knjson::Value(L"Initialized ports linked in AlpcpPortList only; detached, freed and not-yet-linked "
             L"objects are outside this collection. Names follow verified parent directories, at most 32 components and 4096 directories. "
-            L"Blocking debugger calls can exceed the shared 120-second traversal bound."));
+            L"Blocking debugger calls can exceed the shared 180-second traversal bound."));
         FinishCollection(ctx, budget);
         return;
     }

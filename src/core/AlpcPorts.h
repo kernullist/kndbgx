@@ -6,6 +6,14 @@
 
 namespace kncore
 {
+inline constexpr auto AlpcTraversalTimeout = std::chrono::seconds(180);
+
+inline void StartAlpcTraversal(WalkBudget &budget, std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now())
+{
+    // Serial KD latency varies; all ports and names share one cancellable bound.
+    budget.StartTraversal(now, AlpcTraversalTimeout);
+}
+
 struct AlpcPortLayout
 {
     NamespaceLayout Names;
@@ -101,11 +109,7 @@ class AlpcObjectNames
     }
 
   private:
-    struct Component
-    {
-        uint64_t Parent;
-        std::wstring Name;
-    };
+    using Component = NamespaceNamePart;
 
     std::optional<Component> ReadPart(uint64_t body, uint8_t mask)
     {
@@ -115,15 +119,7 @@ class AlpcObjectNames
             return {};
         }
         const auto header = body - layout_.Body->Offset;
-        const auto parent = ReadField(reader_, header - offset, layout_.Parent);
-        Component result{};
-        if (!parent || !KernelReadRange(architecture_, *parent, 1) || *parent % 8 != 0 ||
-            !ReadNamespaceName(reader_, architecture_, layout_, header, *parent, offset, &result.Name) || !CheckWalkDeadline(budget_))
-        {
-            return {};
-        }
-        result.Parent = *parent;
-        return result;
+        return ReadNamespaceNamePart(reader_, architecture_, layout_, header, offset, {}, &budget_);
     }
 
     TargetReader &reader_;
@@ -143,7 +139,7 @@ void CollectAlpcPorts(TargetReader &reader, const TargetArchitecture &architectu
                       WalkBudget &budget, Emit emit)
 {
     const auto begin = std::chrono::steady_clock::now();
-    budget.StartTraversal(begin, std::chrono::seconds(120));
+    StartAlpcTraversal(budget, begin);
     uint8_t cookie = 0;
     std::array<uint8_t, 4> offsets{};
     std::array<uint64_t, 2> links{};
@@ -159,7 +155,8 @@ void CollectAlpcPorts(TargetReader &reader, const TargetArchitecture &architectu
         return;
     }
     const bool initialized = reader.ReadExact(AddressSpace::Virtual, head, &links) &&
-                             reader.ReadExact(AddressSpace::Virtual, cookieAddress, &cookie) &&
+                             CheckWalkDeadline(budget) && reader.ReadExact(AddressSpace::Virtual, cookieAddress, &cookie) &&
+                             CheckWalkDeadline(budget) &&
                              reader.ReadExact(AddressSpace::Virtual, offsetsAddress, &offsets);
     if (!CheckWalkDeadline(budget))
     {
@@ -175,7 +172,11 @@ void CollectAlpcPorts(TargetReader &reader, const TargetArchitecture &architectu
         budget.Stop(Status::Unavailable, L"AlpcObjectDecoderUnavailable");
         return;
     }
-    AlpcObjectNames names(reader, architecture, layout.Names, root, cookie, offsets, directoryType, budget);
+    NamespaceReadMeter recordReads(reader), stateReads(reader), nameReads(reader), communicationReads(reader);
+    AlpcObjectNames names(nameReads, architecture, layout.Names, root, cookie, offsets, directoryType, budget);
+    const bool reuseCommunication = budget.Report.Consistency == L"stopped" || budget.Report.Consistency == L"dump";
+    std::map<uint64_t, std::array<uint64_t, 3>> communicationCache;
+    uint64_t communicationCacheHits = 0;
     uint64_t previous = head;
     uint64_t node = links[0];
     uint64_t named = 0;
@@ -195,11 +196,22 @@ void CollectAlpcPorts(TargetReader &reader, const TargetArchitecture &architectu
             }
             break;
         }
-        // Read only the header discriminator and the adjacent list/owner fields.
-        const auto record = reader.Read(AddressSpace::Virtual, node - 0x18, 0x38);
+        // One bounded read covers the header, list/owner fields and port state.
+        auto record = recordReads.Read(AddressSpace::Virtual, node - 0x18, 0x18 + layout.State->Offset + layout.State->Size);
         if (!CheckWalkDeadline(budget))
         {
             break;
+        }
+        auto state = BlockValue(record, 0x18 + layout.State->Offset, layout.State->Size);
+        if (!BlockValue(record, 0, 1) || !BlockValue(record, 2, 1) || !BlockValue(record, 0x18, 8) ||
+            !BlockValue(record, 0x20, 8) || !BlockValue(record, 0x28, 8) || !BlockValue(record, 0x30, 8))
+        {
+            // Sparse dumps or short transfers can still supply the original fields.
+            record = recordReads.Read(AddressSpace::Virtual, node - 0x18, 0x38);
+            if (!CheckWalkDeadline(budget))
+            {
+                break;
+            }
         }
         const auto next = BlockValue(record, 0x18, 8);
         const auto back = BlockValue(record, 0x20, 8);
@@ -228,9 +240,20 @@ void CollectAlpcPorts(TargetReader &reader, const TargetArchitecture &architectu
         ++budget.Report.Collected.Decoded;
         const auto owner = pointer(BlockValue(record, 0x30, 8), false);
         const auto communication = pointer(BlockValue(record, 0x28, 8));
-        const auto state = ReadField(reader, body, layout.State);
+        if (!state)
+        {
+            state = ReadField(stateReads, body, layout.State);
+        }
+        if (!CheckWalkDeadline(budget))
+        {
+            break;
+        }
         const unsigned kind = state && (*state & 1) ? static_cast<unsigned>((*state >> 1) & 3) : 0;
         const auto name = mask ? names.Resolve(body, static_cast<uint8_t>(*mask)) : AlpcName{};
+        if (!CheckWalkDeadline(budget))
+        {
+            break;
+        }
         std::optional<uint64_t> connection, server, client;
         if (communication == 0)
         {
@@ -238,10 +261,27 @@ void CollectAlpcPorts(TargetReader &reader, const TargetArchitecture &architectu
         }
         else if (communication && KernelReadRange(architecture, *communication, 24))
         {
-            const auto info = reader.Read(AddressSpace::Virtual, *communication, 24);
-            connection = pointer(BlockValue(info, 0, 8));
-            server = pointer(BlockValue(info, 8, 8));
-            client = pointer(BlockValue(info, 16, 8));
+            const auto cached = communicationCache.find(*communication);
+            if (cached != communicationCache.end())
+            {
+                connection = cached->second[0];
+                server = cached->second[1];
+                client = cached->second[2];
+                ++communicationCacheHits;
+            }
+            else
+            {
+                const auto info = communicationReads.Read(AddressSpace::Virtual, *communication, 24);
+                connection = pointer(BlockValue(info, 0, 8));
+                server = pointer(BlockValue(info, 8, 8));
+                client = pointer(BlockValue(info, 16, 8));
+                // Cache only complete, validated triples from this stable collection.
+                if (reuseCommunication && communicationCache.size() < 4096 && ExactBytes(info, 24) && connection && server && client &&
+                    CheckWalkDeadline(budget))
+                {
+                    communicationCache.emplace(*communication, std::array<uint64_t, 3>{*connection, *server, *client});
+                }
+            }
         }
         if (!CheckWalkDeadline(budget))
         {
@@ -286,7 +326,8 @@ void CollectAlpcPorts(TargetReader &reader, const TargetArchitecture &architectu
         uint8_t finalCookie = 0;
         std::array<uint8_t, 4> finalOffsets{};
         const bool stable = reader.ReadExact(AddressSpace::Virtual, head, &finalLinks) && finalLinks == links &&
-                            reader.ReadExact(AddressSpace::Virtual, cookieAddress, &finalCookie) && finalCookie == cookie &&
+                            CheckWalkDeadline(budget) && reader.ReadExact(AddressSpace::Virtual, cookieAddress, &finalCookie) &&
+                            finalCookie == cookie && CheckWalkDeadline(budget) &&
                             reader.ReadExact(AddressSpace::Virtual, offsetsAddress, &finalOffsets) && finalOffsets == offsets;
         if (CheckWalkDeadline(budget) && !stable)
         {
@@ -301,7 +342,20 @@ void CollectAlpcPorts(TargetReader &reader, const TargetArchitecture &architectu
     budget.Report.Analysis.Set(L"namedPorts", knjson::Value(std::to_wstring(named)));
     budget.Report.Analysis.Set(L"unnamedPorts", knjson::Value(std::to_wstring(unnamed)));
     budget.Report.Analysis.Set(L"nameDirectoriesRead", knjson::Value(std::to_wstring(names.DirectoriesRead())));
-    budget.Report.Analysis.Set(L"traversalLimitMs", knjson::Value(L"120000"));
+    budget.Report.Analysis.Set(L"traversalLimitMs", knjson::Value(std::to_wstring(
+        std::chrono::duration_cast<std::chrono::milliseconds>(AlpcTraversalTimeout).count())));
+    budget.Report.Analysis.Set(L"communicationCacheHits", knjson::Value(std::to_wstring(communicationCacheHits)));
+    budget.Report.Analysis.Set(L"communicationCacheEntries", knjson::Value(std::to_wstring(communicationCache.size())));
+    for (const auto &[name, meter] : {std::pair(L"record", &recordReads), std::pair(L"state", &stateReads),
+                                     std::pair(L"name", &nameReads), std::pair(L"communication", &communicationReads)})
+    {
+        auto measured = knjson::Value::MakeObject();
+        measured.Set(L"readRequests", knjson::Value(std::to_wstring(meter->Requests)));
+        measured.Set(L"requestedBytes", knjson::Value(std::to_wstring(meter->Bytes)));
+        measured.Set(L"readElapsedMs", knjson::Value(std::to_wstring(
+            std::chrono::duration_cast<std::chrono::milliseconds>(meter->Elapsed).count())));
+        budget.Report.Analysis.Set(name, std::move(measured));
+    }
     budget.Report.Analysis.Set(
         L"traversalElapsedMs",
         knjson::Value(
