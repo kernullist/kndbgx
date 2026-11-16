@@ -964,7 +964,7 @@ const std::vector<CommandSpec> &CommandSpecs()
         {L"!ssdt",
          {},
          L"Kernel",
-         L"list native SSDT handlers using a matched profile; report shadow-table limits",
+         L"list verified native and shadow SSDT entry points with service IDs",
          L"!ssdt",
          Effect::TargetRead,
          Capability::KernelX64,

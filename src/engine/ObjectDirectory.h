@@ -41,11 +41,11 @@ class ObjectDirectoryWalker
     bool VisitDirectoryNamed(const wchar_t *directoryName, const NamedDirectoryVisitor &visitor, std::wstring *error);
 
     // Recursively walks the whole namespace from the root. The visitor
-    // is invoked for every non-directory object with its decoded type
-    // index; sub-directories are descended up to maxDepth levels.
+    // is invoked for selected-type objects; unrelated names are not read.
+    // Sub-directories are descended up to maxDepth levels.
     typedef std::function<bool(ULONG64 body, unsigned typeIndex, int depth, const std::wstring &path)> NamespaceVisitor;
 
-    bool VisitNamespace(const NamespaceVisitor &visitor, int maxDepth, std::wstring *error);
+    bool VisitNamespace(const NamespaceVisitor &visitor, unsigned selectedType, int maxDepth, std::wstring *error);
 
     // Resolves an object-manager type index (e.g. "Directory",
     // "ALPC Port") through ObTypeIndexTable. Cached per name.

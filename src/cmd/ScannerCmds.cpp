@@ -3,6 +3,7 @@
 // MSR/control-register audit and address inspection.
 
 #include "CollectorSupport.h"
+#include "../core/ServiceTable.h"
 
 #include <dbgeng.h>
 #include <cstring>
@@ -165,39 +166,83 @@ void ScanSsdt(Ctx &ctx)
         profile = kncore::KernelSymbolProfile28000Id;
     }
     uint32_t limit = 0;
-    if (!expected || !table || !limitAddress || !architecture.KernelPointer(*table) ||
-        !ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *limitAddress, &limit) || limit != *expected ||
-        !kncore::ValidRange(*table, *expected * 4))
+    const bool nativeReady = expected && table && limitAddress && architecture.KernelPointer(*table) &&
+        ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *limitAddress, &limit) && limit == *expected &&
+        kncore::ValidRange(*table, *expected * 4);
+    const auto shadowAddress = layout.Address(L"nt", L"KeServiceDescriptorTableShadow");
+    const auto guiTable = layout.Address(L"win32k", L"W32pServiceTable");
+    const auto guiLimitAddress = layout.Address(L"win32k", L"W32pServiceLimit");
+    const auto guiIdentity = layout.Identity(L"win32k");
+    std::optional<kncore::ServiceDescriptor> nativeDescriptor;
+    std::optional<kncore::ServiceDescriptor> guiDescriptor;
+    uint32_t guiLimit = 0;
+    bool shadowReady = false;
+    const auto publicOrShape = [&](const wchar_t *name, uint32_t size, bool array)
+    {
+        const auto shape = layout.Symbol(L"win32k", name);
+        return shape ? shape->Offset == 0 && shape->Size == size && !shape->BitOffset && !shape->BitWidth && shape->ValidFor(size) &&
+            (array ? shape->Kind == kncore::FieldKind::Array && shape->ElementSize == 4u : shape->Kind == kncore::FieldKind::Unsigned)
+            : layout.PublicOnlySymbol(L"win32k", name);
+    };
+    if (nativeReady && identity && shadowAddress && guiTable && guiLimitAddress && guiIdentity &&
+        layout.VerifyProfile(kncore::KernelLayoutFamily::ShadowService) && layout.VerifyProfile(kncore::KernelLayoutFamily::Win32kService) &&
+        publicOrShape(L"W32pServiceTable", 1497 * 4, true) && publicOrShape(L"W32pServiceLimit", 4, false) &&
+        ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *guiLimitAddress, &guiLimit) && guiLimit == 1497)
+    {
+        nativeDescriptor = kncore::ReadServiceDescriptor(ctx.Session, *shadowAddress);
+        guiDescriptor = kncore::ReadServiceDescriptor(ctx.Session, *shadowAddress + 32);
+        shadowReady = nativeDescriptor && guiDescriptor &&
+            kncore::ServiceDescriptorMatches(*nativeDescriptor, *table, limit, identity->Base + 0xe823c) &&
+            kncore::ServiceDescriptorMatches(*guiDescriptor, *guiTable, guiLimit, guiIdentity->Base + 0xa2d48);
+    }
+    const auto owners = knengine::CollectOwnershipIndex(ctx.Session);
+    const auto collect = [&](uint64_t address, uint32_t count, const wchar_t *family, uint32_t base, const std::wstring &name)
+    {
+        kncore::CollectServiceEntries(ctx.Session, architecture, owners, address, count, family, base, name, budget,
+            [&](const knjson::Value &row)
+            {
+                EmitRow(ctx, budget, row);
+            });
+    };
+    if (!nativeReady)
     {
         UnknownScope(ctx, budget, L"NativeSSDT", L"Verified table extent/limit profile unavailable or differs from target");
     }
     else
     {
-        const auto owners = knengine::CollectOwnershipIndex(ctx.Session);
-        budget.Report.Collected.Expected = limit;
-        for (uint32_t index = 0; index < limit && CheckCollection(ctx, budget); ++index)
+        collect(*table, limit, L"NativeSSDT", 0, profile);
+    }
+    if (shadowReady)
+    {
+        collect(*guiTable, guiLimit, L"ShadowSSDT", 0x1000, kncore::Win32kServiceProfileId);
+        if (kncore::RecheckServiceDescriptor(ctx.Session, *shadowAddress, *nativeDescriptor, budget))
         {
-            ++budget.Report.Collected.Visited;
-            int32_t encoded = 0;
-            const uint64_t slot = *table + index * 4;
-            std::optional<uint64_t> routine;
-            if (ctx.Session.ReadExact(kncore::AddressSpace::Virtual, slot, &encoded))
-            {
-                ++budget.Report.Collected.Read;
-                routine = kncore::DecodeServiceEntry(*table, encoded);
-            }
-            else
-            {
-                ++budget.Report.Collected.Unreadable;
-            }
-            auto row = kncore::RoutineObservation(budget.Report, architecture, owners, L"NativeSSDT", slot, routine);
-            row.Set(L"index", knjson::Value(std::to_wstring(index)));
-            row.Set(L"profile", knjson::Value(profile));
-            row.Set(L"encoding", knjson::Value(L"x64SignedRelativeShift4"));
-            EmitRow(ctx, budget, row);
+            kncore::RecheckServiceDescriptor(ctx.Session, *shadowAddress + 32, *guiDescriptor, budget);
         }
     }
-    UnknownScope(ctx, budget, L"ShadowSSDT", L"No verified descriptor layout and GUI-session mapping in this profile");
+    else
+    {
+        UnknownScope(ctx, budget, L"ShadowSSDT", L"Matched NT/win32k code, descriptor, table extent or mapping unavailable");
+    }
+    for (const auto &[address, expectedLimit] : {std::pair(nativeReady ? limitAddress : std::nullopt, limit),
+                                               std::pair(shadowReady ? guiLimitAddress : std::nullopt, guiLimit)})
+    {
+        uint32_t observed = 0;
+        if (address && !budget.Stopped)
+        {
+            const bool stable = ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *address, &observed) && observed == expectedLimit;
+            if (kncore::CheckWalkDeadline(budget) && !stable)
+            {
+                budget.Stop(kncore::Status::StaleContext, L"ServiceLimitChanged");
+            }
+        }
+    }
+    if (nativeReady || shadowReady)
+    {
+        kncore::CheckWalkDeadline(budget);
+    }
+    budget.Report.Limitations.Push(knjson::Value(L"ShadowSSDT covers the registered win32k entry thunks. Per-session dispatch targets "
+        L"and the separate filtered service table are outside this collection."));
     budget.Report.Limitations.Push(
         knjson::Value(L"A matching module does not prove that service code is unchanged. Checking a disk profile does not validate the running kernel."));
     FinishCollection(ctx, budget);

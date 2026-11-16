@@ -1,6 +1,7 @@
 #include "ObjectDirectory.h"
 #include "PageWalk.h"
 #include "../core/ObjectRead.h"
+#include "../core/NamespaceWalk.h"
 #include "../util/Log.h"
 #include <dbgeng.h>
 #include <set>
@@ -341,7 +342,7 @@ unsigned ObjectDirectoryWalker::DecodeTypeIndex(ULONG64 header)
     return static_cast<unsigned char>(raw ^ cookie ^ (header >> 8));
 }
 
-bool ObjectDirectoryWalker::VisitNamespace(const NamespaceVisitor &visitor, int maxDepth, std::wstring *error)
+bool ObjectDirectoryWalker::VisitNamespace(const NamespaceVisitor &visitor, unsigned selectedType, int maxDepth, std::wstring *error)
 {
     kncore::WalkBudget budget;
     budget.Cancelled = [&]()
@@ -356,66 +357,34 @@ bool ObjectDirectoryWalker::VisitNamespace(const NamespaceVisitor &visitor, int 
             budget.Stop(kncore::Status::Unavailable, L"DirectoryTypeUnavailable");
             break;
         }
-        const auto headerBody = layout_.Field(L"nt", L"_OBJECT_HEADER", L"Body");
-        if (!headerBody || rootDirectory_ < headerBody->Offset || DecodeTypeIndex(rootDirectory_ - headerBody->Offset) != directoryType)
+        const auto cookie = layout_.Address(L"nt", L"ObHeaderCookie");
+        const auto offsets = layout_.Address(L"nt", L"ObpInfoMaskToOffset");
+        if (!cookie || !offsets || !layout_.VerifyProfile(kncore::KernelLayoutFamily::ObjectTypes) ||
+            !layout_.VerifyProfile(kncore::KernelLayoutFamily::ObjectNames))
         {
-            budget.Stop(kncore::Status::Unavailable, L"ObjectCookieDecodeNotCorroboratedByRootType");
+            budget.Stop(kncore::Status::Unavailable, L"NamespaceDecoderProfileUnavailable");
             break;
         }
-        struct Directory
-        {
-            ULONG64 Body;
-            int Depth;
-            std::wstring Path;
-        };
-        std::vector<Directory> pending{{rootDirectory_, 0, L"\\"}};
-        std::set<ULONG64> directories;
-        bool depthLimited = false;
-        budget.StartTraversal(std::chrono::steady_clock::now(), std::chrono::seconds(30));
-        while (!pending.empty() && !budget.Stopped)
-        {
-            const auto current = pending.back();
-            pending.pop_back();
-            if (!directories.insert(current.Body).second)
-            {
-                budget.Stop(kncore::Status::Partial, L"RepeatedDirectory");
-                break;
-            }
-            EntriesNamed(current.Body, budget,
-                    [&](ULONG64 body, const std::wstring &name)
-                    {
-                        if (body < headerBody->Offset)
-                        {
-                            budget.Stop(kncore::Status::Partial, L"InvalidObjectHeader");
-                            return false;
-                        }
-                        const auto type = DecodeTypeIndex(body - headerBody->Offset);
-                        const std::wstring path = name.empty() || current.Path.empty() ? std::wstring() :
-                            current.Path + (current.Path == L"\\" ? L"" : L"\\") + name;
-                        if (type == directoryType)
-                        {
-                            if (current.Depth < maxDepth)
-                            {
-                                pending.push_back({body, current.Depth + 1, path});
-                            }
-                            else
-                            {
-                                depthLimited = true;
-                            }
-                            return true;
-                        }
-                        if (type == UINT32_MAX)
-                        {
-                            ++budget.Report.Collected.Unknown;
-                        }
-                        return visitor(body, type, current.Depth, path);
-                    });
-        }
-        if (!budget.Stopped && (depthLimited || budget.Report.Collected.Unknown != 0))
-        {
-            budget.Stop(kncore::Status::Partial, depthLimited ? L"DepthLimit" : L"UnknownObjectTypes");
-        }
-        budget.Complete();
+        kncore::NamespaceLayout fields;
+        fields.Buckets = layout_.Field(L"nt", L"_OBJECT_DIRECTORY", L"HashBuckets");
+        fields.Next = layout_.Field(L"nt", L"_OBJECT_DIRECTORY_ENTRY", L"ChainLink");
+        fields.Object = layout_.Field(L"nt", L"_OBJECT_DIRECTORY_ENTRY", L"Object");
+        fields.Body = layout_.Field(L"nt", L"_OBJECT_HEADER", L"Body");
+        fields.Type = layout_.Field(L"nt", L"_OBJECT_HEADER", L"TypeIndex");
+        fields.Mask = layout_.Field(L"nt", L"_OBJECT_HEADER", L"InfoMask");
+        fields.Parent = layout_.Field(L"nt", L"_OBJECT_HEADER_NAME_INFO", L"Directory");
+        const auto name = layout_.Field(L"nt", L"_OBJECT_HEADER_NAME_INFO", L"Name");
+        fields.Length = kncore::NestedField(name, layout_.Field(L"nt", L"_UNICODE_STRING", L"Length"));
+        fields.Maximum = kncore::NestedField(name, layout_.Field(L"nt", L"_UNICODE_STRING", L"MaximumLength"));
+        fields.Buffer = kncore::NestedField(name, layout_.Field(L"nt", L"_UNICODE_STRING", L"Buffer"));
+        ULONG nameSize = 0;
+        layout_.TypeSize(L"_OBJECT_HEADER_NAME_INFO", &nameSize);
+        fields.NameInfoSize = nameSize;
+        kncore::NamespaceReadMeter measured(session_);
+        kncore::WalkNamedNamespace(measured, architecture_, fields, rootDirectory_, *cookie, *offsets, directoryType,
+                                  selectedType, static_cast<unsigned>(maxDepth), budget, visitor);
+        budget.Report.Analysis.Set(L"namespaceTargetReads", knjson::Value(std::to_wstring(measured.Requests)));
+        budget.Report.Analysis.Set(L"namespaceRequestedBytes", knjson::Value(std::to_wstring(measured.Bytes)));
     } while (false);
     Finish(budget, error);
     return report_.State == kncore::Status::Success;

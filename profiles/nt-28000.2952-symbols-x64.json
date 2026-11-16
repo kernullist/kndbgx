@@ -8,7 +8,7 @@
   "timestamp": "0xe1a9f520",
   "imageSize": "0x1459000",
   "pdbGuid": "4660396c-2030-4c03-9af4-5fc6b15adf98",
-  "scope": "Host-silo ETW storage/selectors, NMI callbacks, unloaded-driver ring and firmware providers",
+  "scope": "Host-silo ETW storage/selectors, NMI callbacks, unloaded-driver ring and firmware providers, encoded timer DPCs, registered shadow service descriptor and object namespace decoding",
   "families": {
     "HostSilo": [
       {
@@ -107,6 +107,98 @@
         "offset": "0xfe",
         "bytes": "8b06488d79188901488b460848894108488b461048894110488d412848897f0848893f48894008488900488b4910e82f07b2ff488b05f0a66c00483928751348892f4889470848893848893ddaa66c00"
       }
+    ],
+    "TimerDpc": [
+      {
+        "symbol": "KeSetTimerEx",
+        "rva": "0x34fdc0",
+        "offset": "0x2f",
+        "bytes": "488b15b212c700498bef48332d9815c7008bca480fcd4833ef448af048d3cd4833ea"
+      },
+      {
+        "symbol": "KeSetTimerEx",
+        "rva": "0x34fdc0",
+        "offset": "0xe4",
+        "bytes": "48896f30"
+      },
+      {
+        "symbol": "KiTimerWaitTest",
+        "rva": "0x350c90",
+        "offset": "0x1c",
+        "bytes": "488b6a30488bf1488b0dee03c7004d8be0448a3a4833e948d3c54180e77f4833ea"
+      },
+      {
+        "symbol": "KiTimerWaitTest",
+        "rva": "0x350c90",
+        "offset": "0x4c",
+        "bytes": "480fcd48332db206c700"
+      },
+      {
+        "symbol": "KeSetTimerEx",
+        "rva": "0x34fdc0",
+        "offset": "0x27",
+        "bytes": "488bf9"
+      },
+      {
+        "symbol": "KeSetTimerEx",
+        "rva": "0x34fdc0",
+        "offset": "0x19",
+        "bytes": "4d8bf9"
+      },
+      {
+        "symbol": "KeInitializeDpc",
+        "rva": "0x48af10",
+        "offset": "0",
+        "bytes": "33c0c701130100004889413848894110488951184c894120c3"
+      },
+      {
+        "symbol": "KeInitializeThreadedDpc",
+        "rva": "0x53fe10",
+        "offset": "0",
+        "bytes": "33c0c7011a0100004889413848894110488951184c894120c3"
+      }
+    ],
+    "ShadowService": [
+      {
+        "symbol": "KeAddSystemServiceTable",
+        "rva": "0xb5fde0",
+        "offset": "0xda",
+        "bytes": "4c89151f154600448905281546004c890d29154600"
+      },
+      {
+        "symbol": "KeAddSystemServiceTable",
+        "rva": "0xb5fde0",
+        "offset": "0xf4",
+        "bytes": "4c8b1505154600488d05fe144600448b0d5f5139008b3d01154600"
+      },
+      {
+        "symbol": "KeAddSystemServiceTable",
+        "rva": "0xb5fde0",
+        "offset": "0x119",
+        "bytes": "4d8bda496313448d4301488bc24d8d5b0448c1f804418bd8428b0c10"
+      }
+    ],
+    "ObjectTypes": [
+      {
+        "symbol": "ObGetObjectType",
+        "rva": "0xa75d90",
+        "offset": "0",
+        "bytes": "488d41d00fb649e848c1e8080fb6c04833c10fb60de7b154004833c1488d0dadbb5400488b04c1c3"
+      }
+    ],
+    "ObjectNames": [
+      {
+        "symbol": "ObQueryNameInfo",
+        "rva": "0xa7c290",
+        "offset": "0",
+        "bytes": "488d41d00fb649eaf6c102750433c0c3"
+      },
+      {
+        "symbol": "ObQueryNameInfo",
+        "rva": "0xa7c290",
+        "offset": "0x11",
+        "bytes": "83e103488d15358349000fb60c11482bc1c3"
+      }
     ]
   },
   "records": {
@@ -135,11 +227,34 @@
       "limitRva": "0xe8238",
       "entries": 490,
       "entryBytes": 4,
-      "encoding": "x64 signed relative shift 4; native table only"
+      "encoding": "x64 signed relative shift 4"
+    },
+    "TimerDpc": {
+      "neverRva": "0xfc10a8",
+      "alwaysRva": "0xfc1398",
+      "dpcField": "0x30",
+      "decode": "bswap64(rotl64(raw XOR KiWaitNever, KiWaitNever & 63) XOR timer) XOR KiWaitAlways",
+      "null": "Encoded NULL must be decoded before testing for zero",
+      "dpcTypes": [
+        "0x13",
+        "0x1a"
+      ]
+    },
+    "ShadowSSDT": {
+      "descriptorRva": "0xfc13c0",
+      "descriptorBytes": 32,
+      "shadowIndex": 1,
+      "tableOffset": "0x0",
+      "limitOffset": "0x10",
+      "argumentsOffset": "0x18",
+      "requiredCompanion": "win32k-28000.2952-services-x64.json",
+      "serviceIdBase": "0x1000"
     }
   },
   "limitations": [
     "Other images and changed/unreadable code windows are not decoded.",
-    "Shadow SSDT and other ETW silos are not covered."
+    "Shadow SSDT covers registered win32k entry thunks, not per-session dispatch destinations or the filtered table.",
+    "Namespace traversal follows root hash buckets; unnamed objects, private namespaces and shadow directories are excluded.",
+    "Other ETW silos are not covered."
   ]
 }

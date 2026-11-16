@@ -1,0 +1,32 @@
+{
+  "schema": "kndbgx.symbol-profile.v1",
+  "support": "Experimental",
+  "id": "WIN32K-28000.2952-services-PDB-2414214E-age1",
+  "machine": "0x8664",
+  "pdbAge": 1,
+  "pdbGuid": "2414214e-c1ed-f9f3-ce5f-1595ccd37b1b",
+  "timestamp": "0xeaa9257b",
+  "imageSize": "0xca000",
+  "runtimeImplementation": "src/core/KernelSymbolProfile.h and src/core/ServiceTable.h; this document cannot enable additional images",
+  "codeWindows": [
+    {
+      "symbol": "SysEntryGetW32pServiceTable",
+      "rva": "0x1c590",
+      "offset": "0",
+      "bytes": "488d05694a0800c3"
+    },
+    {
+      "symbol": "SysEntryGetW32pServiceLimit",
+      "rva": "0x1c580",
+      "offset": "0",
+      "bytes": "8b05be670800c3"
+    }
+  ],
+  "tableRva": "0xa1000",
+  "limitRva": "0xa2d44",
+  "argumentsRva": "0xa2d48",
+  "entries": 1497,
+  "entryBytes": 4,
+  "encoding": "x64 signed relative shift 4",
+  "scope": "Registered win32k entry thunks; requires independent NT descriptor validation. Per-session dispatch destinations and filtered service tables are excluded."
+}

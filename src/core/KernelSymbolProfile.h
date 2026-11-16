@@ -8,6 +8,15 @@ inline constexpr wchar_t KernelSymbolProfileId[] = L"NT-26100.8655-symbols-PDB-1
 inline constexpr wchar_t PiddbProfileId[] = L"NT-28000.2952-PiDDB-PDB-4660396C-age1";
 inline constexpr wchar_t KernelSymbolProfile28000Id[] = L"NT-28000.2952-symbols-PDB-4660396C-age1";
 inline constexpr wchar_t CiHashProfileId[] = L"CI-28000.2952-hash-cache-PDB-F660C9DA-age1";
+inline constexpr wchar_t Win32kServiceProfileId[] = L"WIN32K-28000.2952-services-PDB-2414214E-age1";
+
+inline bool Win32kServiceProfileIdentity(const ModuleIdentity &identity)
+{
+    return identity.Matched && identity.Machine == 0x8664 && identity.PdbAge == 1 && identity.Timestamp == 0xeaa9257b &&
+           identity.ImageSize == 0xca000 &&
+           _wcsicmp(identity.PdbGuid.c_str(), L"{2414214E-C1ED-F9F3-CE5F-1595CCD37B1B}") == 0 &&
+           identity.Base != 0 && ValidRange(identity.Base, identity.ImageSize);
+}
 
 inline bool CiHashProfileIdentity(const ModuleIdentity &identity)
 {
@@ -33,11 +42,21 @@ enum class KernelLayoutFamily
     Unloaded,
     Firmware,
     Piddb,
-    CiHash
+    CiHash,
+    TimerDpc,
+    ShadowService,
+    Win32kService
 };
 
 inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFamily family, bool build28000 = false)
 {
+    if (family == KernelLayoutFamily::Win32kService)
+    {
+        static const std::array<CallbackCodeWindow, 2> services = {{
+            {L"SysEntryGetW32pServiceTable", 0x1c590, 0, L"488d05694a0800c3"},
+            {L"SysEntryGetW32pServiceLimit", 0x1c580, 0, L"8b05be670800c3"}}};
+        return services;
+    }
     if (family == KernelLayoutFamily::CiHash)
     {
         // Cross-image calls can be relocated by the loader and are excluded.
@@ -52,6 +71,24 @@ inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFami
     }
     if (build28000 && family != KernelLayoutFamily::Piddb)
     {
+        static const std::array<CallbackCodeWindow, 8> timer = {{
+            {L"KeSetTimerEx", 0x34fdc0, 0x2f, L"488b15b212c700498bef48332d9815c7008bca480fcd4833ef448af048d3cd4833ea"},
+            {L"KeSetTimerEx", 0x34fdc0, 0xe4, L"48896f30"},
+            {L"KiTimerWaitTest", 0x350c90, 0x1c, L"488b6a30488bf1488b0dee03c7004d8be0448a3a4833e948d3c54180e77f4833ea"},
+            {L"KiTimerWaitTest", 0x350c90, 0x4c, L"480fcd48332db206c700"},
+            {L"KeSetTimerEx", 0x34fdc0, 0x27, L"488bf9"},
+            {L"KeSetTimerEx", 0x34fdc0, 0x19, L"4d8bf9"},
+            {L"KeInitializeDpc", 0x48af10, 0, L"33c0c701130100004889413848894110488951184c894120c3"},
+            {L"KeInitializeThreadedDpc", 0x53fe10, 0, L"33c0c7011a0100004889413848894110488951184c894120c3"}}};
+        static const std::array<CallbackCodeWindow, 1> types = {{
+            {L"ObGetObjectType", 0xa75d90, 0, L"488d41d00fb649e848c1e8080fb6c04833c10fb60de7b154004833c1488d0dadbb5400488b04c1c3"}}};
+        static const std::array<CallbackCodeWindow, 2> names = {{
+            {L"ObQueryNameInfo", 0xa7c290, 0, L"488d41d00fb649eaf6c102750433c0c3"},
+            {L"ObQueryNameInfo", 0xa7c290, 0x11, L"83e103488d15358349000fb60c11482bc1c3"}}};
+        static const std::array<CallbackCodeWindow, 3> shadow = {{
+            {L"KeAddSystemServiceTable", 0xb5fde0, 0xda, L"4c89151f154600448905281546004c890d29154600"},
+            {L"KeAddSystemServiceTable", 0xb5fde0, 0xf4, L"4c8b1505154600488d05fe144600448b0d5f5139008b3d01154600"},
+            {L"KeAddSystemServiceTable", 0xb5fde0, 0x119, L"4d8bda496313448d4301488bc24d8d5b0448c1f804418bd8428b0c10"}}};
         static const std::array<CallbackCodeWindow, 5> silo = {{
             {L"PsGetServerSiloGlobals", 0x2baea0, 0, L"4885c97509488d0594ead000"},
             {L"PsGetServerSiloGlobals", 0x2baea0, 0xe, L"488b81e0050000c3"},
@@ -77,6 +114,14 @@ inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFami
              L"8b06488d79188901488b460848894108488b461048894110488d412848897f0848893f48894008488900488b4910e82f07b2ff488b05f0a66c00483928751348892f4889470848893848893ddaa66c00"}}};
         switch (family)
         {
+        case KernelLayoutFamily::ObjectTypes:
+            return types;
+        case KernelLayoutFamily::ObjectNames:
+            return names;
+        case KernelLayoutFamily::TimerDpc:
+            return timer;
+        case KernelLayoutFamily::ShadowService:
+            return shadow;
         case KernelLayoutFamily::HostSilo:
             return silo;
         case KernelLayoutFamily::Nmi:
@@ -151,6 +196,9 @@ inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFami
     case KernelLayoutFamily::Piddb:
         return piddb;
     case KernelLayoutFamily::CiHash:
+    case KernelLayoutFamily::TimerDpc:
+    case KernelLayoutFamily::ShadowService:
+    case KernelLayoutFamily::Win32kService:
         return {};
     }
     return {};
@@ -158,6 +206,12 @@ inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFami
 
 inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbols(KernelLayoutFamily family, bool build28000 = false)
 {
+    if (family == KernelLayoutFamily::Win32kService)
+    {
+        static const std::pair<const wchar_t *, uint32_t> services[] = {
+            {L"W32pServiceTable", 0xa1000}, {L"W32pServiceLimit", 0xa2d44}};
+        return services;
+    }
     static const std::pair<const wchar_t *, uint32_t> ciHash[] = {{L"g_KernelHashBucketList", 0xef090}};
     if (family == KernelLayoutFamily::CiHash)
     {
@@ -165,12 +219,24 @@ inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbol
     }
     if (build28000 && family != KernelLayoutFamily::Piddb)
     {
+        static const std::pair<const wchar_t *, uint32_t> types[] = {{L"ObTypeIndexTable", 0xfc1960}, {L"ObHeaderCookie", 0xfc0f90}};
+        static const std::pair<const wchar_t *, uint32_t> names[] = {{L"ObpInfoMaskToOffset", 0xf145e0}};
+        static const std::pair<const wchar_t *, uint32_t> timer[] = {{L"KiWaitNever", 0xfc10a8}, {L"KiWaitAlways", 0xfc1398}};
+        static const std::pair<const wchar_t *, uint32_t> shadow[] = {{L"KeServiceDescriptorTableShadow", 0xfc13c0}};
         static const std::pair<const wchar_t *, uint32_t> silo[] = {{L"PspHostSiloGlobals", 0xfc9940}};
         static const std::pair<const wchar_t *, uint32_t> nmi[] = {{L"KiNmiCallbackListHead", 0xf4b570}};
         static const std::pair<const wchar_t *, uint32_t> unloaded[] = {{L"MmUnloadedDrivers", 0xef9e60}, {L"MmLastUnloadedDriver", 0xef9e68}};
         static const std::pair<const wchar_t *, uint32_t> firmware[] = {{L"ExpFirmwareTableProviderListHead", 0xf03940}};
         switch (family)
         {
+        case KernelLayoutFamily::ObjectTypes:
+            return types;
+        case KernelLayoutFamily::ObjectNames:
+            return names;
+        case KernelLayoutFamily::TimerDpc:
+            return timer;
+        case KernelLayoutFamily::ShadowService:
+            return shadow;
         case KernelLayoutFamily::HostSilo:
             return silo;
         case KernelLayoutFamily::Nmi:
@@ -211,6 +277,10 @@ inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbol
         return piddb;
     case KernelLayoutFamily::CiHash:
         return ciHash;
+    case KernelLayoutFamily::TimerDpc:
+    case KernelLayoutFamily::ShadowService:
+    case KernelLayoutFamily::Win32kService:
+        return {};
     }
     return {};
 }
@@ -219,7 +289,8 @@ template <typename Resolve>
 const wchar_t *VerifyKernelProfile(TargetReader &reader, const ModuleIdentity &identity, KernelLayoutFamily family, Resolve resolve)
 {
     const bool build28000 = CallbackProfile28000Identity(identity);
-    const bool matched = family == KernelLayoutFamily::CiHash ? CiHashProfileIdentity(identity) :
+    const bool matched = family == KernelLayoutFamily::Win32kService ? Win32kServiceProfileIdentity(identity) :
+                         family == KernelLayoutFamily::CiHash ? CiHashProfileIdentity(identity) :
                          family == KernelLayoutFamily::Piddb ? build28000 : CallbackProfileIdentity(identity);
     if (!matched || KernelProfileWindows(family, build28000).empty())
     {

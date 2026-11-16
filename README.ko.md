@@ -111,7 +111,7 @@ WinDbg를 대상에 연결하고 메모리를 조사하기 전에 대상을 중�
 
 ![선택한 ALPC 포트와 System 소유자 정보](docs/screenshots/alpc-ports.png)
 
-*하이브 캡처는 15행으로 완료됐다. ALPC는 순회 제한에 도달하기 전 포트 9개를 보관한 Partial 결과이며, 모든 통신 엔드포인트의 목록은 아니다.* [하이브와 ALPC 조사](docs/UX.md#inspect-hives-and-alpc-ports)
+*위 ALPC 이미지는 순회 개선 전 9개 포트만 보관한 Partial 캡처다. 현재 구현은 필요한 헤더·이름만 읽고 전체 순회에 120초 제한을 적용한다. 28000.2952 VM에서는 캐시를 비운 뒤 이름 있는 포트 169개를 모두 확인했다. 이름 없는 포트·private namespace·shadow directory는 포함하지 않는다.* [하이브와 ALPC 조사](docs/UX.md#inspect-hives-and-alpc-ports)
 
 ### 다른 콜백과 서비스 테이블
 
@@ -124,7 +124,7 @@ WinDbg를 대상에 연결하고 메모리를 조사하기 전에 대상을 중�
 
 ![SSDT의 범위와 레이아웃을 검증하지 못한 이유](docs/screenshots/ssdt-coverage.png)
 
-이 게스트에서는 native 테이블의 범위와 shadow descriptor·session 관계를 확인하지 못했다. 0행은 정상 판정이 아니다. [수집 한계 확인](docs/UX.md#read-a-collectors-coverage-limits)
+위 이미지는 프로필 추가 전의 결과다. 검증된 28000.2952 NT·win32k 이미지에서는 native 490개와 Shadow 1,497개 진입점을 표시한다. Shadow 결과는 등록된 win32k 진입점이며 세션별 내부 호출 대상은 포함하지 않는다. 다른 이미지에서 0행이나 Partial이 나오면 해당 범위의 검증 여부를 확인한다. [수집 한계 확인](docs/UX.md#read-a-collectors-coverage-limits)
 
 </details>
 
@@ -179,11 +179,11 @@ IDT 예제는 451개 게이트를 보관한 Partial 결과이고, 제어 레지�
 
 ### DPC 큐와 타이머
 
-`!dpc`는 CPU별 DPC 큐를, `!timer`는 타이머 테이블을 순회한다. **CPU**·**Queue**·**Routine**·**Decode**를 함께 보고, 완료한 큐 수와 전체 예상 큐 수를 비교한다.
+`!dpc`는 CPU별 DPC 큐를, `!timer`는 타이머 테이블을 순회한다. 검증된 28000.2952 NT 이미지에서는 인코딩된 DPC와 NULL을 해석하고 루틴·컨텍스트·중요도를 표시한다. **CPU**·**Queue**·**Routine**·**Decode**를 함께 보고, 완료한 큐 수와 전체 예상 큐 수를 비교한다.
 
 ![189개 타이머 관찰과 전체 큐 1024개 읽기 완료](docs/screenshots/timer-coverage.png)
 
-*타이머 캡처는 189행, 판정 불가 189건이다. 1,024개 큐를 모두 읽었지만 루틴 해석이 불가해 Partial로 남았다. 인코딩된 DPC 포인터를 확인 없이 함수 주소로 해석하지 않는다. 큐 밖에서 실행 중이거나 이미 완료된 작업은 포함하지 않는다.* [큐 조사](docs/UX.md#inspect-dpc-queues-and-timers)
+*위 이미지는 DPC 디코더 추가 전의 Partial 캡처다. 현재 디코더도 이미지·심볼·커널 코드가 검증되지 않으면 루틴을 Unknown으로 남긴다. 큐 밖에서 실행 중이거나 이미 완료된 작업은 포함하지 않는다.* [큐 조사](docs/UX.md#inspect-dpc-queues-and-timers)
 
 ### 호스트와 대상의 보안 상태
 
@@ -541,7 +541,7 @@ Previous/Next는 성공적으로 읽은 범위를 기준으로 이동한다. 주
 | 명령·별칭 | 기능·사용 조건 | 문법·예제 |
 |---|---|---|
 | `!idt` | CPU별 IDT 게이트·핸들러 주소·모듈을 확인하고 같은 벡터끼리 비교한다.<br>Experimental · x64 커널·덤프 | `!idt`<br>예제: `!idt` |
-| `!ssdt` | 검증된 레이아웃으로 native SSDT 핸들러를 읽고 검증하지 못한 shadow 테이블 범위를 별도로 표시한다.<br>Experimental · x64 커널·덤프 | `!ssdt`<br>예제: `!ssdt` |
+| `!ssdt` | 검증된 native·Shadow SSDT 진입점과 서비스 ID를 표시한다. 세션별 내부 호출 대상과 필터 테이블은 제외한다.<br>Experimental · x64 커널·덤프 | `!ssdt`<br>예제: `!ssdt` |
 | `!msrcheck` | 검증된 선택 CPU의 LSTAR·CSTAR·STAR·FMASK·EFER를 읽는다. 다른 CPU는 Unknown으로 남긴다.<br>Experimental · x64 커널·덤프 | `!msrcheck`<br>예제: `!msrcheck` |
 | `!cr` | CPU별로 저장된 CR0·CR4·CR8 값과 해석한 플래그를 읽는다.<br>Experimental · x64 커널·덤프 | `!cr`<br>예제: `!cr` |
 | `!dpc` | 선언된 CPU별 DPC 큐를 순회한다. 지연 시간을 측정하거나 완료된 작업을 나열하지는 않는다.<br>Experimental · x64 커널·덤프 | `!dpc`<br>예제: `!dpc` |

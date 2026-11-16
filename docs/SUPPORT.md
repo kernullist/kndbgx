@@ -23,14 +23,15 @@ Kernel collection requires a matching image/PDB and validated field metadata. A 
 The source includes these compiled fallback profiles:
 
 - NT image **26100.8655 x64**: [callbacks](../profiles/nt-26100.8655-callbacks-x64.json), [additional symbol/layout coverage](../profiles/nt-26100.8655-symbols-x64.json) and [native SSDT](../profiles/nt-26100.8655-x64.json).
-- NT image **28000.2952 x64**: [callbacks](../profiles/nt-28000.2952-callbacks-x64.json), [PiDDB records](../profiles/nt-28000.2952-piddb-x64.json), and [ETW host-silo storage, NMI, unloaded drivers, firmware providers and native SSDT](../profiles/nt-28000.2952-symbols-x64.json).
+- NT image **28000.2952 x64**: [callbacks](../profiles/nt-28000.2952-callbacks-x64.json), [PiDDB records](../profiles/nt-28000.2952-piddb-x64.json), and [additional layouts, timer DPC decoding, object namespace decoding and SSDT descriptors](../profiles/nt-28000.2952-symbols-x64.json).
+- Win32k image with PDB **2414214E-C1ED-F9F3-CE5F-1595CCD37B1B**, age 1: [registered Shadow SSDT entry thunks](../profiles/win32k-28000.2952-services-x64.json). The matching NT descriptor and win32k table/limit are checked independently; per-session dispatch targets and the filtered table are excluded.
 - CI image with PDB **F660C9DA-4538-E0B7-62AA-C762F4FA8CDB**, age 1: [kernel hash-cache records](../profiles/ci-28000.2952-hash-cache-x64.json), observed with that 28000.2952 target. CI identity is checked independently of NT identity.
 
 These profiles identify individual images, which can differ from the OS build number. Fallbacks require the exact image/PDB identity and required symbol RVAs; private record layouts additionally check target code windows. Editing profile JSON does not add support: the implementation is compiled into the extension. Missing pages, changed required code or contradictory metadata refuse the affected fallback. A profile match validates that layout, not whole-image integrity or another kernel version.
 
 Routine annotation can load the owning module's PDB through the current WinDbg symbol path. Verified names retain their provenance; missing or rejected names use `module+RVA` when ownership is known. A pending symbol load can delay cancellation. Use [Context details > Symbols](UX.md#context-symbols-and-waits) to inspect one module's identity and type availability.
 
-Shadow SSDT, private layouts on other images, encoded timer DPC pointers and other missing metadata can remain unverified. PiDDB and CI cache decoding require their exact reviewed image/PDB and code profiles. Timer metadata remains visible when its DPC cannot be decoded. Callback coverage includes declared notify, object and registry families, not every callback mechanism in Windows. Object flags are the operation mask; notify context and registry flags have different meanings.
+Shadow SSDT and timer DPCs on other images can remain unverified. PiDDB, CI cache, encoded DPC and Shadow SSDT decoding require their reviewed image/PDB and code profiles. Timer metadata remains visible when its DPC cannot be decoded. Callback coverage includes declared notify, object and registry families, not every callback mechanism in Windows. Object flags are the operation mask; notify context and registry flags have different meanings.
 
 ## Interpretation limits
 

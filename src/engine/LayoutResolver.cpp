@@ -290,7 +290,8 @@ bool LayoutResolver::PublicOnlySymbol(const wchar_t *module, const wchar_t *symb
 
 bool LayoutResolver::VerifyProfile(kncore::KernelLayoutFamily family)
 {
-    const auto module = family == kncore::KernelLayoutFamily::CiHash ? L"ci" : L"nt";
+    const auto module = family == kncore::KernelLayoutFamily::Win32kService ? L"win32k" :
+                        family == kncore::KernelLayoutFamily::CiHash ? L"ci" : L"nt";
     const auto identity = Identity(module);
     if (!identity)
     {

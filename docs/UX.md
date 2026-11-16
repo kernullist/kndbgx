@@ -69,9 +69,11 @@ This capture completed with **437 rows** for Process handles owned by System. It
 
 Find `!ssdt` and select **Run** to inspect service-table entries when the target has verified layout and extent information. A result with no rows still needs interpretation. Open **View output** and read the collector's scope-specific gaps alongside its status.
 
+The reviewed 28000.2952 NT/win32k profiles expose native and Shadow SSDT entries with **Family**, **Service ID**, local index, routine and symbol. Shadow entries describe registered win32k entry thunks; their per-session dispatch destinations and the separate filtered table are outside the collection. Both image identities, reviewed code, descriptor values and table limits must agree.
+
 ![SSDT returns Partial with explicit native-table and shadow-table coverage gaps](screenshots/ssdt-coverage.png)
 
-For this guest, the native table extent could not be verified, and the shadow-table descriptor/session mapping was unavailable. The result is **0 rows / Partial**, not a clean SSDT verdict. When entries can be collected, module ownership still does not prove that the service code is unchanged.
+This earlier screenshot shows a target without verified service-table profiles. Its **0 rows / Partial** result does not establish a clean SSDT. When entries can be collected, module ownership still does not prove that the service code is unchanged.
 
 ### Save and compare kernel snapshots
 
@@ -255,7 +257,7 @@ Run `!hive` to compare **Root Path**, **File Path**, **File User Name**, hive ad
 
 Run `!alpc` to compare the full named-port path, **Owner / PID**, **Owner / Image**, port address and connection port. Row details retain the owner EPROCESS, creation time and namespace depth when available.
 
-This walk covers named objects only, with depth 16 and a shared 30-second traversal budget. Ports outside the walked namespace and unreadable fields are not covered. An unresolved symbol for an object address does not by itself indicate corruption; use its typed fields and coverage.
+This walk follows the root object namespace hash buckets, with depth 16, at most 65,536 entries and a shared 120-second traversal budget for slow serial KD transports. Bucket/link reads are batched, headers read only type/name-mask bytes, and unrelated object names are skipped. Cancellation remains available. Capture info reports visited directories, names read, filtered objects, namespace target reads/bytes and traversal time. Blocking debugger calls can exceed the deadline. Unnamed ports, private namespaces, shadow directories and unreadable fields are not covered. The object-header decoder requires a reviewed image/code profile and matching PDB fields. An unresolved symbol for an object address does not by itself indicate corruption; use its typed fields and coverage.
 
 Related commands cover other registrations: `!nmi` shows callback routines and contexts, `!hal` inspects verified HAL dispatch function-pointer fields, and `!fwtable` shows provider signatures such as ACPI and their routines. Missing private layouts remain gaps. A verified empty NMI list is distinct from an unavailable layout.
 
@@ -263,7 +265,7 @@ Related commands cover other registrations: `!nmi` shows callback routines and c
 
 Run `!dpc` for per-CPU DPC queues, including deferred routine, context and importance. `!timer` shows **CPU**, **Due time (raw 100 ns)**, **Period (ms)**, **Signal State** and timer object even when the DPC routine is unavailable. Zero period means one-shot; see [KeSetTimerEx units and optional DPC](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-kesettimerex). The raw due time is not a UTC date. Read queue totals in Capture info.
 
-Encoded timer DPC pointers remain undecoded and keep routine coverage Partial. A verified null DPC is valid for a timer with no DPC. Active or completed work outside these transient queues is not covered, and neither command measures DPC latency. Both walks have a shared 30-second traversal budget; blocking debugger calls can exceed it.
+On the exact reviewed 28000.2952 NT image, `!timer` decodes the DPC using the target's keys and verifies the DPC object type before reading its routine, context and importance. Encoded NULL is a valid timer without a DPC. Missing profiles, keys or DPC memory keep the routine Unknown. Active or completed work outside these transient queues is not covered, and neither command measures DPC latency. Both walks have a shared 30-second traversal budget; blocking debugger calls can exceed it.
 
 `!devstack` names the driver owning each observed device and shows type, stack size and flags. Lower devices use `attachedFrom` to identify the device above them. `!drvobj` displays IRP major names while preserving numeric codes in the raw record. `!payload` prioritizes observed W+X, inspected/total pages and range coverage; a first-page sample does not classify the entire allocation. `!etw` prioritizes logger name, status, mode, lost events and log file. WNF decoding includes readable lifetime/scope and owner-tag fields, while ETL import prioritizes provider/event/task/opcode identity.
 

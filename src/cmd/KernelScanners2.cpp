@@ -5,6 +5,8 @@
 #include "../core/MemoryString.h"
 #include "../core/KernelAnalysis.h"
 #include "../core/PeIdentity.h"
+#include "../core/TimerDpc.h"
+#include "../core/Piddb.h"
 #include "../util/FileReader.h"
 
 #include <dbgeng.h>
@@ -115,6 +117,35 @@ void CpuQueues(Ctx &ctx, bool timers)
                                                 layout.Field(L"nt", L"_DISPATCHER_HEADER", L"SignalState"));
     const auto context = layout.Field(L"nt", L"_KDPC", L"DeferredContext");
     const auto importance = layout.Field(L"nt", L"_KDPC", L"Importance");
+    const auto dpcType = layout.Field(L"nt", L"_KDPC", L"Type");
+    const auto never = timers ? layout.Address(L"nt", L"KiWaitNever") : std::nullopt;
+    const auto always = timers ? layout.Address(L"nt", L"KiWaitAlways") : std::nullopt;
+    std::optional<kncore::TimerDpcKeys> timerKeys;
+    const auto readKeys = [&]() -> std::optional<kncore::TimerDpcKeys>
+    {
+        kncore::TimerDpcKeys keys;
+        if (never && always && ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *never, &keys.Never) &&
+            ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *always, &keys.Always))
+        {
+            return keys;
+        }
+        return {};
+    };
+    if (timers && never && always && layout.VerifyProfile(kncore::KernelLayoutFamily::TimerDpc) &&
+        kncore::PiddbFieldMatches(timerDpc, 0x30, 8, kncore::FieldKind::Pointer) &&
+        kncore::PiddbFieldMatches(dpcType, 0, 1, kncore::FieldKind::Unsigned) &&
+        kncore::PiddbFieldMatches(routine, 0x18, 8, kncore::FieldKind::Pointer))
+    {
+        const auto scalar = [&](const wchar_t *name)
+        {
+            const auto shape = layout.Symbol(L"nt", name);
+            return shape ? kncore::PiddbFieldMatches(shape, 0, 8, kncore::FieldKind::Unsigned) : layout.PublicOnlySymbol(L"nt", name);
+        };
+        if (scalar(L"KiWaitNever") && scalar(L"KiWaitAlways"))
+        {
+            timerKeys = readKeys();
+        }
+    }
     const auto queue = layout.Field(L"nt", L"_KPRCB", timers ? L"TimerTable" : L"DpcData");
     const auto entries = timers ? layout.Field(L"nt", L"_KTIMER_TABLE", L"TimerEntries") : queue;
     const auto list = timers ? layout.Field(L"nt", L"_KTIMER_TABLE_ENTRY", L"Entry") : DpcSingleHead(layout);
@@ -178,25 +209,21 @@ void CpuQueues(Ctx &ctx, bool timers)
                 const uint64_t object = node - link->Offset;
                 const auto rawDpc = timers ? kncore::ReadField(ctx.Session, object, timerDpc) : std::optional<uint64_t>(object);
                 std::optional<uint64_t> function;
-                bool routineViaDpc = false;
+                const auto dpc = timers ? kncore::ValidatedTimerDpc(ctx.Session, architecture, object, rawDpc, timerKeys, dpcType) : rawDpc;
                 if (!timers)
                 {
                     function = kncore::ReadField(ctx.Session, object, routine);
                 }
-                else if (rawDpc && *rawDpc == 0)
+                else if (dpc && *dpc == 0)
                 {
                     function = 0;
                 }
-                else if (rawDpc && architecture.KernelPointer(*rawDpc))
+                else if (dpc)
                 {
-                    // A plain canonical DPC pointer is read through and the
-                    // routine is accepted only when its ownership resolves;
-                    // anything else keeps the unverified-decode caveat.
-                    const auto candidate = kncore::ReadField(ctx.Session, *rawDpc, routine);
-                    if (candidate && architecture.KernelPointer(*candidate) && owners.Find(*candidate, budget.Report.Stamp).Image)
+                    function = kncore::ReadField(ctx.Session, *dpc, routine);
+                    if (function == 0)
                     {
-                        function = candidate;
-                        routineViaDpc = true;
+                        function.reset();
                     }
                 }
                 auto row = kncore::RoutineObservation(budget.Report, architecture, owners, timers ? L"Timer.Dpc" : L"Dpc.DeferredRoutine",
@@ -206,6 +233,7 @@ void CpuQueues(Ctx &ctx, bool timers)
                 row.Set(L"cpu", knjson::Value(std::to_wstring(cpu)));
                 row.Set(L"queue", knjson::Value(std::to_wstring(bank)));
                 row.Set(L"rawDpc", kncore::OptionalNumber(rawDpc, true));
+                row.Set(L"dpc", kncore::OptionalNumber(dpc, true));
                 if (timers)
                 {
                     const auto due = kncore::ReadField(ctx.Session, object, dueTime);
@@ -219,10 +247,10 @@ void CpuQueues(Ctx &ctx, bool timers)
                         ++budget.Report.Collected.Unknown;
                     }
                 }
-                else
+                if (dpc && *dpc != 0)
                 {
-                    const auto parameter = kncore::ReadField(ctx.Session, object, context);
-                    const auto priority = kncore::ReadField(ctx.Session, object, importance);
+                    const auto parameter = kncore::ReadField(ctx.Session, *dpc, context);
+                    const auto priority = kncore::ReadField(ctx.Session, *dpc, importance);
                     row.Set(L"deferredContext", kncore::OptionalNumber(parameter, true));
                     row.Set(L"importance", kncore::OptionalNumber(priority));
                     if (!parameter || !priority)
@@ -230,17 +258,11 @@ void CpuQueues(Ctx &ctx, bool timers)
                         ++budget.Report.Collected.Unknown;
                     }
                 }
-                if (timers && rawDpc && *rawDpc == 0)
+                if (timers)
                 {
-                    row.Set(L"decode", knjson::Value(L"No DPC associated with this timer"));
-                }
-                else if (timers && !routineViaDpc)
-                {
-                    row.Set(L"decode", knjson::Value(L"Raw timer Dpc may be encoded; no unverified pointer decoder applied"));
-                }
-                else if (routineViaDpc)
-                {
-                    row.Set(L"decode", knjson::Value(L"Timer routine read through a canonical Dpc pointer"));
+                    row.Set(L"decode", knjson::Value(!timerKeys ? L"Timer DPC profile or keys unavailable" :
+                        !dpc ? L"Encoded DPC unavailable or invalid" : *dpc == 0 ? L"Verified encoded NULL DPC" : L"Verified encoded DPC"));
+                    row.Set(L"decoderProfile", timerKeys ? knjson::Value(kncore::KernelSymbolProfile28000Id) : knjson::Value());
                 }
                 EmitRow(ctx, budget, row);
                 return kncore::VisitDecision::Continue;
@@ -271,8 +293,17 @@ void CpuQueues(Ctx &ctx, bool timers)
         knjson::Value(L"Queues are transient; completed/active work outside these declared queues is not covered."));
     if (timers)
     {
+        const bool stableKeys = !timerKeys || readKeys() == timerKeys;
+        if (ctx.Session.Cancelled())
+        {
+            budget.Stop(kncore::Status::Cancelled, L"Cancelled");
+        }
+        else if (!stableKeys)
+        {
+            budget.Stop(kncore::Status::StaleContext, L"TimerDpcKeysChanged");
+        }
         budget.Report.Limitations.Push(knjson::Value(L"DueTime is the raw kernel timer value in 100-nanosecond units, not a UTC date. "
-            L"Period is in milliseconds; zero denotes a one-shot timer. Encoded DPC values remain undecoded."));
+            L"Period is in milliseconds; zero denotes a one-shot timer. DPC decoding requires the exact reviewed NT image and code."));
     }
     budget.Report.Analysis = knjson::Value::MakeObject();
     budget.Report.Analysis.Set(L"expectedQueues", knjson::Value(std::to_wstring(static_cast<uint64_t>(count) * banks)));
@@ -360,14 +391,15 @@ void ScanAlpc(Ctx &ctx)
             }
             return !ctx.Session.Cancelled();
         },
-        16, &error);
+        typeIndex, 16, &error);
     const auto command = ctx.Out.Details.CommandId;
     ctx.Out.Details = walker.Report();
     ctx.Out.Details.CommandId = command;
     ctx.Out.Details.Rows = rows;
     ctx.Out.Details.Collected.Unknown += unknown;
     ctx.Out.Details.Limitations.Push(
-        knjson::Value(L"Named object namespace only, depth 16; unnamed ALPC ports are outside this enumeration."));
+        knjson::Value(L"Root object namespace hash buckets only, depth 16; unnamed ports, private namespaces and shadow directories "
+                       L"are outside this enumeration."));
     if (unknown != 0 && ctx.Out.Details.State == kncore::Status::Success)
     {
         ctx.Out.Details.State = kncore::Status::Partial;

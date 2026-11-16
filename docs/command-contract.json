@@ -978,7 +978,7 @@
   {
     "name": "!ssdt",
     "group": "Kernel",
-    "summary": "list native SSDT handlers using a matched profile; report shadow-table limits",
+    "summary": "list verified native and shadow SSDT entry points with service IDs",
     "grammar": "!ssdt",
     "support": "Experimental",
     "capability": "KernelX64",

@@ -112,7 +112,7 @@ Use `!nmi` for the NMI callback chain, `!hal` for HAL dispatch function pointers
 
 ![SSDT scope-specific layout and extent gaps](docs/screenshots/ssdt-coverage.png)
 
-This guest's native-table extent and shadow descriptor/session relationship were unavailable. Zero rows do not establish a clean table. [Coverage workflow](docs/UX.md#read-a-collectors-coverage-limits)
+This screenshot predates the reviewed 28000.2952 profiles, which now expose 490 native entries and 1,497 registered win32k entry thunks on the validated target. Unsupported layouts still produce explicit gaps; zero rows do not establish a clean table. [Coverage workflow](docs/UX.md#read-a-collectors-coverage-limits)
 
 </details>
 
@@ -167,7 +167,7 @@ Run `!msrcheck` for LSTAR, CSTAR, STAR, FMASK and EFER on the verified current e
 
 ### DPC queues and timers
 
-Run `!dpc` for per-CPU routine, context and importance observations. `!timer` displays raw due time, period in milliseconds, signal state and timer object even when its DPC cannot be decoded. Compare completed queues with expected queues. Encoded DPCs remain Unknown, and active/completed work outside these queues is not covered. [Queue workflow](docs/UX.md#inspect-dpc-queues-and-timers)
+Run `!dpc` for per-CPU routine, context and importance observations. `!timer` displays raw due time, period in milliseconds, signal state and timer object. On the verified 28000.2952 NT image it also decodes the DPC, including encoded NULL, and resolves its routine. Other images retain Unknown when no decoder is verified. Compare completed queues with expected queues; active/completed work outside these queues is not covered. [Queue workflow](docs/UX.md#inspect-dpc-queues-and-timers)
 
 ### Host and target security observations
 
@@ -516,7 +516,7 @@ Page commands require an x64 kernel target. Big-pool commands require a live ker
 | Command / aliases | Purpose and availability | Syntax and examples |
 |---|---|---|
 | `!idt` | Inspect per-CPU IDT gates, handler addresses and modules; compare matching vectors across CPUs.<br>Experimental · Kernel x64 / dump | `!idt`<br>Examples: `!idt` |
-| `!ssdt` | Read native SSDT handlers using verified layouts and report unverified shadow-table coverage separately.<br>Experimental · Kernel x64 / dump | `!ssdt`<br>Examples: `!ssdt` |
+| `!ssdt` | Read verified native and Shadow SSDT entry points with service IDs; inspect per-table coverage.<br>Experimental · Kernel x64 / dump | `!ssdt`<br>Examples: `!ssdt` |
 | `!msrcheck` | Read LSTAR/CSTAR/STAR/FMASK/EFER on the verified selected CPU; other CPUs remain Unknown.<br>Experimental · Kernel x64 / dump | `!msrcheck`<br>Examples: `!msrcheck` |
 | `!cr` | Read saved per-CPU CR0, CR4 and CR8 values and decoded flags.<br>Experimental · Kernel x64 / dump | `!cr`<br>Examples: `!cr` |
 | `!dpc` | Walk declared per-CPU DPC queues; does not measure latency or cover completed work.<br>Experimental · Kernel x64 / dump | `!dpc`<br>Examples: `!dpc` |
