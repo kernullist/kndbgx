@@ -481,7 +481,7 @@ These collectors are Experimental and need an x64 kernel target with usable symb
 | `!devstack` | Walk the device stack attached to an observed device object.<br>Experimental · Kernel x64 / dump | `!devstack <device-address>`<br>Examples: `!devstack <device-address>` |
 | `!module` | Read loaded PE identity and section metadata; /disk adds a file comparison only in verified local KD.<br>Experimental · Kernel x64 / dump | `!module [module] [/disk]`<br>Examples: `!module fvevol`<br>`!module fvevol /disk` |
 | `!unloaded` | Inspect retained MmUnloadedDrivers entries; missing history does not establish erasure.<br>Experimental · Kernel x64 / dump | `!unloaded`<br>Examples: `!unloaded` |
-| `!piddb` | Walk PiDDBCacheTable when its layout and entries can be verified.<br>Experimental · Kernel x64 / dump | `!piddb`<br>Examples: `!piddb` |
+| `!piddb` | Show verified PiDDB driver names, raw PE timestamps and cached load-result NTSTATUS values. Entry decoding currently supports the 28000.2952 x64 profile.<br>Experimental · Kernel x64 / dump | `!piddb`<br>Examples: `!piddb` |
 | `!cihash` | Inspect kernel CI hash-bucket metadata when the required layout is available.<br>Experimental · Kernel x64 / dump | `!cihash`<br>Examples: `!cihash` |
 | `!mapper` | Collect !unloaded, !piddb and !cihash together, preserving each child result and its coverage.<br>Experimental · Kernel x64 / dump | `!mapper`<br>Examples: `!mapper` |
 | `!nmi` | Walk registered NMI callbacks and resolve their routines where possible.<br>Experimental · Kernel x64 / dump | `!nmi`<br>Examples: `!nmi` |

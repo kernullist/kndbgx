@@ -915,6 +915,7 @@
     { commands: "vtop kpage", kinds: "PageTranslation", fields: "va symbol pa dtb pageSize writable executable error entries" },
     { commands: "module", kinds: "ModulePeObservation", fields: "module base symbol size timestamp sections" },
     { commands: "unloaded", kinds: "UnloadedDriver", fields: "name StartAddress EndAddress CurrentTime index record ringNextIndex" },
+    { commands: "piddb", kinds: "PiDDBEntry", fields: "name timeDateStamp loadStatus loadStatusClass entry reason" },
     { commands: "token", kinds: "ProcessToken", fields: "process.pid tokenTypeName mandatoryLabelRid privilegesPresent privilegesEnabled privilegesEnabledByDefault address AuthenticationId TokenId SessionId" },
     { commands: "mapper", kinds: "", fields: "commandId status coverage.complete coverage.visitedEntries coverage.unknownEntries coverage.unreadableEntries coverage.stopReason" },
     { commands: "pool bigpool", kinds: "BigPoolAllocation", fields: "address symbol tag size nonPaged" },
@@ -967,6 +968,15 @@
 
   function columnLabel(path)
   {
+    if (path.length === 1 && firstToken(state.resultMeta.commandId || state.resultCommand).replace(/^!/, "").toLowerCase() === "piddb")
+    {
+      var piddbLabels = { name: "Driver name", timeDateStamp: "PE timestamp (raw)", loadStatus: "Load status (NTSTATUS)",
+        loadStatusClass: "Cached result", entry: "Cache entry" };
+      if (Object.prototype.hasOwnProperty.call(piddbLabels, path[0]))
+      {
+        return piddbLabels[path[0]];
+      }
+    }
     if (path.length === 1 && ["breakpoints", "event"].indexOf(state.resultMeta.commandId) >= 0)
     {
       var breakpointLabels = { condition: "Condition (/w)", expression: "Address expression", matchThreadId: "Debugger thread" };
@@ -1183,6 +1193,11 @@
         layout.kinds.indexOf("RecordReference") < 0;
       column.visible = index < (callbackColumns ? 6 : 9) && (rank(column) < 200 || layout.columns.length <= 3) &&
         (!callbackColumns || priority.indexOf(column.path.join(".")) >= 0);
+      if (state.resultCollection === "rows" && layout.kinds.indexOf("PiDDBEntry") >= 0 &&
+          firstToken(state.resultMeta.commandId || state.resultCommand).replace(/^!/, "").toLowerCase() === "piddb")
+      {
+        column.visible = priority.indexOf(column.path.join(".")) >= 0;
+      }
     });
     if (!visibleColumns().length && layout.columns.length)
     {

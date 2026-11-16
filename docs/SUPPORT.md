@@ -29,7 +29,7 @@ These names identify kernel images, which can differ from the OS build number. F
 
 Routine annotation can load the owning module's PDB through the current WinDbg symbol path. Verified names retain their provenance; missing or rejected names use `module+RVA` when ownership is known. A pending symbol load can delay cancellation. Use [Context details > Symbols](UX.md#context-symbols-and-waits) to inspect one module's identity and type availability.
 
-Shadow SSDT, private HAL/PiDDB/CI layouts, encoded timer DPC pointers and other missing metadata can remain unverified. Callback coverage includes declared notify, object and registry families, not every callback mechanism in Windows. Object flags are the operation mask; notify context and registry flags have different meanings.
+Shadow SSDT, private HAL/CI layouts, encoded timer DPC pointers and other missing metadata can remain unverified. PiDDB entry decoding currently requires the exact reviewed 28000.2952 x64 image/PDB and code profile; other layouts remain unverified. Callback coverage includes declared notify, object and registry families, not every callback mechanism in Windows. Object flags are the operation mask; notify context and registry flags have different meanings.
 
 ## Interpretation limits
 

@@ -1213,7 +1213,7 @@ const std::vector<CommandSpec> &CommandSpecs()
         {L"!piddb",
          {},
          L"Kernel",
-         L"PiDDBCacheTable walk",
+         L"PiDDB cached driver load results",
          L"!piddb",
          Effect::TargetRead,
          Capability::KernelX64,

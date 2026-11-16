@@ -263,7 +263,7 @@ def package(configuration, output, private_patterns=()):
         name = "docs/screenshots/" + screenshot
         files[name] = read_public_file(ROOT, name)
     for profile in ("nt-26100.8655-callbacks-x64.json", "nt-26100.8655-symbols-x64.json",
-                    "nt-26100.8655-x64.json", "nt-28000.2952-callbacks-x64.json"):
+                    "nt-26100.8655-x64.json", "nt-28000.2952-callbacks-x64.json", "nt-28000.2952-piddb-x64.json"):
         name = "profiles/" + profile
         files[name] = read_public_file(ROOT, name)
     sources = source_manifest(private_patterns)

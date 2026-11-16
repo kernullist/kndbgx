@@ -5,6 +5,7 @@
 namespace kncore
 {
 inline constexpr wchar_t KernelSymbolProfileId[] = L"NT-26100.8655-symbols-PDB-11D7FE79-age1";
+inline constexpr wchar_t PiddbProfileId[] = L"NT-28000.2952-PiDDB-PDB-4660396C-age1";
 
 enum class KernelLayoutFamily
 {
@@ -14,11 +15,21 @@ enum class KernelLayoutFamily
     HostSilo,
     Nmi,
     Unloaded,
-    Firmware
+    Firmware,
+    Piddb
 };
 
 inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFamily family)
 {
+    // Reviewed insertion, comparison and lookup code establishes the private payload.
+    static const std::array<CallbackCodeWindow, 6> piddb = {{
+        {L"RtlInsertElementGenericTableFullAvl", 0x41a3b0, 0xbf, L"4c8bc6488d4f20498bd7e802103300"},
+        {L"PiCompareDDBCacheEntries", 0xb1f990, 0xf,
+         L"450fb74810488bfa0fb75210498bd84d8b4018488bf149d1e9488b4f1848d1eac644242001e88700deff"},
+        {L"PiCompareDDBCacheEntries", 0xb1f990, 0x46, L"8b43208b4f203bc1"},
+        {L"PiUpdateDriverDBCache", 0xb2e66c, 0x104, L"4533c9488d55c0488d0d029d4a00458d4138e809b68eff"},
+        {L"PiUpdateDriverDBCache", 0xb2e66c, 0x1bd, L"448965e4f30f7f45e8418b47088945e0"},
+        {L"PiLookupInDDBCache", 0x918554, 0x12a, L"8b58244885ed7490"}}};
     // Exact image and target code corroboration; no instruction-pattern searches.
     static const std::array<CallbackCodeWindow, 1> objectTypes = {
         {{L"ObGetObjectType", 0x9b3340, 0, L"488d41d00fb649e848c1e8080fb6c04833c10fb60d332b61004833c1488d0ddd346100488b04c1c3"}}};
@@ -69,6 +80,8 @@ inline std::span<const CallbackCodeWindow> KernelProfileWindows(KernelLayoutFami
         return unloaded;
     case KernelLayoutFamily::Firmware:
         return firmware;
+    case KernelLayoutFamily::Piddb:
+        return piddb;
     }
     return {};
 }
@@ -82,6 +95,7 @@ inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbol
     static const std::pair<const wchar_t *, uint32_t> nmi[] = {{L"KiNmiCallbackListHead", 0xf468d0}};
     static const std::pair<const wchar_t *, uint32_t> unloaded[] = {{L"MmUnloadedDrivers", 0xef5250}, {L"MmLastUnloadedDriver", 0xef5248}};
     static const std::pair<const wchar_t *, uint32_t> firmware[] = {{L"ExpFirmwareTableProviderListHead", 0xefec90}};
+    static const std::pair<const wchar_t *, uint32_t> piddb[] = {{L"PiDDBCacheTable", 0xfd8480}};
     switch (family)
     {
     case KernelLayoutFamily::ObjectTypes:
@@ -98,6 +112,8 @@ inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbol
         return unloaded;
     case KernelLayoutFamily::Firmware:
         return firmware;
+    case KernelLayoutFamily::Piddb:
+        return piddb;
     }
     return {};
 }
@@ -105,7 +121,8 @@ inline std::span<const std::pair<const wchar_t *, uint32_t>> KernelProfileSymbol
 template <typename Resolve>
 const wchar_t *VerifyKernelProfile(TargetReader &reader, const ModuleIdentity &identity, KernelLayoutFamily family, Resolve resolve)
 {
-    if (!CallbackProfileIdentity(identity) || KernelProfileWindows(family).empty())
+    const bool matched = family == KernelLayoutFamily::Piddb ? CallbackProfile28000Identity(identity) : CallbackProfileIdentity(identity);
+    if (!matched || KernelProfileWindows(family).empty())
     {
         return L"NoMatchingKernelProfile";
     }

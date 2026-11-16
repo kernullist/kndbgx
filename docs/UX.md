@@ -239,6 +239,12 @@ Drag the Row details divider to widen the text. Long field previews may end with
 
 ### Inspect driver history
 
+Run `!piddb` for individual cached driver records. The default columns are **Driver name**, **PE timestamp (raw)**, **Load status (NTSTATUS)**, **Cached result** and **Cache entry**. AVL links remain in Row details and export, with address navigation available for nonzero parent and child pointers. An unreadable name stays unknown with a reason; other readable entries are retained.
+
+The private PiDDB payload is currently verified for x64 kernel 28000.2952 with PDB `4660396C-2030-4C03-9AF4-5FC6B15ADF98`, age 1. Image identity, matched PDB field shapes, table comparator and reviewed target code must agree. Unsupported layouts produce a coverage diagnostic instead of address-only driver rows. Traversal checks parents, cycles and the declared element count, with a 30-second budget and cancellation. A blocking debugger read can exceed that budget; when it returns, an expired or cancelled collection remains incomplete and retains already collected records.
+
+**Load status** is the cached NTSTATUS, not current module residency. **PE timestamp (raw)** is the PE header value, not load time; reproducible builds can use a hash there. PiDDB does not enumerate processes. See [Microsoft's reproducible PE description](https://learn.microsoft.com/en-us/dotnet/fundamentals/runtime-libraries/system-reflection-portableexecutable-debugdirectoryentrytype).
+
 1. Run `!mapper` from Library to collect `!unloaded`, `!piddb` and `!cihash` into one retained result.
 2. Read each child collection's **Command ID**, **Status**, **Coverage / Complete** and stop reason. The outer rows represent collections, not individual drivers.
 3. Run a child command separately for its own table. Open **Row details / Raw record** or export the composite result to inspect nested evidence.

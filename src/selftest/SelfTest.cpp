@@ -35,6 +35,7 @@
 #include "MemoryExportRegression.h"
 #include "PlatformPostureRegression.h"
 #include "DiagnosticRegression.h"
+#include "PiddbRegression.h"
 
 #include <cstdio>
 #include <string>
@@ -706,6 +707,7 @@ int wmain(int argc, wchar_t **argv)
     knself::RunCallbackRegression(Check);
     knself::RunPresentationRegression(Check);
     knself::RunKernelSymbolRegression(Check);
+    knself::RunPiddbRegression(Check);
     knself::RunMemoryRegression(Check);
     knself::RunMemoryExportRegression(Check);
     knself::RunPlatformPostureRegression(Check);

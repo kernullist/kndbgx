@@ -1,0 +1,81 @@
+{
+  "schema": "kndbgx.symbol-profile.v1",
+  "id": "NT-28000.2952-PiDDB-PDB-4660396C-age1",
+  "support": "Experimental",
+  "machine": "0x8664",
+  "timestamp": "0xe1a9f520",
+  "imageSize": "0x1459000",
+  "pdbGuid": "4660396c-2030-4c03-9af4-5fc6b15adf98",
+  "pdbAge": 1,
+  "scope": "PiDDB cached driver name, raw PE TimeDateStamp and load-result NTSTATUS",
+  "runtimeImplementation": "src/core/KernelSymbolProfile.h and src/core/Piddb.h; this file cannot enable additional kernels",
+  "table": {
+    "symbol": "PiDDBCacheTable",
+    "rva": "0xfd8480",
+    "storage": "Inline RTL_AVL_TABLE, corroborated by PiUpdateDriverDBCache",
+    "requiredPdbFields": [
+      "_RTL_AVL_TABLE.BalancedRoot",
+      "_RTL_AVL_TABLE.NumberGenericTableElements",
+      "_RTL_AVL_TABLE.DeleteCount",
+      "_RTL_AVL_TABLE.CompareRoutine",
+      "_RTL_BALANCED_LINKS.Parent",
+      "_RTL_BALANCED_LINKS.LeftChild",
+      "_RTL_BALANCED_LINKS.RightChild",
+      "_UNICODE_STRING.Length",
+      "_UNICODE_STRING.MaximumLength",
+      "_UNICODE_STRING.Buffer"
+    ]
+  },
+  "payload": {
+    "offsetFromNode": "0x20",
+    "insertedBytes": "0x38",
+    "name": "0x10",
+    "timeDateStamp": "0x20",
+    "loadStatus": "0x24",
+    "evidence": "RtlInsertElementGenericTableFullAvl copies after the 0x20-byte links; PiCompareDDBCacheEntries compares the Unicode name and PE timestamp; PiUpdateDriverDBCache inserts 0x38 bytes; PiLookupInDDBCache returns the status at +0x24"
+  },
+  "limitations": [
+    "TimeDateStamp is not a load time and can be a reproducible-build hash.",
+    "A cached result does not establish current driver residency or process identity.",
+    "Missing records do not establish history erasure.",
+    "Other kernel identities and missing or changed code windows are not decoded."
+  ],
+  "windows": [
+    {
+      "symbol": "RtlInsertElementGenericTableFullAvl",
+      "rva": "0x41a3b0",
+      "offset": "0xbf",
+      "bytes": "4c8bc6488d4f20498bd7e802103300"
+    },
+    {
+      "symbol": "PiCompareDDBCacheEntries",
+      "rva": "0xb1f990",
+      "offset": "0xf",
+      "bytes": "450fb74810488bfa0fb75210498bd84d8b4018488bf149d1e9488b4f1848d1eac644242001e88700deff"
+    },
+    {
+      "symbol": "PiCompareDDBCacheEntries",
+      "rva": "0xb1f990",
+      "offset": "0x46",
+      "bytes": "8b43208b4f203bc1"
+    },
+    {
+      "symbol": "PiUpdateDriverDBCache",
+      "rva": "0xb2e66c",
+      "offset": "0x104",
+      "bytes": "4533c9488d55c0488d0d029d4a00458d4138e809b68eff"
+    },
+    {
+      "symbol": "PiUpdateDriverDBCache",
+      "rva": "0xb2e66c",
+      "offset": "0x1bd",
+      "bytes": "448965e4f30f7f45e8418b47088945e0"
+    },
+    {
+      "symbol": "PiLookupInDDBCache",
+      "rva": "0x918554",
+      "offset": "0x12a",
+      "bytes": "8b58244885ed7490"
+    }
+  ]
+}

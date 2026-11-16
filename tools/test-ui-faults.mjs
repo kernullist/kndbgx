@@ -1408,6 +1408,26 @@ async function openTable(app, command, rows, options = {})
     }
 }
 
+await check("T-UI-PIDDB driver identity and cached status replace topology columns", async () =>
+{
+    const app = harness();
+    await app.boot();
+    const row = { kind: "PiDDBEntry", name: "fixture.sys", timeDateStamp: "0xfedcba98", loadStatus: "0x00000000",
+        loadStatusClass: "STATUS_SUCCESS", entry: "0xffff800000002020",
+        topology: { kind: "PiDDBAvlNode", address: "0xffff800000002000", parent: "0xffff800000001000", left: "0x0", right: "0x0" } };
+    await openTable(app, "!piddb", [row]);
+    assert.deepEqual(headers(app), ["#", "Driver name", "PE timestamp (raw)", "Load status (NTSTATUS)", "Cached result", "Cache entry"]);
+    assert.equal(tableCell(app, 0, "Driver name"), "fixture.sys");
+    assert.equal(tableCell(app, 0, "PE timestamp (raw)"), "0xfedcba98");
+    assert.equal(tableCell(app, 0, "Load status (NTSTATUS)"), "0x00000000");
+    assert.equal(tableCell(app, 0, "Cached result"), "STATUS_SUCCESS");
+    const unavailable = { ...row, name: null, reason: "UnreadableDriverName", loadStatus: "0xc0000428", loadStatusClass: "Error" };
+    await openTable(app, "!piddb", [unavailable], { id: "piddb-partial" });
+    assert.equal(tableCell(app, 0, "Driver name"), "Unknown");
+    assert.equal(tableCell(app, 0, "Reason"), "UnreadableDriverName");
+    assert.equal(tableCell(app, 0, "Cached result"), "Error");
+});
+
 await check("T-UI-STACK captured identity survives sorting, context changes and retained-result recall", async () =>
 {
     const app = harness({ breakpointAuto: false });

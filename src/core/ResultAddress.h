@@ -59,7 +59,7 @@ inline std::optional<std::wstring> AddressFieldSpace(const knjson::Value &row, c
     {
         return explicitSpace.IsString() ? explicitSpace.AsString(L"") : inheritedSpace;
     }
-    if (row.Get(L"kind").AsString(L"") == L"PiDDBAvlNode" && (field == L"left" || field == L"right"))
+    if (kind == L"PiDDBAvlNode" && (field == L"parent" || field == L"left" || field == L"right"))
     {
         return L"virtual";
     }

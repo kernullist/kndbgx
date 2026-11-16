@@ -1,5 +1,6 @@
 #include "CollectorSupport.h"
 #include "../core/ObjectRead.h"
+#include "../core/Piddb.h"
 #include "../util/SnapshotStore.h"
 
 #include <windows.h>
@@ -330,59 +331,53 @@ void ScanPiddb(Ctx &ctx)
 {
     kncore::WalkBudget budget;
     kncore::TargetArchitecture architecture;
-    if (!BeginCollection(ctx, budget, architecture, L"TargetMemory:PiDDBAvlTopology"))
+    if (!BeginCollection(ctx, budget, architecture, L"TargetMemory:PiDDBCache"))
     {
         return;
     }
     knengine::LayoutResolver layout(ctx.Session);
     const auto table = SymbolAddress(ctx.Session, layout, L"nt", L"PiDDBCacheTable");
-    const auto root = kncore::NestedField(layout.Field(L"nt", L"_RTL_AVL_TABLE", L"BalancedRoot"),
-                                          layout.Field(L"nt", L"_RTL_BALANCED_LINKS", L"RightChild"));
-    const auto left = layout.Field(L"nt", L"_RTL_BALANCED_LINKS", L"LeftChild");
-    const auto right = layout.Field(L"nt", L"_RTL_BALANCED_LINKS", L"RightChild");
-    const auto first = table ? kncore::ReadField(ctx.Session, *table, root) : std::nullopt;
-    if (!first || !left || !right)
+    const auto compare = layout.Address(L"nt", L"PiCompareDDBCacheEntries");
+    ULONG linksSize = 0;
+    const auto field = [&](const wchar_t *type, const wchar_t *name, uint32_t offset, uint32_t size, kncore::FieldKind kind)
     {
-        UnknownScope(ctx, budget, L"PiDDB", L"Root or RTL_BALANCED_LINKS metadata unavailable");
+        return kncore::PiddbFieldMatches(layout.Field(L"nt", type, name), offset, size, kind);
+    };
+    using kncore::FieldKind;
+    const bool verified = table && compare && layout.VerifyProfile(kncore::KernelLayoutFamily::Piddb) &&
+        layout.PublicOnlySymbol(L"nt", L"PiDDBCacheTable") &&
+        layout.TypeSize(L"_RTL_BALANCED_LINKS", &linksSize) && linksSize == 0x20 &&
+        field(L"_RTL_AVL_TABLE", L"BalancedRoot", 0, 0x20, FieldKind::Composite) &&
+        field(L"_RTL_AVL_TABLE", L"NumberGenericTableElements", 0x2c, 4, FieldKind::Unsigned) &&
+        field(L"_RTL_AVL_TABLE", L"DeleteCount", 0x40, 4, FieldKind::Unsigned) &&
+        field(L"_RTL_AVL_TABLE", L"CompareRoutine", 0x48, 8, FieldKind::Pointer) &&
+        field(L"_RTL_BALANCED_LINKS", L"Parent", 0, 8, FieldKind::Pointer) &&
+        field(L"_RTL_BALANCED_LINKS", L"LeftChild", 8, 8, FieldKind::Pointer) &&
+        field(L"_RTL_BALANCED_LINKS", L"RightChild", 0x10, 8, FieldKind::Pointer) &&
+        field(L"_UNICODE_STRING", L"Length", 0, 2, FieldKind::Unsigned) &&
+        field(L"_UNICODE_STRING", L"MaximumLength", 2, 2, FieldKind::Unsigned) &&
+        field(L"_UNICODE_STRING", L"Buffer", 8, 8, FieldKind::Pointer);
+    if (!verified)
+    {
+        UnknownScope(ctx, budget, L"PiDDBPayload", L"No verified PiDDB entry layout for this kernel: " + layout.Diagnostic());
     }
     else
     {
-        std::vector<uint64_t> stack = {*first};
-        while (!stack.empty() && CheckCollection(ctx, budget))
+        budget.Report.LayoutProfile = kncore::PiddbProfileId;
+        kncore::CollectPiddbEntries(ctx.Session, architecture, *table, *compare, budget);
+        size_t printed = 0;
+        for (const auto &row : budget.Report.Rows.Items())
         {
-            const auto node = stack.back();
-            stack.pop_back();
-            if (node == 0)
+            if (++printed > 256)
             {
-                continue;
-            }
-            if (!architecture.KernelPointer(node) || !budget.Consume(node, architecture))
-            {
-                budget.Stop(kncore::Status::Partial, L"InvalidAvlNodeOrCycle");
                 break;
             }
-            const auto a = kncore::ReadField(ctx.Session, node, left);
-            const auto b = kncore::ReadField(ctx.Session, node, right);
-            auto row = knjson::Value::MakeObject();
-            row.Set(L"kind", knjson::Value(L"PiDDBAvlNode"));
-            row.Set(L"address", knjson::Value(kncore::Hex(node)));
-            row.Set(L"left", kncore::OptionalNumber(a, true));
-            row.Set(L"right", kncore::OptionalNumber(b, true));
-            row.Set(L"payload", knjson::Value());
-            EmitRow(ctx, budget, row);
-            if (!a || !b)
-            {
-                ++budget.Report.Collected.Unreadable;
-                budget.Stop(kncore::Status::Partial, L"UnreadableAvlChild");
-                break;
-            }
-            ++budget.Report.Collected.Read;
-            stack.push_back(*a);
-            stack.push_back(*b);
+            ctx.Out.AddLine(row.Write());
         }
-        UnknownScope(ctx, budget, L"PiDDBPayload",
-                     L"RTL_BALANCED_LINKS topology is available; private payload offset/type requires a verified profile");
     }
+    budget.Report.Limitations.Push(knjson::Value(L"PiDDB stores cached driver load results, not processes or current module residency. "
+        L"TimeDateStamp is the raw PE header value, not a load time; reproducible builds can use a hash. "
+        L"Missing cache entries do not establish history erasure."));
     FinishCollection(ctx, budget);
 }
 

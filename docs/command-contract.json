@@ -1262,7 +1262,7 @@
   {
     "name": "!piddb",
     "group": "Kernel",
-    "summary": "PiDDBCacheTable walk",
+    "summary": "PiDDB cached driver load results",
     "grammar": "!piddb",
     "support": "Experimental",
     "capability": "KernelX64",

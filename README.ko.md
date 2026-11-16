@@ -481,7 +481,7 @@ Previous/Next는 성공적으로 읽은 범위를 기준으로 이동한다. 주
 | `!devstack` | 관찰한 디바이스 객체의 연결된 디바이스 스택을 순회한다.<br>Experimental · x64 커널·덤프 | `!devstack <device-address>`<br>예제: `!devstack <device-address>` |
 | `!module` | 로드된 PE의 식별 정보와 섹션 메타데이터를 읽는다. /disk 파일 비교는 검증된 로컬 KD에서만 가능하다.<br>Experimental · x64 커널·덤프 | `!module [module] [/disk]`<br>예제: `!module fvevol`<br>`!module fvevol /disk` |
 | `!unloaded` | 남아 있는 MmUnloadedDrivers 항목을 확인한다. 기록 부재가 이력 삭제의 증거는 아니다.<br>Experimental · x64 커널·덤프 | `!unloaded`<br>예제: `!unloaded` |
-| `!piddb` | 레이아웃과 항목을 검증할 수 있을 때 PiDDBCacheTable을 순회한다.<br>Experimental · x64 커널·덤프 | `!piddb`<br>예제: `!piddb` |
+| `!piddb` | 검증된 PiDDB 항목의 드라이버 이름·원시 PE 타임스탬프·캐시된 로드 상태(NTSTATUS)를 표시한다. 현재 항목 해석은 28000.2952 x64 프로필을 지원한다.<br>Experimental · x64 커널·덤프 | `!piddb`<br>예제: `!piddb` |
 | `!cihash` | 필요한 레이아웃이 있을 때 커널 CI 해시 버킷 메타데이터를 확인한다.<br>Experimental · x64 커널·덤프 | `!cihash`<br>예제: `!cihash` |
 | `!mapper` | !unloaded·!piddb·!cihash를 함께 수집하고 각 하위 결과와 수집 범위를 보존한다.<br>Experimental · x64 커널·덤프 | `!mapper`<br>예제: `!mapper` |
 | `!nmi` | 등록된 NMI 콜백을 순회하고 가능한 함수 정보를 해석한다.<br>Experimental · x64 커널·덤프 | `!nmi`<br>예제: `!nmi` |
