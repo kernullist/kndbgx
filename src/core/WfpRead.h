@@ -4,6 +4,7 @@
 #include "Walker.h"
 #include "WfpNames.h"
 #include "../util/HostCollectors.h"
+#include "../util/Text.h"
 #include <bit>
 #include <map>
 #include <span>
@@ -14,6 +15,11 @@ static_assert(sizeof(FWPS_FILTER3) == 0x40 && offsetof(FWPS_FILTER3, filterCondi
               offsetof(FWPS_FILTER3, action) == 0x28 && offsetof(FWPS_FILTER3, context) == 0x30);
 static_assert(sizeof(FWPS_FILTER_CONDITION0) == 0x18 && offsetof(FWPS_FILTER_CONDITION0, conditionValue) == 8);
 static_assert(sizeof(FWP_VALUE0) == 16 && sizeof(FWP_BYTE_BLOB) == 16 && sizeof(FWP_RANGE0) == 32);
+
+inline bool WfpTerminalRead(Status state)
+{
+    return state == Status::Cancelled || state == Status::StaleContext || state == Status::InternalFault;
+}
 
 inline uint64_t WfpInteger(std::span<const unsigned char> bytes, size_t offset, size_t width)
 {
@@ -215,6 +221,11 @@ class WfpReader
             return std::nullopt;
         }
         const auto read = Reader.Read(AddressSpace::Virtual, address, size);
+        if (WfpTerminalRead(read.State))
+        {
+            Budget.Stop(read.State, L"WfpReadStopped");
+            return std::nullopt;
+        }
         if (!ExactBytes(read, size))
         {
             ++Budget.Report.Collected.Unreadable;
@@ -786,7 +797,7 @@ inline bool ReadWfpFilter(kncore::WfpReader &read, const kncore::WfpHashEntry &e
             summary += name + L" " + WfpMatchName(match) + L" " + condition.Get(L"value").AsString(L"Unknown");
             if (summary.size() > 4096)
             {
-                summary.resize(4096);
+                summary.resize(knutil::Utf16PrefixUnits(summary, 4096));
                 summary += L" [see conditions]";
             }
         }

@@ -45,7 +45,7 @@ void CollectBfeMetadata(Ctx &ctx, const kncore::TargetArchitecture &architecture
         CollectProcesses(ctx.Session, layout, &processes, inventory);
         if (inventory.Details.State != Status::Success || !inventory.Details.Collected.Complete)
         {
-            budget.Stop(inventory.Details.State == Status::Cancelled ? Status::Cancelled : Status::Unavailable,
+            budget.Stop(WfpTerminalRead(inventory.Details.State) ? inventory.Details.State : Status::Unavailable,
                         L"BfeProcessInventoryIncomplete");
             break;
         }
@@ -83,9 +83,9 @@ void CollectBfeMetadata(Ctx &ctx, const kncore::TargetArchitecture &architecture
             const auto base = FindBfeModule(candidateRead, *peb);
             if (!base)
             {
-                if (probe.Report.State == Status::Cancelled)
+                if (WfpTerminalRead(probe.Report.State))
                 {
-                    budget.Stop(Status::Cancelled, L"Cancelled");
+                    budget.Stop(probe.Report.State, L"BfeProcessReadStopped");
                     break;
                 }
                 discoveryComplete = false;
@@ -375,7 +375,7 @@ void ScanTargetWfp(Ctx &ctx)
             if (!complete || mismatch)
             {
                 const auto state = bfeBudget.Report.State;
-                budget.Stop(state == Status::Cancelled || state == Status::InternalFault ? state : Status::Partial,
+                budget.Stop(WfpTerminalRead(state) ? state : Status::Partial,
                             mismatch ? L"BfeRuntimeIdentityMismatch" : L"BfeMetadataIncomplete");
             }
             ctx.Out.AddLine(L"[wfp.bfe] records=" + std::to_wstring(records.size()) + L" matched=" + std::to_wstring(matched) +

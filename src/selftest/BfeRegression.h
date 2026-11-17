@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CollectorRegression.h"
+#include "WfpRegression.h"
 #include "../core/BfeRead.h"
 
 namespace knself
@@ -9,6 +10,24 @@ template <typename Check> void RunBfeRegression(Check check)
 {
     using namespace kncore;
     const TargetArchitecture architecture{0x8664, 8, 48, {}};
+    for (const auto status : {Status::Cancelled, Status::StaleContext, Status::InternalFault})
+    {
+        WfpTerminalReader physical;
+        physical.State = status;
+        BfeProcessReader memory(physical, [](uint64_t) -> std::optional<uint64_t>
+        {
+            return 0x8000;
+        });
+        WalkBudget bytesBudget;
+        BfeReader bytesRead(memory, bytesBudget);
+        check(!bytesRead.Bytes(0x10000, 8) && bytesBudget.Stopped && bytesBudget.Report.State == status &&
+              !bytesRead.Bytes(0x10008, 8) && physical.Reads == 1,
+              "bfe.physical-terminal-read-preserves-status-and-stops");
+        WalkBudget textBudget;
+        BfeReader textRead(memory, textBudget);
+        check(textRead.Text(0x10000).Get(L"value").IsNull() && textBudget.Stopped && textBudget.Report.State == status,
+              "bfe.terminal-read-cannot-publish-a-string");
+    }
     {
         ByteFixture physical;
         physical.Put(0x8ffe, 0x2211, 2);
@@ -92,6 +111,20 @@ template <typename Check> void RunBfeRegression(Check check)
         return memory;
     };
     std::vector<BfeRecord> records;
+    for (const auto status : {Status::Cancelled, Status::StaleContext, Status::InternalFault})
+    {
+        auto memory = fixture(0);
+        WfpTerminalReader fault;
+        fault.State = status;
+        fault.Fallback = &memory;
+        fault.FailAt = text;
+        WalkBudget budget;
+        BfeReader read(fault, budget);
+        read.RecordUnits = 2 * 1024 * 1024;
+        std::vector<BfeRecord> rows;
+        check(!ReadBfeTable(read, architecture, module, manager, 0, rows) && rows.empty() && budget.Report.State == status,
+              "bfe.text-read-terminal-status-survives-record-budget");
+    }
     for (const auto type : {0u, 2u, 3u, 4u, 5u})
     {
         auto memory = fixture(type);

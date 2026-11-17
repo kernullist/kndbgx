@@ -41,7 +41,7 @@ The validation script rebuilds Debug/Release solution and direct projects, runs 
 
 The packager accepts Release only. It checks generated docs, dependency hashes, binary hardening, matching local PDB identity and publication policy, then verifies the archive. Existing output paths are refused. The ZIP contains the DLL, DIA runtime, MIT license, user guides and their selected screenshots, command metadata, profile descriptions, third-party notices, a release manifest and an SBOM. PDBs and raw session exports remain local. The source manifest hashes current tracked bytes and records a dirty worktree; it does not attest to test completion or include untracked source files.
 
-`tools/test-release-privacy.py` also builds a fixture archive and checks that every profile linked by packaged `SUPPORT.md` is present with its exact source bytes and manifest hash, including the Win32kbase process-filter policy profile.
+`tools/test-release-privacy.py` also builds a fixture archive and checks that every profile linked by packaged `SUPPORT.md` is present with its exact source bytes and manifest hash, including the Win32kbase process-filter policy and NETIO/fwpkclnt/BFE WFP profiles.
 
 ## Additional and target-specific checks
 
@@ -163,3 +163,13 @@ Adversarial coverage includes process-scoped translations and cross-page physica
 The accepted combined run completed with Success, 1,868/1,868 visited entries, zero unknown/unreadable entries and 481 table rows. An independent native WinDbg oracle matched 4,259 name/description, GUID-relationship, flag, service-name, sublayer-weight and layer-field values without discrepancies. Release self-tests passed 1,741 assertions, the UI fault suite 311 scenarios, the affected rendered-browser column suite eight scenarios, and engine integration 184 assertions across normal/deferred fixtures. Publication privacy fixtures passed 36 tests. Context checks retained the original implicit process/thread, RIP and stopped target uptime.
 
 The final loaded build also ran the default `!wfp` through the KNDbgX command box. The rendered 258-row table showed filter names, descriptions, provider names and sublayer names beside IDs and actions, with the original stopped process context retained.
+
+### Session-wide adversarial follow-up
+
+Review of the fourteen commits from PiDDB record decoding through BFE enrichment found three further issues. WFP required reads could demote terminal statuses to Partial, while optional reads could continue; BFE physical/text reads and discovery also lost stale-context or internal-fault states. Those paths now stop with the original terminal status, and a later record-output limit cannot overwrite it. A long condition summary could split a UTF-16 surrogate pair at its display limit and fail strict JSON serialization; truncation now uses the existing surrogate-safe prefix helper while retaining full structured condition values. The release archive also omitted the three WFP profile descriptions; the package and support links now include them.
+
+The read-status and Unicode failures were reproduced with synthetic target memory before correction. New regression cases exercise required and optional reads, physical-to-user reads, text failure adjacent to the aggregate record limit, and two long application-ID conditions whose summary crosses a surrogate pair. The package fixture independently failed for each omitted profile before the package list was corrected. SDK inspection rejected a separate field-width hypothesis: `FWPM_SUBLAYER0.flags` is 32 bits and its existing decoder remains unchanged.
+
+The full Debug/Release solution and direct-project gate passed 1,757 native assertions per run, frontend fault checks, normal/deferred-symbol engine integration, binary hardening/PDB checks, reproducible Release builds and publication-privacy checks. All 176 rendered-browser scenarios and 36 privacy/package fixtures passed. The final process-inventory status-propagation correction passed affected Debug/Release builds, native tests and engine checks. Two subsequent clean Release builds produced byte-identical DLLs with matching PDB identities.
+
+Fresh WinDbg validation of this follow-up is pending: host desktop input returned `GetCursorPos` access denied (`0x80070005`). The earlier target captures above validate the preceding builds; they are not a new live run of this follow-up. The new terminal-status and Unicode failure paths are covered by synthetic reader fixtures. The VM was not resumed and its network configuration was not changed.

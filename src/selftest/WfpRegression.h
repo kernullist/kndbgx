@@ -6,11 +6,49 @@
 
 namespace knself
 {
+class WfpTerminalReader final : public kncore::TargetReader
+{
+  public:
+    kncore::Status State = kncore::Status::Cancelled;
+    size_t Reads = 0;
+    kncore::TargetReader *Fallback = nullptr;
+    uint64_t FailAt = 0;
+    kncore::ReadResult Read(kncore::AddressSpace space, uint64_t address, size_t length) override
+    {
+        ++Reads;
+        if (Fallback != nullptr && address != FailAt)
+        {
+            return Fallback->Read(space, address, length);
+        }
+        kncore::ReadResult result;
+        result.Space = space;
+        result.Address = address;
+        result.Requested = result.Transferred = length;
+        result.Bytes.resize(length);
+        result.Valid.assign(length, 1);
+        result.State = State;
+        return result;
+    }
+};
+
 template <typename Check> void RunWfpRegression(Check check)
 {
     using namespace kncore;
     constexpr uint64_t base = 0xfffff80000000000ULL;
     const TargetArchitecture architecture{0x8664, 8, 48, {}};
+    for (const auto status : {Status::Cancelled, Status::StaleContext, Status::InternalFault})
+    {
+        for (const bool required : {false, true})
+        {
+            WfpTerminalReader memory;
+            memory.State = status;
+            WalkBudget budget;
+            WfpReader read(memory, architecture, budget);
+            check(!read.Bytes(base, 8, required) && budget.Stopped && budget.Report.State == status &&
+                  !read.Integer(base + 8, 8) && memory.Reads == 1,
+                  "wfp.terminal-read-stops-required-and-optional-collection");
+        }
+    }
     for (const auto module : {L"NETIO", L"fwpkclnt", L"nt"})
     {
         ModuleIdentity identity;
@@ -279,6 +317,49 @@ template <typename Check> void RunWfpRegression(Check check)
         check(ReadWfpFilter(missingRead, entry, {}, row) && row.Get(L"calloutId").AsString(L"") == L"7" &&
                   missing.Report.Collected.Unknown == 1 && row.Get(L"calloutKey").IsNull(),
               "wfp.missing-referenced-callout-is-an-unknown-not-absence");
+
+        memory.Put(runtime + 0x28, FWP_ACTION_PERMIT, 4);
+        memory.Put(runtime + 0x1c, 2, 4);
+        const auto field = FWPS_FIELD_ALE_AUTH_CONNECT_V4_ALE_APP_ID;
+        const auto prefix = WfpFieldName(entry.Layer, field) + L" Equal ";
+        const std::wstring firstName(2048, L'a');
+        const std::wstring secondName = std::wstring(4095 - (prefix.size() * 2 + firstName.size() + 2), L'b') +
+                                       wchar_t(0xd83d) + wchar_t(0xde00) + L"tail";
+        for (size_t i = 0; i < 2; ++i)
+        {
+            const auto condition = runtime + 0x100 + i * 0x18;
+            const auto blob = runtime + 0x200 + i * 0x10;
+            const auto buffer = runtime + 0x1000 + i * 0x1000;
+            const auto &name = i == 0 ? firstName : secondName;
+            memory.Text(condition, {}, 0x18);
+            memory.Put(condition, field, 2);
+            memory.Put(condition + 8, FWP_BYTE_BLOB_TYPE, 4);
+            memory.Put(condition + 16, blob);
+            memory.Text(blob, {}, 16);
+            memory.Put(blob, name.size() * 2, 4);
+            memory.Put(blob + 8, buffer);
+            for (size_t j = 0; j < name.size(); ++j)
+            {
+                memory.Put(buffer + j * 2, name[j], 2);
+            }
+        }
+        WalkBudget unicodeBudget;
+        WfpReader unicodeRead(memory, architecture, unicodeBudget);
+        knjson::Value unicodeRow;
+        const bool decoded = ReadWfpFilter(unicodeRead, entry, {}, unicodeRow);
+        bool serializable = false;
+        try
+        {
+            knjson::Value parsed;
+            serializable = knjson::Parse(unicodeRow.Write(), &parsed);
+        }
+        catch (const std::domain_error &)
+        {
+        }
+        check(decoded && serializable && unicodeRow.Get(L"conditionSummary").AsString(L"").ends_with(L" [see conditions]") &&
+              unicodeRow.Get(L"conditions").Items().size() == 2 &&
+              unicodeRow.Get(L"conditions").Items()[1].Get(L"value").AsString(L"") == secondName,
+              "wfp.truncated-condition-summary-keeps-valid-unicode-and-full-values");
     }
     {
         ByteFixture memory;

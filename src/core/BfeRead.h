@@ -65,7 +65,7 @@ class BfeProcessReader final : public TargetReader
             }
             if (!ExactBytes(bytes, size))
             {
-                result.State = bytes.State == Status::Cancelled ? Status::Cancelled : Status::Partial;
+                result.State = WfpTerminalRead(bytes.State) ? bytes.State : Status::Partial;
                 return result;
             }
             offset += size;
@@ -126,10 +126,15 @@ class BfeReader
             return {};
         }
         const auto bytes = Reader.Read(AddressSpace::Virtual, address, size);
+        if (WfpTerminalRead(bytes.State))
+        {
+            Budget.Stop(bytes.State, L"BfeReadStopped");
+            return {};
+        }
         if (!ExactBytes(bytes, size))
         {
             ++Budget.Report.Collected.Unreadable;
-            Budget.Stop(bytes.State == Status::Cancelled ? Status::Cancelled : Status::Partial, L"BfeUnreadableMemory");
+            Budget.Stop(Status::Partial, L"BfeUnreadableMemory");
             return {};
         }
         return bytes.Bytes;
@@ -163,9 +168,9 @@ class BfeReader
                 }
                 // A terminator in the readable prefix is sufficient; bytes past it are irrelevant.
                 const auto bytes = Reader.Read(AddressSpace::Virtual, address + offset, size);
-                if (bytes.State == Status::Cancelled)
+                if (WfpTerminalRead(bytes.State))
                 {
-                    Budget.Stop(Status::Cancelled, L"Cancelled");
+                    Budget.Stop(bytes.State, L"BfeReadStopped");
                     break;
                 }
                 for (size_t i = 0; i + 1 < size; i += 2)
@@ -485,6 +490,10 @@ inline bool ReadBfeTable(BfeReader &read, const TargetArchitecture &architecture
                 row.Set(L"subLayer", knjson::Value(BfeGuid(*value, 0x50)));
                 row.Set(L"managementConditionCount", knjson::Value(std::to_wstring(WfpInteger(*value, 0x70, 4))));
                 row.Set(L"managementAction", knjson::Value(Hex(WfpInteger(*value, 0x80, 4))));
+            }
+            if (!read.Check())
+            {
+                return false;
             }
             const auto units = row.Write().size();
             if (read.RecordCount >= 8192 || read.RecordUnits > 2 * 1024 * 1024 || units > 2 * 1024 * 1024 - read.RecordUnits)
