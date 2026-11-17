@@ -949,7 +949,9 @@
     { commands: "ci", kinds: "HostCodeIntegrity", fields: "scope known codeIntegrityEnabled testSign umciEnabled umciAuditMode hvciEnabled hvciAuditMode hvciStrictMode hvciIumEnabled raw unknownOptions ntStatus" },
     { commands: "hv", kinds: "HostCpuObservation TargetControlRegister", fields: "scope cpuVendor hypervisorBit hypervisorVendor microsoftInterface hardwareFeaturesStatus hardwareFeatures cr4 bit13 source" },
     { commands: "dma", kinds: "", fields: "table available bytes error" },
-    { commands: "wfp", kinds: "", fields: "name actionName filterId calloutId layer subLayer conditionCount action calloutKey providerKey flags weight key description" },
+    { commands: "wfp", kinds: "filters", fields: "filterId actionName name layerName conditionCount conditionSummary weight subLayerWeight calloutId calloutKey registered classifyRoutineSymbol flags layerId layer subLayer action providerKey classifyRoutine notifyRoutine flowDeleteRoutine description nameState" },
+    { commands: "wfp", kinds: "callouts", fields: "calloutId calloutKey key name registered layerName classifyRoutineSymbol notifyRoutineSymbol flowDeleteRoutineSymbol policyEntryPresent registrationTypeRaw flags registrationFlags layerId layer classifyRoutine notifyRoutine flowDeleteRoutine device description nameState" },
+    { commands: "wfp", kinds: "", fields: "name key layer subLayer weight flags description" },
     { commands: "byovd", kinds: "ModuleFileCatalogObservation HashCatalog", fields: "module path imageIdentityMatches sha256 catalogMatch source version count catalogSha256" },
     { commands: "features", kinds: "", fields: "feature enabled status reason" },
     { commands: "results", kinds: "", fields: "commandId status rowCount findingCount historical resultId" },
@@ -1193,6 +1195,22 @@
   {
     var layout = state.tableLayout;
     var command = firstToken(state.resultMeta.commandId || state.resultCommand).replace(/^!/, "").toLowerCase();
+    if (command === "wfp")
+    {
+      var wfpProfiles = tableProfiles.filter(function (item)
+      {
+        return item.commands === "wfp" && (!item.kinds || layout.kinds.indexOf(item.kinds) >= 0);
+      });
+      var wfpFields = wfpProfiles.map(function (item)
+      {
+        return item.fields;
+      }).join(" ");
+      if (layout.kinds.indexOf("filters") >= 0 && layout.kinds.indexOf("callouts") >= 0)
+      {
+        wfpFields = "filterId calloutId actionName layerName registered calloutKey classifyRoutineSymbol conditionCount conditionSummary " + wfpFields;
+      }
+      return { commands: "wfp", kinds: "", fields: wfpFields };
+    }
     return tableProfiles.find(function (item)
     {
       return item.commands.split(" ").indexOf(command) >= 0;
@@ -1948,6 +1966,11 @@
       }
     }
     var field = path.join(".");
+    if (row && row.kind === "filters" && row.usesCallout === false && value == null &&
+        /^(calloutId|calloutKey|registered|policyEntryPresent|registrationTypeRaw|classifyRoutine(?:Symbol)?|notifyRoutine(?:Symbol)?|flowDeleteRoutine(?:Symbol)?)$/.test(field))
+    {
+      return "N/A";
+    }
     if (row && row.kind === "filters" && value === null &&
         ((field === "providerKey" && row.hasProviderKey === false) || (field === "calloutKey" && row.usesCallout === false)))
     {

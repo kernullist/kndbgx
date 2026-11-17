@@ -237,7 +237,7 @@ void AnnotateResultSymbols(knengine::DbgSession &session, kncore::Result &report
             }
         }
         for (const wchar_t *field : {L"CompletionRoutine", L"CancelRoutine", L"DispatchRoutine", L"win32Start",
-                                   L"driverInit", L"driverUnload", L"driverStartIo"})
+                                   L"driverInit", L"driverUnload", L"driverStartIo", L"classifyRoutine", L"notifyRoutine", L"flowDeleteRoutine"})
         {
             annotate(field, std::wstring(field) + L"Symbol", true);
         }

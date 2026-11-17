@@ -41,6 +41,7 @@
 #include "AlpcRegression.h"
 #include "Win32kDispatchRegression.h"
 #include "Win32kPolicyRegression.h"
+#include "WfpRegression.h"
 
 #include <cstdio>
 #include <string>
@@ -714,6 +715,7 @@ int wmain(int argc, wchar_t **argv)
     knself::RunKernelSymbolRegression(Check);
     knself::RunPiddbRegression(Check);
     knself::RunCommandRecordRegression(Check);
+    knself::RunWfpRegression(Check);
     knself::RunKernelPartialRegression(Check);
     knself::RunAlpcRegression(Check);
     knself::RunWin32kDispatchRegression(Check);

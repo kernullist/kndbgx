@@ -55,7 +55,7 @@ inline std::optional<std::wstring> AddressFieldSpace(const knjson::Value &row, c
     static const std::set<std::wstring> virtualFields = {
         L"address", L"symbolAddress", L"routine", L"handler", L"pointer", L"slot", L"base", L"baseAddress", L"moduleBase",
         L"start", L"end", L"eprocess", L"ethread", L"object", L"device", L"driverObject", L"DriverObject",
-        L"firstDevice", L"driverInit", L"driverUnload", L"driverStartIo", L"attachedTo", L"ownerProcess", L"connectionPort", L"filter", L"frame", L"stack", L"return",
+        L"providerContext", L"classifyRoutine", L"notifyRoutine", L"flowDeleteRoutine", L"firstDevice", L"driverInit", L"driverUnload", L"driverStartIo", L"attachedTo", L"ownerProcess", L"connectionPort", L"filter", L"frame", L"stack", L"return",
         L"entry", L"listEntry", L"readAddress", L"nextAddress", L"instructionPointer", L"win32Start", L"context",
         L"preRoutine", L"postRoutine", L"CompletionRoutine", L"CancelRoutine", L"DispatchRoutine", L"StartAddress", L"EndAddress",
         L"MdlAddress", L"UserBuffer", L"SystemBuffer", L"Thread", L"CurrentStackLocation", L"DeviceObject", L"FileObject",

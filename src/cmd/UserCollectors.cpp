@@ -1,6 +1,6 @@
 // M5 user-mode collectors: WFP objects, hypervisor posture, DMA firmware,
 // BYOVD catalog hashing and firmware-table provider probing. These run
-// entirely in the WinDbg process without kernel memory access.
+// in the WinDbg process; remote WFP uses the target runtime collector.
 
 #include "CollectorSupport.h"
 #include "../core/HashCatalog.h"
@@ -47,7 +47,7 @@ void ScanWfp(Ctx &ctx)
     {
         if (!SessionIsLocalLiveKernel(ctx.Session))
         {
-            out.Fail(kncore::Status::Unavailable, HostCollectorRefusal(L"wfp"));
+            ScanTargetWfp(ctx);
             break;
         }
         HANDLE engine = nullptr;

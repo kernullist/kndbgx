@@ -193,9 +193,13 @@ template <typename Check> void RunPolicyRegression(Check check)
         tagged = tagged && has;
     }
     check(tagged, "policy.help-tags-every-command-with-session-availability");
-    const auto localOnly = kncmd::DispatchCommand(unconnected, L"help !wfp");
+    const auto localOnly = kncmd::DispatchCommand(unconnected, L"help !dma");
     check(localOnly.Output.find(L"[kernel: live only, local KD]") != std::wstring::npos,
           "policy.help-distinguishes-local-kernel-collectors");
+    const auto remoteWfp = kncmd::FindCommand(L"!wfp");
+    check(remoteWfp && remoteWfp->Requires == kncmd::Capability::KernelX64 &&
+              kncmd::EffectiveTargetModes(*remoteWfp) == kncmd::TargetMode::DumpAndLive,
+          "policy.wfp-target-runtime-is-available-to-remote-kernel-and-dump");
     const auto unknownHelp = kncmd::DispatchCommand(unconnected, L"help definitely-not-a-command");
     check(unknownHelp.Data.State == kncore::Status::Unsupported &&
               unknownHelp.Output.find(L"Unknown command: definitely-not-a-command") != std::wstring::npos,

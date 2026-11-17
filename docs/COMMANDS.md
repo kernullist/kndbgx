@@ -114,7 +114,7 @@ Session availability (Modes), together with Capability and the handler's checks:
 | `!mapper` |  |  | KernelX64 | DumpAndLive | Experimental | TargetRead |
 | `!payload` |  |  | KernelX64 | LiveKernel | Experimental | TargetRead |
 | `!byovd` |  | `/status` | LocalKernelX64 | LiveKernelLocal | Experimental | TargetRead, HostFileRead |
-| `!wfp` |  |  | LocalKernelX64 | LiveKernelLocal | Experimental | TargetRead |
+| `!wfp [filters] [callouts] [providers\|sublayers\|layers (local KD)]` |  |  | KernelX64 | DumpAndLive | Experimental | TargetRead |
 | `!ci [/host]` |  | `/host` | None | Any | Experimental | None |
 | `!hv` |  |  | None | Any | Experimental | TargetRead |
 | `!dma` |  |  | LocalKernelX64 | LiveKernelLocal | Experimental | TargetRead |

@@ -1614,6 +1614,17 @@ await check("T-UI-TABLE-SEMANTICS command records expose their actual payload an
             subLayer: "sub-layer-guid", filterId: "18446744073709551615", conditionCount: "0", flags: "0x0", hasProviderKey: false,
             usesCallout: false, providerKey: null, calloutKey: null },
             { "Action": "0x1001", "Action Name": "Block", "Layer": "layer-guid", "Filter ID": "18446744073709551615", "Condition Count": "0", "Provider Key": "None", "Callout Key": "N/A" }],
+        ["!wfp filters", { kind: "filters", source: "DebugTargetRuntime", filterId: "9007199254740993", actionName: "Permit",
+            layerId: "48", layerName: "ALE_AUTH_CONNECT_V4", conditionCount: "1", conditionSummary: "IP_PROTOCOL Equal 6",
+            weight: "18446744073709551615", subLayerWeight: "3", usesCallout: false, calloutId: null, calloutKey: null,
+            nameState: "NotInRuntimeSchema" },
+            { "Filter ID": "9007199254740993", "Layer Name": "ALE_AUTH_CONNECT_V4", "Condition Summary": "IP_PROTOCOL Equal 6",
+                "Weight": "18446744073709551615", "Callout ID": "N/A", "Callout Key": "N/A", "Name State": "NotInRuntimeSchema" }],
+        ["!wfp callouts", { kind: "callouts", source: "DebugTargetRuntime", calloutId: "7", calloutKey: "callout-guid", registered: true,
+            layerName: "NotAssigned", policyEntryPresent: false, classifyRoutine: "0xfffff80000001000", classifyRoutineSymbol: "example!Classify",
+            notifyRoutine: "0x0000000000000000", flowDeleteRoutine: "0x0000000000000000" },
+            { "Callout ID": "7", "Callout Key": "callout-guid", "Registered": "Yes", "Layer Name": "NotAssigned",
+                "Policy Entry Present": "No", "Classify Routine Symbol": "example!Classify" }],
         ["features", { feature: "ttd-replay", enabled: false, status: "Unavailable", reason: "Not enabled" }, { "Feature": "ttd-replay", "Enabled": "No" }],
         ["results", { commandId: "!timer", status: "Partial", rowCount: "1", findingCount: "0", historical: true, resultId: "sample" },
             { "Command ID": "!timer", "Row Count": "1", "Historical": "Yes" }]
@@ -1626,6 +1637,17 @@ await check("T-UI-TABLE-SEMANTICS command records expose their actual payload an
             assert.equal(tableCell(app, 0, label), expected, command + ": " + label);
         }
     }
+    await openTable(app, "!wfp filters callouts", [
+        { kind: "filters", filterId: "100", actionName: "Permit", usesCallout: false, calloutId: null, calloutKey: null, conditionCount: "0", conditionSummary: "None" },
+        { kind: "callouts", calloutId: "7", calloutKey: "callout-guid", registered: true, policyEntryPresent: false,
+            classifyRoutineSymbol: "example!Classify", notifyRoutineSymbol: null, notifyRoutineSymbolSource: "NotRegistered" }
+    ]);
+    assert.equal(tableCell(app, 0, "Filter ID"), "100");
+    assert.ok(headers(app).indexOf("Callout ID") < headers(app).indexOf("Condition Summary"), "Mixed WFP rows must keep callout identity before filter-only details");
+    assert.equal(tableCell(app, 0, "Callout ID"), "N/A");
+    assert.equal(tableCell(app, 1, "Policy Entry Present"), "No");
+    assert.equal(tableCell(app, 1, "Classify Routine Symbol"), "example!Classify");
+    assert.equal(tableCell(app, 1, "Notify Routine Symbol"), "Not registered");
     await openTable(app, "!drvobj example", [
         { kind: "Driver", name: "\\Driver\\Example", object: "0xffff800000001000", start: "0xffff800000002000", size: "0x1000", firstDevice: "0x0" },
         { kind: "DriverDispatch", major: "14", majorName: "DEVICE_CONTROL", handler: "0xffff800000002100", symbol: "example!Dispatch", ownership: "KnownModule", driverObject: "0xffff800000001000" },

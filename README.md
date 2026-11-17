@@ -182,7 +182,7 @@ Run `!hv` to see **HostCpuidObservation** and **TargetControlRegister** as separ
 
 ![Explicit debugger-host CI and HVCI flags](docs/screenshots/host-code-integrity.png)
 
-`!wfp` enumerates BFE filters, callouts, providers, sublayers and layers; `!dma` observes DMAR/IVRS firmware tables; `!byovd` compares local driver-file SHA-256 hashes with an operator-supplied catalog. All three require verified local KD and are unavailable for this remote guest. Table presence does not prove active DMA protection, and a catalog match does not prove exploitability or loaded-image integrity. [Platform scope and catalog setup](docs/UX.md#distinguish-host-and-target-security-state)
+`!wfp filters callouts` reads the remote target runtime on the matched 28000.2952 NETIO/fwpkclnt/NT profiles. Verified local KD retains BFE filters, callouts, providers, sublayers and layers. `!dma` observes DMAR/IVRS firmware tables and `!byovd` compares local driver-file SHA-256 hashes with an operator-supplied catalog; those two still require verified local KD. Table presence does not prove active DMA protection, and a catalog match does not prove exploitability or loaded-image integrity. [Platform scope and catalog setup](docs/UX.md#distinguish-host-and-target-security-state)
 
 </details>
 
@@ -508,7 +508,7 @@ Page commands require an x64 kernel target. Big-pool commands require a live ker
 
 ### CPU, kernel tables and platform state
 
-`!byovd`, `!wfp` and `!dma` require verified local KD and cannot substitute host information for a remote guest. `!ci /host` and the CPUID part of `!hv` explicitly describe the debugger host. For `!byovd`, prepare the catalog documented in the [platform workflow](docs/UX.md#distinguish-host-and-target-security-state); a hash match does not establish exploitability.
+`!byovd` and `!dma` require verified local KD. Remote/dump `!wfp [filters] [callouts]` reads target runtime memory only on matched image/PDB/code profiles; it never substitutes host BFE state. BFE providers, sublayers and layers remain local-KD collections. `!ci /host` and the CPUID part of `!hv` explicitly describe the debugger host. For `!byovd`, prepare the catalog documented in the [platform workflow](docs/UX.md#distinguish-host-and-target-security-state); a hash match does not establish exploitability.
 
 <details>
 <summary>11 commands — purpose, syntax and examples</summary>
@@ -524,7 +524,7 @@ Page commands require an x64 kernel target. Big-pool commands require a live ker
 | `!hv` | Show host CPUID/hypervisor observations separately from available debuggee CR4 state.<br>Experimental · Host CPUID; target CR4 if available | `!hv`<br>Examples: `!hv` |
 | `!ci` | Read public CI/HVCI flags in verified local KD; /host explicitly queries the debugger host.<br>Experimental · Local KD, or explicit /host | `!ci [/host]`<br>Examples: `!ci`<br>`!ci /host` |
 | `!byovd` | Compare local driver-file SHA-256 values with an operator-provided catalog. /status reads catalog metadata only.<br>Experimental · Verified local KD x64 | `!byovd [/status]`<br>Examples: `!byovd /status`<br>`!byovd` |
-| `!wfp` | Enumerate host BFE filters, callouts, providers, sublayers and layers in verified local KD.<br>Experimental · Verified local KD x64 | `!wfp`<br>Examples: `!wfp` |
+| `!wfp` | Read target runtime filters/callouts on the matched remote KD or dump profile; use BFE management collections in verified local KD.<br>Experimental · Kernel x64 | `!wfp [filters] [callouts]`<br>Examples: `!wfp filters callouts` |
 | `!dma` | Observe host DMAR/IVRS firmware tables in verified local KD; table presence does not prove active DMA protection.<br>Experimental · Verified local KD x64 | `!dma`<br>Examples: `!dma` |
 
 </details>

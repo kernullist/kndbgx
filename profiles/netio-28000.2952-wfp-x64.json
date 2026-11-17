@@ -1,0 +1,137 @@
+{
+  "schema": "kndbgx.symbol-profile.v1",
+  "support": "Experimental",
+  "machine": "0x8664",
+  "pdbAge": 1,
+  "runtimeImplementation": "src/core/WfpProfile.h; documents cannot enable other images",
+  "id": "NETIO-28000.2952-WFP",
+  "timestamp": "0x3bce0554",
+  "imageSize": "0xbc000",
+  "pdbGuid": "de265633-63ba-3a8b-e44c-0496bb5eae44",
+  "scope": "Read-only target WFP runtime inventory; not BFE management names or packet verdicts",
+  "windows": [
+    {
+      "symbol": "FeGetWfpGlobalPtr",
+      "rva": "0x64740",
+      "offset": "0x0",
+      "bytes": "488b0551530300c3"
+    },
+    {
+      "symbol": "FeEnumLayer",
+      "rva": "0x7980",
+      "offset": "0x4e",
+      "bytes": "663bb980010000"
+    },
+    {
+      "symbol": "FeGetRefCalloutEx",
+      "rva": "0x70b0",
+      "offset": "0x9c",
+      "bytes": "488b15452909003bba980100007328488b82a0010000488d0c7f48c1e1054803c14889068b500440f6c50174060fb6480c0bd185d2750a"
+    },
+    {
+      "symbol": "FeRegisterCalloutEntry",
+      "rva": "0x3ec18",
+      "offset": "0x9f",
+      "bytes": "44893b8d6801896b044183ff030f85f20000004c897328"
+    },
+    {
+      "symbol": "FeRegisterCalloutEntry",
+      "rva": "0x3ec18",
+      "offset": "0xb6",
+      "bytes": "488b4424604c8bb42488000000488943188b4424708943308a44247888434e4c896b204d85f60f85cb000000837b50000fb78424900000006689434c"
+    },
+    {
+      "symbol": "FeRegisterCalloutEntry",
+      "rva": "0x3ec18",
+      "offset": "0x1a4",
+      "bytes": "4c897310"
+    },
+    {
+      "symbol": "FeRegisterCalloutEntry",
+      "rva": "0x3ec18",
+      "offset": "0x1bc",
+      "bytes": "4c897340"
+    },
+    {
+      "symbol": "FeAddCalloutEntry",
+      "rva": "0x3eb50",
+      "offset": "0x5f",
+      "bytes": "c644110c01"
+    },
+    {
+      "symbol": "AddFilterToFilterHashtable",
+      "rva": "0x59f0",
+      "offset": "0x89",
+      "bytes": "896f1c488bd7488977204c897728488b050a4009008b8890010000894f18488b0dfa3f09004c8b4710488b8988010000"
+    },
+    {
+      "symbol": "KfdFindFilterById",
+      "rva": "0x5c10",
+      "offset": "0x42",
+      "bytes": "488b4c2450488b4118488907"
+    },
+    {
+      "symbol": "AddFilterToIndex",
+      "rva": "0x4d46c",
+      "offset": "0x68",
+      "bytes": "6644896730"
+    }
+  ],
+  "ntDependency": {
+    "identity": "nt-28000.2952-callbacks-x64.json",
+    "windows": [
+      {
+        "symbol": "RtlLookupEntryHashTable",
+        "rva": "0x428e60",
+        "offset": "0x52",
+        "bytes": "4d8b43204533d241817b088000000077588bca48c1e1044903c8"
+      },
+      {
+        "symbol": "RtlLookupEntryHashTable",
+        "rva": "0x428e60",
+        "offset": "0xbb",
+        "bytes": "8d8280000000ba010000000fbdc8d3e233d08d41f94d8b04c0eb8d"
+      }
+    ]
+  },
+  "root": {
+    "symbol": "gWfpGlobal",
+    "rva": "0x99a98",
+    "storage": "Pointer"
+  },
+  "runtimeOffsets": {
+    "layerCount": "0x180",
+    "filterHash": "0x188",
+    "filterNamespace": "0x190",
+    "calloutCapacity": "0x198",
+    "calloutTable": "0x1a0"
+  },
+  "hashEntry": {
+    "commonBytes": "0x20",
+    "namespace": "0x18",
+    "layerId": "0x1c",
+    "filterId": "0x20",
+    "internalFilter": "0x28",
+    "internalRuntimePointer": "0x18",
+    "internalLayerId": "0x30"
+  },
+  "callout": {
+    "stride": "0x60",
+    "registrationTypeRaw": "0x0",
+    "registered": "0x4",
+    "policyEntryPresent": "0xc",
+    "classify": "0x10",
+    "type3Classify": "0x28",
+    "notify": "0x18",
+    "flowDelete": "0x20",
+    "flags": "0x30",
+    "device": "0x40",
+    "layerId": "0x4c"
+  },
+  "validation": {
+    "target": "Windows kernel 28000.2952 x64, stopped remote KD",
+    "nativeOracle": "258 namespace-matched filters, 87 active NETIO callouts, 828 conditions; all IDs/actions/condition headers/callback pointers/GUIDs/weights compared independently",
+    "publicStructures": "Windows SDK 10.0.26100.0 FWPS_FILTER3 and FWPS_FILTER_CONDITION0; compile-time size/offset checks",
+    "bounds": "65536 slots/entries; 1024 conditions per filter; 4096 bytes per value; shared 180 second traversal deadline; 2 Mi UTF-16 units for condition JSON and 4 Mi units for row JSON before symbol annotations"
+  }
+}

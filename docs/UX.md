@@ -307,7 +307,7 @@ Run `!ci /host` only when you intend to inspect the debugger host. It reports pu
 
 The following commands require **verified local KD**, so they are not demonstrated as guest collections in this remote-KD session:
 
-- `!wfp` reads host BFE filters, callouts, providers, sublayers and layers. Service/API failures remain explicit; it does not alter network policy.
+- `!wfp` defaults to filters. On remote KD or a dump, `!wfp filters callouts` reads the matched target runtime and labels its source. Filter rows show IDs, SDK layer names, action, typed conditions, runtime weight and sublayer weight. Callout rows show GUID/ID, registration/policy-entry state, classify/notify/flow-delete functions and owning symbols. Registration-only slots show `NotAssigned` for layer; non-callout filter actions show N/A for callout fields. BFE management names, filter/provider/sublayer GUIDs and descriptions are not recovered by this path; provider context remains an opaque target pointer. Verified local KD retains host BFE filters, callouts, providers, sublayers and layers. No path changes network policy.
 - `!dma` queries DMAR/IVRS firmware tables. Presence alone does not establish enabled IOMMU/DMA protection.
 - `!byovd` hashes local driver files and compares SHA-256 digests with the operator's catalog. It does not download a catalog, establish exploitability or validate the loaded memory image.
 
@@ -396,7 +396,7 @@ Each retained result opens a tab. Double-click a tab or press F2 to rename it, d
 
 Default columns follow each command's observation fields. Named fields remain visible beyond the generic nine-column fallback, including mixed driver/device, IRP/stack, ETL/event-summary and file-audit records. Horizontal scrolling and keyboard header focus reach the remaining columns; manual column choices stay unchanged. Missing fields show a dash, unreadable values show Unknown, and observed zero/false values remain visible. Nested metadata and raw records are still available in Row details and export.
 
-Defaults also expose token selection and process identity, snapshot change/unknown state, result-page offsets and delivery, and CI/HV host-versus-target scope. Local-KD `!wfp` filter rows include action name/raw code, filter ID, layer/sublayer, condition count, provider and callout keys. A filter without a provider reports None; a non-callout action reports N/A for its callout key. These are BFE registration records, not a simulated packet-policy decision.
+Defaults also expose token selection and process identity, snapshot change/unknown state, result-page offsets and delivery, and CI/HV host-versus-target scope. Local-KD `!wfp` filter rows include action name/raw code, filter ID, layer/sublayer, condition count, provider and callout keys. A filter without a provider reports None; a non-callout action reports N/A for its callout key. Remote runtime rows instead expose target filter conditions and callout registrations using the verified profiles. Expand Row details for complete typed condition values, raw value/type/match IDs and scope limitations; the table summary is bounded to 4096 characters. Neither view simulates a packet-policy decision.
 
 Use **Columns** to keep the fields relevant to the current question. Here, Callback type, Routine / Pre and Symbol / Pre are selected. Hidden columns remain in the retained result and its export.
 

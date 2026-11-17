@@ -74,6 +74,7 @@
     <ClCompile Include="src\cmd\DrvobjCmds.cpp" />
     <ClCompile Include="src\cmd\KernelScanners2.cpp" />
     <ClCompile Include="src\cmd\UserCollectors.cpp" />
+    <ClCompile Include="src\cmd\WfpCmds.cpp" />
     <ClCompile Include="src\cmd\DumpCmds.cpp" />
     <ClCompile Include="src\cmd\ExtraCmds.cpp" />
     <ClCompile Include="src\engine\LayoutResolver.cpp" />

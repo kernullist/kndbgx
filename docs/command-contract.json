@@ -1332,11 +1332,11 @@
   {
     "name": "!wfp",
     "group": "Kernel",
-    "summary": "WFP BFE enumeration (local KD)",
-    "grammar": "!wfp",
+    "summary": "WFP filters/callouts (target runtime on remote KD; BFE on local KD)",
+    "grammar": "!wfp [filters] [callouts] [providers|sublayers|layers (local KD)]",
     "support": "Experimental",
-    "capability": "LocalKernelX64",
-    "targetModes": "LiveKernelLocal",
+    "capability": "KernelX64",
+    "targetModes": "DumpAndLive",
     "effectMask": 1,
     "aliases": [],
     "options": []

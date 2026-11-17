@@ -119,6 +119,7 @@ void ScanMinifilters(Ctx &ctx);
 
 // ---- handlers implemented in UserCollectors.cpp ----
 void ScanWfp(Ctx &ctx);
+void ScanTargetWfp(Ctx &ctx);
 void ScanHv(Ctx &ctx);
 void ScanCodeIntegrity(Ctx &ctx);
 void ScanDma(Ctx &ctx);

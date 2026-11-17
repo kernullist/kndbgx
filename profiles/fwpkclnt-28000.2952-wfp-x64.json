@@ -1,0 +1,71 @@
+{
+  "schema": "kndbgx.symbol-profile.v1",
+  "support": "Experimental",
+  "machine": "0x8664",
+  "pdbAge": 1,
+  "runtimeImplementation": "src/core/WfpProfile.h; documents cannot enable other images",
+  "id": "fwpkclnt-28000.2952-WFP",
+  "timestamp": "0xfc07e3f8",
+  "imageSize": "0x8b000",
+  "pdbGuid": "eace892d-e775-c77a-413a-bde50bc0a90b",
+  "scope": "Read-only target WFP runtime inventory; not BFE management names or packet verdicts",
+  "windows": [
+    {
+      "symbol": "FwppCalloutFindById",
+      "rva": "0x67c6c",
+      "offset": "0x0",
+      "bytes": "3b0d661cfeff73138bc1488d0c80488b055f1cfeff488d04c8c3"
+    },
+    {
+      "symbol": "FwppCalloutAlloc",
+      "rva": "0x67c94",
+      "offset": "0x45",
+      "bytes": "0f10450083492001897910"
+    },
+    {
+      "symbol": "FwppCalloutRegister",
+      "rva": "0x679d4",
+      "offset": "0xf8",
+      "bytes": "894314834b2004"
+    }
+  ],
+  "ntDependency": {
+    "identity": "nt-28000.2952-callbacks-x64.json",
+    "windows": [
+      {
+        "symbol": "RtlLookupEntryHashTable",
+        "rva": "0x428e60",
+        "offset": "0x52",
+        "bytes": "4d8b43204533d241817b088000000077588bca48c1e1044903c8"
+      },
+      {
+        "symbol": "RtlLookupEntryHashTable",
+        "rva": "0x428e60",
+        "offset": "0xbb",
+        "bytes": "8d8280000000ba010000000fbdc8d3e233d08d41f94d8b04c0eb8d"
+      }
+    ]
+  },
+  "root": {
+    "symbol": "gFwppCallouts",
+    "rva": "0x498a0",
+    "capacity": "0x38",
+    "table": "0x40"
+  },
+  "entry": {
+    "stride": "0x28",
+    "key": "0x0",
+    "id": "0x10",
+    "registrationFlags": "0x14",
+    "state": "0x20",
+    "allocatedBit": "0x1",
+    "registrationInProgressBit": "0x2",
+    "registeredBit": "0x4"
+  },
+  "validation": {
+    "target": "Windows kernel 28000.2952 x64, stopped remote KD",
+    "nativeOracle": "258 namespace-matched filters, 87 active NETIO callouts, 828 conditions; all IDs/actions/condition headers/callback pointers/GUIDs/weights compared independently",
+    "publicStructures": "Windows SDK 10.0.26100.0 FWPS_FILTER3 and FWPS_FILTER_CONDITION0; compile-time size/offset checks",
+    "bounds": "65536 slots/entries; 1024 conditions per filter; 4096 bytes per value; shared 180 second traversal deadline; 2 Mi UTF-16 units for condition JSON and 4 Mi units for row JSON before symbol annotations"
+  }
+}
