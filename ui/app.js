@@ -949,8 +949,11 @@
     { commands: "ci", kinds: "HostCodeIntegrity", fields: "scope known codeIntegrityEnabled testSign umciEnabled umciAuditMode hvciEnabled hvciAuditMode hvciStrictMode hvciIumEnabled raw unknownOptions ntStatus" },
     { commands: "hv", kinds: "HostCpuObservation TargetControlRegister", fields: "scope cpuVendor hypervisorBit hypervisorVendor microsoftInterface hardwareFeaturesStatus hardwareFeatures cr4 bit13 source" },
     { commands: "dma", kinds: "", fields: "table available bytes error" },
-    { commands: "wfp", kinds: "filters", fields: "filterId actionName name layerName conditionCount conditionSummary weight subLayerWeight calloutId calloutKey registered classifyRoutineSymbol flags layerId layer subLayer action providerKey classifyRoutine notifyRoutine flowDeleteRoutine description nameState" },
-    { commands: "wfp", kinds: "callouts", fields: "calloutId calloutKey key name registered layerName classifyRoutineSymbol notifyRoutineSymbol flowDeleteRoutineSymbol policyEntryPresent registrationTypeRaw flags registrationFlags layerId layer classifyRoutine notifyRoutine flowDeleteRoutine device description nameState" },
+    { commands: "wfp", kinds: "filters", fields: "filterId name actionName providerName subLayerName description layerName conditionCount conditionSummary weight subLayerWeight calloutId calloutKey registered classifyRoutineSymbol flags layerId layer subLayer action providerKey classifyRoutine notifyRoutine flowDeleteRoutine description nameState managementState providerState subLayerState key managementFlags descriptionState providerDescription subLayerDescription" },
+    { commands: "wfp", kinds: "callouts", fields: "calloutId name calloutKey key providerName description registered layerName classifyRoutineSymbol notifyRoutineSymbol flowDeleteRoutineSymbol policyEntryPresent registrationTypeRaw flags registrationFlags layerId layer classifyRoutine notifyRoutine flowDeleteRoutine device description nameState managementState providerKey providerState" },
+    { commands: "wfp", kinds: "providers", fields: "name description key providerName serviceName weight providerKey managementFlags nameState descriptionState managementState" },
+    { commands: "wfp", kinds: "sublayers", fields: "name description key providerName serviceName weight providerKey managementFlags nameState descriptionState managementState" },
+    { commands: "wfp", kinds: "layers", fields: "layerId layerName name description key fieldCount subLayer managementFlags nameState descriptionState managementState" },
     { commands: "wfp", kinds: "", fields: "name key layer subLayer weight flags description" },
     { commands: "byovd", kinds: "ModuleFileCatalogObservation HashCatalog", fields: "module path imageIdentityMatches sha256 catalogMatch source version count catalogSha256" },
     { commands: "features", kinds: "", fields: "feature enabled status reason" },
@@ -1207,7 +1210,7 @@
       }).join(" ");
       if (layout.kinds.indexOf("filters") >= 0 && layout.kinds.indexOf("callouts") >= 0)
       {
-        wfpFields = "filterId calloutId actionName layerName registered calloutKey classifyRoutineSymbol conditionCount conditionSummary " + wfpFields;
+        wfpFields = "filterId calloutId name providerName subLayerName actionName layerName registered calloutKey classifyRoutineSymbol conditionCount conditionSummary " + wfpFields;
       }
       return { commands: "wfp", kinds: "", fields: wfpFields };
     }

@@ -1332,8 +1332,8 @@
   {
     "name": "!wfp",
     "group": "Kernel",
-    "summary": "WFP filters/callouts (target runtime on remote KD; BFE on local KD)",
-    "grammar": "!wfp [filters] [callouts] [providers|sublayers|layers (local KD)]",
+    "summary": "WFP runtime and BFE metadata (verified target profiles on remote KD)",
+    "grammar": "!wfp [filters] [callouts] [providers] [sublayers] [layers]",
     "support": "Experimental",
     "capability": "KernelX64",
     "targetModes": "DumpAndLive",

@@ -1,9 +1,173 @@
 #include "CollectorSupport.h"
 #include "../core/WfpProfile.h"
 #include "../core/WfpRead.h"
+#include "../core/BfeRead.h"
+#include "../engine/ContextGuard.h"
 
 namespace kncmd
 {
+namespace
+{
+void CollectBfeMetadata(Ctx &ctx, const kncore::TargetArchitecture &architecture, kncore::WalkBudget &budget,
+                        std::vector<kncore::BfeRecord> &records, knjson::Value &analysis)
+{
+    using namespace kncore;
+    knengine::ContextGuard restore(ctx.Session);
+    knengine::LayoutResolver layout(ctx.Session);
+    uint64_t process = 0;
+    uint64_t module = 0;
+    uint64_t pid = 0;
+    uint64_t candidates = 0;
+    bool profileVerified = false;
+    do
+    {
+        if (!restore.Valid())
+        {
+            budget.Stop(Status::Unavailable, L"BfeContextCaptureFailed");
+            break;
+        }
+        const auto pebField = layout.Field(L"nt", L"_EPROCESS", L"Peb");
+        const auto ldrField = layout.Field(L"nt", L"_PEB", L"Ldr");
+        const auto listField = layout.Field(L"nt", L"_PEB_LDR_DATA", L"InLoadOrderModuleList");
+        const auto linksField = layout.Field(L"nt", L"_LDR_DATA_TABLE_ENTRY", L"InLoadOrderLinks");
+        const auto baseField = layout.Field(L"nt", L"_LDR_DATA_TABLE_ENTRY", L"DllBase");
+        const auto nameField = layout.Field(L"nt", L"_LDR_DATA_TABLE_ENTRY", L"BaseDllName");
+        if (!pebField || pebField->Size != 8 || !ldrField || ldrField->Offset != 0x18 || ldrField->Size != 8 ||
+            !listField || listField->Offset != 0x10 || !linksField || linksField->Offset != 0 ||
+            !baseField || baseField->Offset != 0x30 || baseField->Size != 8 ||
+            !nameField || nameField->Offset != 0x58 || nameField->Size != 16)
+        {
+            budget.Stop(Status::Unavailable, L"BfeProcessLayoutUnavailable");
+            break;
+        }
+        std::vector<ProcRow> processes;
+        CmdText inventory;
+        CollectProcesses(ctx.Session, layout, &processes, inventory);
+        if (inventory.Details.State != Status::Success || !inventory.Details.Collected.Complete)
+        {
+            budget.Stop(inventory.Details.State == Status::Cancelled ? Status::Cancelled : Status::Unavailable,
+                        L"BfeProcessInventoryIncomplete");
+            break;
+        }
+        const auto translate = [&](uint64_t address) -> std::optional<uint64_t>
+        {
+            ULONG64 physical = 0;
+            return ctx.Session.TranslateVirtual(address, &physical) ? std::optional<uint64_t>(physical) : std::nullopt;
+        };
+        BfeProcessReader processMemory(ctx.Session, translate);
+        BfeReader read(processMemory, budget);
+        bool discoveryComplete = true;
+        for (const auto &candidate : processes)
+        {
+            if (_wcsicmp(candidate.Image.c_str(), L"svchost.exe") != 0)
+            {
+                continue;
+            }
+            if (!read.Check())
+            {
+                break;
+            }
+            ++candidates;
+            const auto peb = ReadField(ctx.Session, candidate.Eprocess, pebField);
+            if (!peb || *peb == 0 || ctx.Session.SystemObjects()->SetImplicitProcessDataOffset(candidate.Eprocess) != S_OK)
+            {
+                discoveryComplete = false;
+                continue;
+            }
+            WalkBudget probe;
+            probe.Cancelled = budget.Cancelled;
+            probe.StartTraversal();
+            probe.Deadline = budget.Deadline;
+            BfeProcessReader candidateMemory(ctx.Session, translate);
+            BfeReader candidateRead(candidateMemory, probe);
+            const auto base = FindBfeModule(candidateRead, *peb);
+            if (!base)
+            {
+                if (probe.Report.State == Status::Cancelled)
+                {
+                    budget.Stop(Status::Cancelled, L"Cancelled");
+                    break;
+                }
+                discoveryComplete = false;
+                continue;
+            }
+            if (*base != 0)
+            {
+                if (process != 0)
+                {
+                    budget.Stop(Status::Unavailable, L"BfeProcessAmbiguous");
+                    break;
+                }
+                process = candidate.Eprocess;
+                pid = candidate.Pid;
+                module = *base;
+            }
+        }
+        if (budget.Stopped)
+        {
+            break;
+        }
+        if (process == 0 || !discoveryComplete)
+        {
+            budget.Stop(Status::Unavailable, discoveryComplete ? L"BfeServiceNotFound" : L"BfeProcessDiscoveryIncomplete");
+            break;
+        }
+        if (ctx.Session.SystemObjects()->SetImplicitProcessDataOffset(process) != S_OK)
+        {
+            budget.Stop(Status::Unavailable, L"BfeProcessContextFailed");
+            break;
+        }
+        if (!VerifyBfeImage(read, module))
+        {
+            break;
+        }
+        profileVerified = true;
+        const auto manager = read.Integer(module + 0xf6770);
+        if (!manager)
+        {
+            break;
+        }
+        for (const auto type : {0u, 2u, 3u, 4u, 5u})
+        {
+            std::vector<BfeRecord> tableRecords;
+            if (!ReadBfeTable(read, architecture, module, *manager, type, tableRecords))
+            {
+                break;
+            }
+            records.insert(records.end(), std::make_move_iterator(tableRecords.begin()), std::make_move_iterator(tableRecords.end()));
+        }
+        if (!budget.Stopped)
+        {
+            const auto finalManager = read.Integer(module + 0xf6770);
+            if (!finalManager || finalManager != manager)
+            {
+                if (!budget.Stopped)
+                {
+                    budget.Stop(Status::Partial, L"BfeManagerChanged");
+                }
+                records.clear();
+            }
+        }
+    } while (false);
+    if (!restore.Restore())
+    {
+        budget.Stop(Status::InternalFault, L"BfeContextRestoreFailed");
+    }
+    if (!budget.Stopped && budget.Report.Collected.Unknown != 0)
+    {
+        budget.Stop(Status::Partial, L"BfeTextUnavailable");
+    }
+    budget.Complete();
+    analysis.Set(L"bfeState", knjson::Value(StatusName(budget.Report.State)));
+    analysis.Set(L"bfeReason", knjson::Value(budget.Report.Collected.StopReason));
+    analysis.Set(L"bfeProfile", profileVerified ? knjson::Value(BfeProfileId) : knjson::Value());
+    analysis.Set(L"bfeProcess", process ? knjson::Value(Hex(process)) : knjson::Value());
+    analysis.Set(L"bfePid", process ? knjson::Value(std::to_wstring(pid)) : knjson::Value());
+    analysis.Set(L"bfeRecords", knjson::Value(std::to_wstring(records.size())));
+    analysis.Set(L"bfeProcessCandidates", knjson::Value(std::to_wstring(candidates)));
+    ctx.Out.AddLine(L"[wfp.bfe.discovery] candidates=" + std::to_wstring(candidates));
+}
+} // namespace
 
 void ScanTargetWfp(Ctx &ctx)
 {
@@ -15,10 +179,9 @@ void ScanTargetWfp(Ctx &ctx)
     }
     for (const auto &kind : kinds)
     {
-        if (kind != L"filters" && kind != L"callouts")
+        if (kind != L"filters" && kind != L"callouts" && kind != L"providers" && kind != L"sublayers" && kind != L"layers")
         {
-            ctx.Out.Fail(kind == L"providers" || kind == L"sublayers" || kind == L"layers" ? Status::Unsupported : Status::InvalidInput,
-                         L"[wfp] Remote/dump runtime collection supports filters and callouts; BFE management collections require local KD.");
+            ctx.Out.Fail(Status::InvalidInput, L"[wfp] Unknown collection.");
             return;
         }
     }
@@ -63,7 +226,8 @@ void ScanTargetWfp(Ctx &ctx)
             break;
         }
         budget.Report.LayoutProfile = WfpProfileId;
-        budget.Report.Limitations.Push(knjson::Value(L"Target runtime inventory, not BFE management inventory or an effective packet verdict. This collector does not recover BFE display names, filter/provider/sublayer GUIDs or descriptions; provider context remains an opaque target pointer."));
+        budget.Report.Limitations.Push(knjson::Value(L"Filters/callouts are runtime inventory enriched from the target BFE service, not an effective packet verdict. BFE-only filters are counted separately. Provider context remains an opaque target pointer."));
+        budget.Report.Limitations.Push(knjson::Value(L"BFE enrichment requires resident user pages in a unique svchost.exe hosting the verified bfe.dll. Indirect resource strings are preserved verbatim, without host localization. Absent and empty descriptions are distinct."));
         budget.Report.Limitations.Push(knjson::Value(L"Callout layer is reported only for a present runtime policy entry; registration-only slots can contain an unassigned zero layer. Condition values are bounded to 4096 bytes, 1024 conditions per filter."));
         const auto global = read.Integer(globalSymbol, 8);
         const auto roots = global ? read.Bytes(*global + 0x178, 0x30) : std::nullopt;
@@ -105,7 +269,7 @@ void ScanTargetWfp(Ctx &ctx)
                 {
                     break;
                 }
-                EmitRow(ctx, budget, row, 20);
+                EmitRow(ctx, budget, row, 0);
                 ++budget.Report.Collected.Decoded;
             }
         }
@@ -120,7 +284,7 @@ void ScanTargetWfp(Ctx &ctx)
                 const auto ok = ReadWfpFilter(read, entry, callouts, row);
                 if (!row.IsNull() && read.Retain(row, false))
                 {
-                    EmitRow(ctx, budget, row, 20);
+                    EmitRow(ctx, budget, row, 0);
                     ++filters;
                     ++budget.Report.Collected.Decoded;
                 }
@@ -135,7 +299,6 @@ void ScanTargetWfp(Ctx &ctx)
         analysis.Set(L"hashNodes", knjson::Value(std::to_wstring(physicalNodes)));
         analysis.Set(L"otherNamespaceNodes", knjson::Value(std::to_wstring(otherNodes)));
         analysis.Set(L"filterNamespace", knjson::Value(std::to_wstring(nameSpace)));
-        budget.Report.Analysis = analysis;
         ctx.Out.AddLine(L"[wfp.runtime] filters=" + (kinds.contains(L"filters") ? std::to_wstring(filters) : L"not-requested") + L" callouts=" + std::to_wstring(callouts.size()) +
                         L" hashNodes=" + std::to_wstring(physicalNodes) + L" otherNamespaces=" + std::to_wstring(otherNodes));
         if (!budget.Stopped)
@@ -150,6 +313,83 @@ void ScanTargetWfp(Ctx &ctx)
                     budget.Stop(Status::Partial, L"WfpRootsChangedDuringRead");
                 }
             }
+        }
+        if (!budget.Stopped)
+        {
+            WalkBudget bfeBudget;
+            bfeBudget.Cancelled = budget.Cancelled;
+            bfeBudget.MaxNodes = 65536;
+            std::vector<BfeRecord> records;
+            CollectBfeMetadata(ctx, architecture, bfeBudget, records, analysis);
+            const bool complete = bfeBudget.Report.Collected.Complete;
+            budget.Report.Collected.Expected += bfeBudget.Report.Collected.Expected;
+            budget.Report.Collected.Visited += bfeBudget.Report.Collected.Visited;
+            budget.Report.Collected.Read += bfeBudget.Report.Collected.Read;
+            budget.Report.Collected.Decoded += bfeBudget.Report.Collected.Decoded;
+            budget.Report.Collected.Unknown += bfeBudget.Report.Collected.Unknown;
+            budget.Report.Collected.Unreadable += bfeBudget.Report.Collected.Unreadable;
+            if (!analysis.Get(L"bfeProfile").IsNull())
+            {
+                budget.Report.LayoutProfile += L";" + std::wstring(BfeProfileId);
+            }
+            auto enriched = knjson::Value::MakeArray();
+            uint64_t matched = 0;
+            uint64_t managementFilters = 0;
+            uint64_t matchedFilters = 0;
+            bool mismatch = false;
+            read.RowUnits = 0;
+            for (auto row : budget.Report.Rows.Items())
+            {
+                mismatch = !EnrichBfeRow(row, records, complete) || mismatch;
+                if (row.Get(L"managementState").AsString(L"") == L"Matched")
+                {
+                    ++matched;
+                    matchedFilters += row.Get(L"kind").AsString(L"") == L"filters";
+                }
+                if (read.Retain(row, false))
+                {
+                    enriched.Push(row);
+                }
+            }
+            for (const auto &record : records)
+            {
+                managementFilters += record.Type == 5;
+                if (record.Type <= 3 && kinds.contains(record.Row.Get(L"kind").AsString(L"")))
+                {
+                    auto row = record.Row;
+                    if (record.Type == 2)
+                    {
+                        BfeJoinReference(row, records, 0, L"providerKey", L"provider", complete);
+                    }
+                    if (read.Retain(row, false))
+                    {
+                        enriched.Push(row);
+                    }
+                }
+            }
+            budget.Report.Rows = enriched;
+            analysis.Set(L"bfeMatchedRows", knjson::Value(std::to_wstring(matched)));
+            analysis.Set(L"bfeFilterCount", knjson::Value(std::to_wstring(managementFilters)));
+            analysis.Set(L"bfeFiltersWithoutRuntimeMatch", kinds.contains(L"filters") && complete ?
+                         knjson::Value(std::to_wstring(managementFilters - matchedFilters)) : knjson::Value());
+            if (!complete || mismatch)
+            {
+                const auto state = bfeBudget.Report.State;
+                budget.Stop(state == Status::Cancelled || state == Status::InternalFault ? state : Status::Partial,
+                            mismatch ? L"BfeRuntimeIdentityMismatch" : L"BfeMetadataIncomplete");
+            }
+            ctx.Out.AddLine(L"[wfp.bfe] records=" + std::to_wstring(records.size()) + L" matched=" + std::to_wstring(matched) +
+                            L" state=" + StatusName(bfeBudget.Report.State) + L" reason=" + bfeBudget.Report.Collected.StopReason);
+        }
+        budget.Report.Analysis = analysis;
+        size_t displayed = 0;
+        for (const auto &row : budget.Report.Rows.Items())
+        {
+            if (++displayed > 20)
+            {
+                break;
+            }
+            ctx.Out.AddLine(row.Write());
         }
     } while (false);
     FinishCollection(ctx, budget);

@@ -1626,6 +1626,13 @@ await check("T-UI-TABLE-SEMANTICS command records expose their actual payload an
             { "Callout ID": "7", "Callout Key": "callout-guid", "Registered": "Yes", "Layer Name": "NotAssigned",
                 "Policy Entry Present": "No", "Classify Routine Symbol": "example!Classify" }],
         ["features", { feature: "ttd-replay", enabled: false, status: "Unavailable", reason: "Not enabled" }, { "Feature": "ttd-replay", "Enabled": "No" }],
+        ["!wfp filters", { kind: "filters", filterId: "100", name: "Target filter", description: "Target description",
+            providerName: "Target provider", subLayerName: "Target sublayer", managementState: "Matched", nameState: "Present" },
+            { "Name": "Target filter", "Description": "Target description", "Provider Name": "Target provider",
+                "Sub Layer Name": "Target sublayer", "Management State": "Matched" }],
+        ["!wfp providers", { kind: "providers", source: "DebugTargetBfe", name: "@example.dll,-1", description: null,
+            nameState: "IndirectResource", descriptionState: "Absent", serviceName: "ExampleService" },
+            { "Name": "@example.dll,-1", "Name State": "IndirectResource", "Description State": "Absent", "Service Name": "ExampleService" }],
         ["results", { commandId: "!timer", status: "Partial", rowCount: "1", findingCount: "0", historical: true, resultId: "sample" },
             { "Command ID": "!timer", "Row Count": "1", "Historical": "Yes" }]
     ];

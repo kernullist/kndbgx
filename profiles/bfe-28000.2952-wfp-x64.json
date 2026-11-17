@@ -1,0 +1,96 @@
+{
+  "schema": "kndbgx.symbol-profile.v1",
+  "support": "Experimental",
+  "machine": "0x8664",
+  "pdbAge": 1,
+  "runtimeImplementation": "src/core/BfeRead.h; documents cannot enable other images",
+  "id": "BFE-28000.2952-C1292E0A",
+  "timestamp": "0x9b4142c3",
+  "imageSize": "0x10a000",
+  "pdbGuid": "c1292e0a-a164-36b2-9ec1-0ca2c76a2562",
+  "scope": "Read-only target BFE management metadata, joined to runtime identities; no host API or resource localization",
+  "windows": [
+    {
+      "symbol": "BfeObjectFindById",
+      "rva": "0x38aa0",
+      "offset": "0x28",
+      "bytes": "4869f898010000"
+    },
+    {
+      "symbol": "BfeObjectFindById",
+      "rva": "0x38aa0",
+      "offset": "0x8c",
+      "bytes": "498d8f20010000"
+    },
+    {
+      "symbol": "BfeObjectFindById",
+      "rva": "0x38aa0",
+      "offset": "0xac",
+      "bytes": "488d70d8"
+    },
+    {
+      "symbol": "BfeObjectFindById",
+      "rva": "0x38aa0",
+      "offset": "0xbf",
+      "bytes": "f6460808"
+    },
+    {
+      "symbol": "BfeObjectFindByKey",
+      "rva": "0x1bf90",
+      "offset": "0x3a",
+      "bytes": "48031d9fa70d00"
+    },
+    {
+      "symbol": "BfeObjectFindByKey",
+      "rva": "0x1bf90",
+      "offset": "0x5a",
+      "bytes": "488dabf0000000"
+    },
+    {
+      "symbol": "BfeObjectFindByKey",
+      "rva": "0x1bf90",
+      "offset": "0x8d",
+      "bytes": "488d58f0"
+    },
+    {
+      "symbol": "BfeObjectFindByKey",
+      "rva": "0x1bf90",
+      "offset": "0xc4",
+      "bytes": "488d8b90000000"
+    },
+    {
+      "symbol": "BfeObjectGetPublicStateDefault",
+      "rva": "0x3b5e0",
+      "offset": "0x0",
+      "bytes": "488b01c3"
+    },
+    {
+      "symbol": "BfeObjectGetKeyFromPublicStateDefault",
+      "rva": "0x3c1c0",
+      "offset": "0x0",
+      "bytes": "488bc1c3"
+    },
+    {
+      "symbol": "BfeFilterGetId",
+      "rva": "0x386a0",
+      "offset": "0x0",
+      "bytes": "488b01488b80b0000000c3"
+    }
+  ],
+  "layout": {
+    "gBfeObjMgr": "0xf6770",
+    "typeStride": "0x198",
+    "keyHash": "0xf0",
+    "objectKeyLink": "0x10",
+    "objectDeletedMask": "0x8",
+    "publicStatePointer": "0x90",
+    "types": {
+      "providers": 0,
+      "sublayers": 2,
+      "layers": 3,
+      "callouts": 4,
+      "filters": 5
+    }
+  },
+  "identityVerification": "Target PE machine, size, timestamp and image CodeView GUID/age, then target code bytes; PEB layouts additionally require matched NT fields."
+}
