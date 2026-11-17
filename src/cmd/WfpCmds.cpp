@@ -2,12 +2,55 @@
 #include "../core/WfpProfile.h"
 #include "../core/WfpRead.h"
 #include "../core/BfeRead.h"
+#include "../core/BfeResources.h"
 #include "../engine/ContextGuard.h"
 
 namespace kncmd
 {
 namespace
 {
+bool LoadResourceLayout(knengine::LayoutResolver &resolver, kncore::ResourceLayout &layout)
+{
+    using namespace kncore;
+    const auto field = [&](const wchar_t *type, const wchar_t *name)
+    {
+        return resolver.Field(L"nt", type, name);
+    };
+    const auto node = field(L"_MMVAD_SHORT", L"VadNode");
+    bool ok = node && node->Offset == 0 && node->Size == 24;
+    ok &= layout.Add(L"root", NestedField(field(L"_EPROCESS", L"VadRoot"), field(L"_RTL_AVL_TREE", L"Root")), 8);
+    ok &= layout.Add(L"left", field(L"_RTL_BALANCED_NODE", L"Left"), 8);
+    ok &= layout.Add(L"right", field(L"_RTL_BALANCED_NODE", L"Right"), 8);
+    ok &= layout.Add(L"start", field(L"_MMVAD_SHORT", L"StartingVpn"), 4);
+    ok &= layout.Add(L"startHigh", field(L"_MMVAD_SHORT", L"StartingVpnHigh"), 1);
+    ok &= layout.Add(L"private", NestedField(field(L"_MMVAD_SHORT", L"u"), field(L"_MMVAD_FLAGS", L"PrivateMemory")), 4, true);
+    ok &= layout.Add(L"subsection", field(L"_MMVAD", L"Subsection"), 8);
+    ok &= layout.Add(L"control", field(L"_SUBSECTION", L"ControlArea"), 8);
+    ok &= layout.Add(L"pteBase", field(L"_SUBSECTION", L"SubsectionBase"), 8);
+    ok &= layout.Add(L"next", field(L"_SUBSECTION", L"NextSubsection"), 8);
+    ok &= layout.Add(L"sector", field(L"_SUBSECTION", L"StartingSector"), 4);
+    ok &= layout.Add(L"sectorHigh", NestedField(field(L"_SUBSECTION", L"SubsectionFlags"), field(L"_MMSUBSECTION_FLAGS", L"StartingSector4132")), 4, true);
+    ok &= layout.Add(L"sectors", field(L"_SUBSECTION", L"NumberOfFullSectors"), 4);
+    ok &= layout.Add(L"tail", NestedField(field(L"_SUBSECTION", L"SubsectionFlags"), field(L"_MMSUBSECTION_FLAGS", L"SectorEndOffset")), 4, true);
+    ok &= layout.Add(L"ptes", field(L"_SUBSECTION", L"PtesInSubsection"), 4);
+    ok &= layout.Add(L"unusedPtes", field(L"_SUBSECTION", L"UnusedPtes"), 4);
+    ok &= layout.Add(L"image", NestedField(field(L"_CONTROL_AREA", L"u"), field(L"_MMSECTION_FLAGS", L"Image")), 4, true);
+    ok &= layout.Add(L"filePointer", NestedField(field(L"_CONTROL_AREA", L"FilePointer"), field(L"_EX_FAST_REF", L"Object")), 8);
+    ok &= layout.Add(L"refCount", field(L"_EX_FAST_REF", L"RefCnt"), 8, true);
+    ok &= layout.Add(L"fileName", field(L"_FILE_OBJECT", L"FileName"), 16);
+    ok &= layout.Add(L"valid", field(L"_MMPTE_HARDWARE", L"Valid"), 8, true);
+    ok &= layout.Add(L"hardwarePfn", field(L"_MMPTE_HARDWARE", L"PageFrameNumber"), 8, true);
+    ok &= layout.Add(L"transition", field(L"_MMPTE_TRANSITION", L"Transition"), 8, true);
+    ok &= layout.Add(L"prototype", field(L"_MMPTE_TRANSITION", L"Prototype"), 8, true);
+    ok &= layout.Add(L"transitionPfn", field(L"_MMPTE_TRANSITION", L"PageFrameNumber"), 8, true);
+    if (ok)
+    {
+        ok = *layout.Fields.at(L"refCount").BitOffset == 0 && *layout.Fields.at(L"refCount").BitWidth <= 8 &&
+             *layout.Fields.at(L"hardwarePfn").BitWidth <= 40 && *layout.Fields.at(L"transitionPfn").BitWidth <= 40;
+    }
+    return ok;
+}
+
 void CollectBfeMetadata(Ctx &ctx, const kncore::TargetArchitecture &architecture, kncore::WalkBudget &budget,
                         std::vector<kncore::BfeRecord> &records, knjson::Value &analysis)
 {
@@ -148,6 +191,45 @@ void CollectBfeMetadata(Ctx &ctx, const kncore::TargetArchitecture &architecture
                 records.clear();
             }
         }
+        if (!budget.Stopped)
+        {
+            ResourceLayout resourceLayout;
+            knengine::SessionStatus resourceStatus = {};
+            ctx.Session.QueryStatus(&resourceStatus);
+            if (resourceStatus.Stopped && LoadResourceLayout(layout, resourceLayout))
+            {
+                WalkBudget resources;
+                resources.Cancelled = budget.Cancelled;
+                ResourceMemory resourceMemory(ctx.Session, architecture, resources);
+                std::vector<uint64_t> owners{process};
+                for (const auto &candidate : processes)
+                {
+                    if (_wcsicmp(candidate.Image.c_str(), L"services.exe") == 0)
+                    {
+                        owners.push_back(candidate.Eprocess);
+                    }
+                }
+                for (const auto &candidate : processes)
+                {
+                    if (candidate.Eprocess != process && _wcsicmp(candidate.Image.c_str(), L"svchost.exe") == 0)
+                    {
+                        owners.push_back(candidate.Eprocess);
+                    }
+                }
+                ResolveBfeResources(resourceMemory, resourceLayout, owners, records, analysis);
+                analysis.Set(L"resourceState", knjson::Value(StatusName(resources.Report.State)));
+                analysis.Set(L"resourceReason", knjson::Value(resources.Report.Collected.StopReason));
+                if (WfpTerminalRead(resources.Report.State))
+                {
+                    budget.Stop(resources.Report.State, resources.Report.Collected.StopReason.c_str());
+                }
+            }
+            else
+            {
+                analysis.Set(L"resourceState", knjson::Value(L"Unavailable"));
+                analysis.Set(L"resourceReason", knjson::Value(resourceStatus.Stopped ? L"ResourceKernelLayoutUnavailable" : L"ResourceTargetNotStopped"));
+            }
+        }
     } while (false);
     if (!restore.Restore())
     {
@@ -227,7 +309,7 @@ void ScanTargetWfp(Ctx &ctx)
         }
         budget.Report.LayoutProfile = WfpProfileId;
         budget.Report.Limitations.Push(knjson::Value(L"Filters/callouts are runtime inventory enriched from the target BFE service, not an effective packet verdict. BFE-only filters are counted separately. Provider context remains an opaque target pointer."));
-        budget.Report.Limitations.Push(knjson::Value(L"BFE enrichment requires resident user pages in a unique svchost.exe hosting the verified bfe.dll. Indirect resource strings are preserved verbatim, without host localization. Absent and empty descriptions are distinct."));
+        budget.Report.Limitations.Push(knjson::Value(L"BFE enrichment requires resident user pages in a unique svchost.exe hosting the verified bfe.dll. Indirect strings use target mapped PE/MUI resources with matching checksums; missing pages or mappings retain the original reference. No host localization or target page-in is performed. Absent and empty descriptions are distinct."));
         budget.Report.Limitations.Push(knjson::Value(L"Callout layer is reported only for a present runtime policy entry; registration-only slots can contain an unassigned zero layer. Condition values are bounded to 4096 bytes, 1024 conditions per filter."));
         const auto global = read.Integer(globalSymbol, 8);
         const auto roots = global ? read.Bytes(*global + 0x178, 0x30) : std::nullopt;
@@ -378,8 +460,15 @@ void ScanTargetWfp(Ctx &ctx)
                 budget.Stop(WfpTerminalRead(state) ? state : Status::Partial,
                             mismatch ? L"BfeRuntimeIdentityMismatch" : L"BfeMetadataIncomplete");
             }
+            if (!budget.Stopped && analysis.Get(L"resourceState").AsString(L"Success") != L"Success")
+            {
+                budget.Stop(Status::Partial, L"BfeResourceUnavailable");
+            }
             ctx.Out.AddLine(L"[wfp.bfe] records=" + std::to_wstring(records.size()) + L" matched=" + std::to_wstring(matched) +
                             L" state=" + StatusName(bfeBudget.Report.State) + L" reason=" + bfeBudget.Report.Collected.StopReason);
+            ctx.Out.AddLine(L"[wfp.resources] resolved=" + analysis.Get(L"resourceResolved").AsString(L"0") +
+                            L" unresolved=" + analysis.Get(L"resourceUnresolved").AsString(L"Unknown") +
+                            L" state=" + analysis.Get(L"resourceState").AsString(L"Unavailable"));
         }
         budget.Report.Analysis = analysis;
         size_t displayed = 0;

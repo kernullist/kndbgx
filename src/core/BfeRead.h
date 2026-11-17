@@ -601,7 +601,8 @@ inline void BfeJoinReference(knjson::Value &row, const std::vector<BfeRecord> &r
     row.Set(std::wstring(prefix) + L"State", knjson::Value(found == records.end() ? complete ? L"NotPresentInBfe" : L"Unavailable" : L"Matched"));
     if (found != records.end())
     {
-        for (const auto field : {L"name", L"nameState", L"description", L"descriptionState", L"serviceName", L"serviceNameState", L"weight", L"providerKey"})
+        for (const auto field : {L"name", L"nameState", L"nameRaw", L"nameResource", L"description", L"descriptionState",
+                                 L"descriptionRaw", L"descriptionResource", L"serviceName", L"serviceNameState", L"weight", L"providerKey"})
         {
             auto suffix = std::wstring(field);
             suffix[0] = wchar_t(towupper(suffix[0]));

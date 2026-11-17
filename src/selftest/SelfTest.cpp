@@ -43,6 +43,7 @@
 #include "Win32kPolicyRegression.h"
 #include "WfpRegression.h"
 #include "BfeRegression.h"
+#include "ResourceRegression.h"
 
 #include <cstdio>
 #include <string>
@@ -718,6 +719,7 @@ int wmain(int argc, wchar_t **argv)
     knself::RunCommandRecordRegression(Check);
     knself::RunWfpRegression(Check);
     knself::RunBfeRegression(Check);
+    knself::RunResourceRegression(Check);
     knself::RunKernelPartialRegression(Check);
     knself::RunAlpcRegression(Check);
     knself::RunWin32kDispatchRegression(Check);

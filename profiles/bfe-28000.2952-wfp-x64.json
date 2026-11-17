@@ -3,12 +3,12 @@
   "support": "Experimental",
   "machine": "0x8664",
   "pdbAge": 1,
-  "runtimeImplementation": "src/core/BfeRead.h; documents cannot enable other images",
+  "runtimeImplementation": "src/core/BfeRead.h; src/core/BfeResources.h; src/core/MappedResources.h; src/core/PeResources.h; documents cannot enable other images",
   "id": "BFE-28000.2952-C1292E0A",
   "timestamp": "0x9b4142c3",
   "imageSize": "0x10a000",
   "pdbGuid": "c1292e0a-a164-36b2-9ec1-0ca2c76a2562",
-  "scope": "Read-only target BFE management metadata, joined to runtime identities; no host API or resource localization",
+  "scope": "Read-only target BFE management metadata and resident mapped PE/MUI strings, joined to runtime identities; no host BFE or host resource lookup",
   "windows": [
     {
       "symbol": "BfeObjectFindById",

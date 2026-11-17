@@ -55,6 +55,7 @@ struct PeImage
     uint32_t ImageSize = 0;
     uint32_t HeadersSize = 0;
     uint32_t EntryRva = 0;
+    IMAGE_DATA_DIRECTORY ResourceDirectory = {};
     IMAGE_DATA_DIRECTORY DebugDirectory = {};
     std::vector<IMAGE_SECTION_HEADER> Sections;
 };
@@ -122,6 +123,10 @@ inline BinaryResult ParsePeHeaders(std::span<const unsigned char> bytes, PeImage
         Load(bytes, optional + offsetof(IMAGE_OPTIONAL_HEADER32, SizeOfImage), &image.ImageSize);
         Load(bytes, optional + offsetof(IMAGE_OPTIONAL_HEADER32, SizeOfHeaders), &image.HeadersSize);
         Load(bytes, optional + offsetof(IMAGE_OPTIONAL_HEADER32, AddressOfEntryPoint), &image.EntryRva);
+        if (directories > IMAGE_DIRECTORY_ENTRY_RESOURCE)
+        {
+            Load(bytes, optional + minimum + IMAGE_DIRECTORY_ENTRY_RESOURCE * sizeof(IMAGE_DATA_DIRECTORY), &image.ResourceDirectory);
+        }
         if (directories > IMAGE_DIRECTORY_ENTRY_DEBUG)
         {
             Load(bytes, optional + minimum + IMAGE_DIRECTORY_ENTRY_DEBUG * sizeof(IMAGE_DATA_DIRECTORY), &image.DebugDirectory);
