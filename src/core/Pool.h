@@ -2,9 +2,46 @@
 
 #include "CollectorRead.h"
 #include <array>
+#include <string_view>
 
 namespace kncore
 {
+struct PoolDisplayOptions
+{
+    explicit PoolDisplayOptions(bool payload) : Summary(!payload), Permissions(payload)
+    {
+    }
+    bool Summary;
+    bool Permissions;
+    bool Full = false;
+
+    bool Apply(std::wstring_view option)
+    {
+        if (option == L"summary" || option == L"big" || option == L"find")
+        {
+            Summary = option == L"summary";
+            explicitMode_ = true;
+        }
+        else if (option == L"/wx" || option == L"/full")
+        {
+            Permissions = true;
+            Full = Full || option == L"/full";
+            if (!explicitMode_)
+            {
+                Summary = false;
+            }
+        }
+        else
+        {
+            return false;
+        }
+        return true;
+    }
+
+  private:
+    bool explicitMode_ = false;
+};
+
 struct BigPoolEntry
 {
     uint64_t Address = 0;

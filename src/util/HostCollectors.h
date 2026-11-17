@@ -8,6 +8,31 @@
 
 namespace knutil
 {
+inline const wchar_t *WfpActionName(FWP_ACTION_TYPE action)
+{
+    switch (action)
+    {
+    case FWP_ACTION_BLOCK:
+        return L"Block";
+    case FWP_ACTION_PERMIT:
+        return L"Permit";
+    case FWP_ACTION_CALLOUT_TERMINATING:
+        return L"Terminating callout";
+    case FWP_ACTION_CALLOUT_INSPECTION:
+        return L"Inspection callout";
+    case FWP_ACTION_CALLOUT_UNKNOWN:
+        return L"Callout (unknown termination)";
+    case FWP_ACTION_CONTINUE:
+        return L"Continue";
+    case FWP_ACTION_NONE:
+        return L"None";
+    case FWP_ACTION_NONE_NO_MATCH:
+        return L"No match";
+    default:
+        return L"Unknown";
+    }
+}
+
 struct HashResult
 {
     kncore::Status State = kncore::Status::IOError;

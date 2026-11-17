@@ -3,6 +3,7 @@
 #include "../core/Piddb.h"
 #include "../core/CiHash.h"
 #include "../core/HistoryRows.h"
+#include "../core/DriverRecord.h"
 #include "../util/SnapshotStore.h"
 
 #include <windows.h>
@@ -456,6 +457,12 @@ void ScanPayload(Ctx &ctx)
 
 void ScanDriverList(Ctx &ctx)
 {
+    kncore::TargetArchitecture architecture;
+    if (!KernelArchitecture(ctx.Session, &architecture))
+    {
+        ctx.Out.Fail(kncore::Status::Unavailable, L"Target architecture unavailable");
+        return;
+    }
     knengine::ObjectDirectoryWalker walker(ctx.Session);
     knengine::LayoutResolver layout(ctx.Session);
     unsigned driverType = 0;
@@ -498,6 +505,18 @@ void ScanDriverList(Ctx &ctx)
             row.Set(L"name", accepted ? knjson::Value(name) : knjson::Value());
             row.Set(L"verification", knjson::Value(typeVerified ? L"ObTypeIndexTable" : L"DriverNameEcho"));
             unknown += accepted ? 0 : 1;
+            if (typeVerified || echoVerified)
+            {
+                const auto fields = kncore::ReadDriverRecordFields(ctx.Session, architecture, body, [&](const wchar_t *field)
+                {
+                    return layout.Field(L"nt", L"_DRIVER_OBJECT", field);
+                });
+                for (const auto &[key, value] : fields.Fields.Fields())
+                {
+                    row.Set(key, value);
+                }
+                unknown += fields.Unknown;
+            }
             rows.Push(row);
             if (rows.Items().size() <= 256)
             {

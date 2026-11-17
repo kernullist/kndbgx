@@ -8,6 +8,7 @@
 #include "../engine/SymbolQuery.h"
 #include "../core/Features.h"
 #include "../core/DisassemblyView.h"
+#include "../core/FieldObservation.h"
 #include "../catalog/Catalog.h"
 #include <array>
 #include <cwctype>
@@ -197,6 +198,9 @@ void Disassemble(Ctx &ctx)
         row.Set(L"address", knjson::Value(kncore::Hex(address)));
         row.Set(L"source", knjson::Value(L"DbgEng uf"));
         row.Set(L"engineCompleted", knjson::Value(complete));
+        const size_t prefix = knutil::Utf16PrefixUnits(text, 262144);
+        row.Set(L"output", knjson::Value(text.substr(0, prefix)));
+        row.Set(L"outputTruncated", knjson::Value(prefix != text.size()));
         row.Set(L"interpretation", knjson::Value(L"Host function output is unparsed; engine completion does not prove complete disassembly"));
         ctx.Out.Details.Rows.Push(row);
         ctx.Out.AddLine(L"[function] " + kncore::Hex(address));
@@ -318,22 +322,33 @@ void TypeFields(Ctx &ctx)
         if (ctx.Args.size() == 3 && field.Size <= 256 && kncore::ValidRange(address, static_cast<uint64_t>(field.Offset) + field.Size))
         {
             const auto read = ctx.Session.Read(kncore::AddressSpace::Virtual, address + field.Offset, field.Size);
-            row.Set(L"bytes", read.State == kncore::Status::Success ? knjson::Value(kncore::BytesHex(read.Bytes)) : knjson::Value());
+            const bool readable = kncore::ExactBytes(read, field.Size);
+            row.Set(L"bytes", readable ? knjson::Value(kncore::BytesHex(read.Bytes)) : knjson::Value());
             row.Set(L"valueStatus", knjson::Value(kncore::StatusName(read.State)));
+            if (field.Kind == kncore::FieldKind::Unsigned || field.Kind == kncore::FieldKind::Signed ||
+                field.Kind == kncore::FieldKind::Boolean || field.Kind == kncore::FieldKind::Pointer)
+            {
+                row.Set(L"value", kncore::ScalarFieldObservation(field, read));
+            }
             if (field.Kind == kncore::FieldKind::Pointer && (field.Size == 4 || field.Size == 8))
             {
                 uint64_t pointer = 0;
-                const bool readable = read.State == kncore::Status::Success && read.Bytes.size() == field.Size;
                 if (readable)
                 {
                     std::memcpy(&pointer, read.Bytes.data(), field.Size);
                 }
                 row.Set(L"pointer", readable ? knjson::Value(kncore::Hex(pointer)) : knjson::Value());
             }
-            if (read.State != kncore::Status::Success)
+            if (!readable)
             {
                 ++ctx.Out.Details.Collected.Unreadable;
             }
+        }
+        else if (ctx.Args.size() == 3)
+        {
+            row.Set(L"bytes", knjson::Value());
+            row.Set(L"valueStatus", knjson::Value(L"NotRead:FieldSizeLimit"));
+            ++ctx.Out.Details.Collected.Unknown;
         }
         ctx.Out.Details.Rows.Push(row);
         ctx.Out.AddLine(kncore::Hex(field.Offset) + L" " + name + L" size=" + std::to_wstring(field.Size) +
@@ -343,8 +358,9 @@ void TypeFields(Ctx &ctx)
     {
         ctx.Out.AddLine(L"[unknown.field] " + name);
     }
-    ctx.Out.Details.Collected.Unknown = descriptor->UnknownFields.size();
-    const bool complete = descriptor->Complete && !ctx.Session.Cancelled() && ctx.Out.Details.Collected.Unreadable == 0;
+    ctx.Out.Details.Collected.Unknown += descriptor->UnknownFields.size();
+    const bool complete = descriptor->Complete && !ctx.Session.Cancelled() && ctx.Out.Details.Collected.Unreadable == 0 &&
+                          ctx.Out.Details.Collected.Unknown == 0;
     FinishRows(ctx.Out, complete);
     if (!complete)
     {

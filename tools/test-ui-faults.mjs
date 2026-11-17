@@ -1556,6 +1556,96 @@ await check("T-UI-RECORDS semantic collector fields survive sparse routines and 
     assert.equal(tableCell(app, 0, "Reason"), "CiHashNameUnavailable");
 });
 
+await check("T-UI-TABLE-SEMANTICS command records expose their actual payload and source scope", async () =>
+{
+    const app = harness();
+    await app.boot();
+    const examples = [
+        ["dt nt!_EXAMPLE 0x1000", { field: "Flags", offset: "0x8", type: "unsigned long", pointer: null, symbol: null,
+            size: "4", bitOffset: "3", bitWidth: "2", arrayCount: null, bytes: "18000000", value: "0x3", valueStatus: "Success" },
+            { "Value": "0x3", "Bytes": "18000000", "Value Status": "Success" }],
+        ["dt nt!_EXAMPLE 0x1000", { field: "Buffer", offset: "0x10", type: "char [1024]", size: "1024", bytes: null,
+            valueStatus: "NotRead:FieldSizeLimit" }, { "Bytes": "Unknown", "Value Status": "NotRead:FieldSizeLimit" }],
+        ["uf nt!Example", { kind: "HostFunctionDisassembly", address: "0xffff800000002000", output: "nt!Example:\nret",
+            engineCompleted: true, outputTruncated: false, source: "DbgEng uf" }, { "Output": "nt!Example:\nret", "Output Truncated": "No" }],
+        ["!driver", { kind: "DriverObject", name: "\\Driver\\Example", address: "0xffff800000002000", start: "0xffff800000004000",
+            size: "4096", flags: "0x0", firstDevice: "0x0", driverInit: "0xffff800000004100", driverInitSymbol: "sample!DriverEntry",
+            driverUnload: "0x0", driverUnloadSymbol: null, driverUnloadSymbolSource: "NotRegistered", driverStartIo: null },
+            { "Name": "\\Driver\\Example", "Size": "4096", "Driver Init Symbol": "sample!DriverEntry", "Driver Unload Symbol": "Not registered", "Driver Start Io": "Unknown" }],
+        ["!pool summary", { kind: "PoolTagSummary", tag: "Test", allocationCount: "2", totalBytes: "12288" },
+            { "Tag": "Test", "Allocation Count": "2", "Total Bytes": "12288" }],
+        ["!pool summary /wx", { kind: "PoolTagSummary", tag: "Test", allocationCount: "2", totalBytes: "12288",
+            wxObservedAllocations: "0", fullyClassifiedAllocations: "1", incompleteAllocations: "1", inspectedPages: "2", unavailablePages: "0" },
+            { "Wx Observed Allocations": "0", "Fully Classified Allocations": "1", "Incomplete Allocations": "1", "Inspected Pages": "2" }],
+        ["!token", { kind: "ThreadToken", process: { pid: "4", image: "System" }, selection: "CurrentThreadEffectiveToken",
+            tokenTypeName: "Impersonation", mandatoryLabelRid: "16384", privilegesPresent: "0x0", privilegesEnabled: "0x0",
+            privilegesEnabledByDefault: "0x0", address: "0xffff800000002000", AuthenticationId: "999", TokenId: "1001", SessionId: "0" },
+            { "Selection": "CurrentThreadEffectiveToken", "Process / Image": "System", "Session ID": "0", "Token ID": "1001" }],
+        ["!ci /host", { kind: "HostCodeIntegrity", scope: "DebuggerHost", known: true, source: "NtQuerySystemInformation", raw: "0x400",
+            ntStatus: "0x0", queryAvailable: true, returnedLength: "8", structureLength: "8", unknownOptions: "0x0",
+            codeIntegrityEnabled: false, testSign: false, umciEnabled: false, umciAuditMode: false, hvciEnabled: true,
+            hvciAuditMode: false, hvciStrictMode: false, hvciIumEnabled: false },
+            { "Scope": "DebuggerHost", "Hvci Enabled": "Yes", "Code Integrity Enabled": "No", "Unknown Options": "0x0" }],
+        ["ntstatus c0000005", { kind: "NtStatus", code: "0xc0000005", severity: "Error", ntSuccess: false, facility: "0x0", statusCode: "0x5", customer: false, reservedBit: false },
+            { "Code": "0xc0000005", "Nt Success": "No", "Status Code": "0x5" }],
+        ["bugcheck-decode 1f2 1000 4 2000 181", { kind: "Bugcheck", code: "0x1f2", name: "KASAN", parameters: ["0x1000", "0x4", "0x2000", "0x181"],
+            address: "0x1000", instructionPointer: "0x2000", access: "write", accessBytes: "4", shadowByte: "0x81", shadowMeaning: "Alloca left redzone" },
+            { "Parameters": '["0x1000","0x4","0x2000","0x181"]', "Shadow Meaning": "Alloca left redzone" }],
+        ["!address 1000", { kind: "Address", address: "0x1000", space: "virtual", physical: "0x0", dtb: "0x2000", writable: false, executable: true, pageSize: "4096", error: "" },
+            { "Physical": "0x0", "Writable": "No", "Executable": "Yes" }],
+        ["!diff before after", { kind: "SnapshotDifference", collector: "processes", key: "example", state: "Unknown", knownChanged: false, unknownFields: true,
+            beforeCount: "1", afterCount: "1", before: { image: "example" }, after: { image: null } },
+            { "State": "Unknown", "Unknown Fields": "Yes", "Known Changed": "No" }],
+        ["diagnose drivers", { kind: "HostDiagnostic", recipe: "drivers", command: "lm", engineAccepted: true, contextRestored: true, outputTruncated: false,
+            output: "native output" }, { "Output": "native output", "Context Restored": "Yes" }],
+        ["diag-catalog", { kind: "DiagnosticRecipe", name: "drivers", group: "kernel", description: "Inspect drivers", operand: "none", hostCommand: "lm" },
+            { "Group": "kernel", "Operand": "none", "Host Command": "lm" }],
+        ["!byovd", { kind: "ModuleFileCatalogObservation", module: "example", path: "example.sys", imageIdentityMatches: false, sha256: null, catalogMatch: null },
+            { "Image Identity Matches": "No", "Catalog Match": "Unknown" }],
+        ["driver-audit example.sys", { kind: "DriverImage", machine: "0x8664", subsystem: "1", imageSize: "4096", entryRva: "0x1000",
+            timestamp: "0x0", nxCompatible: true, dynamicBase: true, highEntropyVa: false, guardCfDeclared: false, forceIntegrity: false,
+            relocationsStripped: false, loadConfigValid: true, certificateTablePresent: false, certificateTableBoundsValid: true },
+            { "High Entropy Va": "No", "Guard Cf Declared": "No", "Force Integrity": "No", "Certificate Table Present": "No" }],
+        ["driver-audit example.sys", { kind: "EmbeddedSignature", status: "NoEmbeddedSignature", trustedByHostOfflinePolicy: false,
+            revocationChecked: false, catalogChecked: false, scope: "HostOfflinePolicy" },
+            { "Catalog Checked": "No", "Revocation Checked": "No", "Scope": "HostOfflinePolicy" }],
+        ["!dma", { table: "DMAR (Intel VT-d)", bytes: "0", error: "0x2", available: false }, { "Table": "DMAR (Intel VT-d)", "Available": "No" }],
+        ["!wfp", { kind: "filters", name: "example", key: "filter-guid", action: "0x1001", actionName: "Block", layer: "layer-guid",
+            subLayer: "sub-layer-guid", filterId: "18446744073709551615", conditionCount: "0", flags: "0x0", hasProviderKey: false,
+            usesCallout: false, providerKey: null, calloutKey: null },
+            { "Action": "0x1001", "Action Name": "Block", "Layer": "layer-guid", "Filter ID": "18446744073709551615", "Condition Count": "0", "Provider Key": "None", "Callout Key": "N/A" }],
+        ["features", { feature: "ttd-replay", enabled: false, status: "Unavailable", reason: "Not enabled" }, { "Feature": "ttd-replay", "Enabled": "No" }],
+        ["results", { commandId: "!timer", status: "Partial", rowCount: "1", findingCount: "0", historical: true, resultId: "sample" },
+            { "Command ID": "!timer", "Row Count": "1", "Historical": "Yes" }]
+    ];
+    for (const [command, row, cells] of examples)
+    {
+        await openTable(app, command, [row]);
+        for (const [label, expected] of Object.entries(cells))
+        {
+            assert.equal(tableCell(app, 0, label), expected, command + ": " + label);
+        }
+    }
+    await openTable(app, "!drvobj example", [
+        { kind: "Driver", name: "\\Driver\\Example", object: "0xffff800000001000", start: "0xffff800000002000", size: "0x1000", firstDevice: "0x0" },
+        { kind: "DriverDispatch", major: "14", majorName: "DEVICE_CONTROL", handler: "0xffff800000002100", symbol: "example!Dispatch", ownership: "KnownModule", driverObject: "0xffff800000001000" },
+        { kind: "Device", driverName: "\\Driver\\Example", device: "0xffff800000003000", type: "0x22", stackSize: "1", flags: "0x0", link: "NextDevice" }
+    ]);
+    assert.equal(tableCell(app, 0, "Size"), "0x1000");
+    assert.equal(tableCell(app, 0, "First Device"), "0x0");
+    assert.equal(tableCell(app, 1, "Major"), "DEVICE_CONTROL");
+    assert.equal(tableCell(app, 2, "Stack Size"), "1");
+    await openTable(app, "irp 0xffff800000001000", [
+        { kind: "Irp", address: "0xffff800000001000", status: "0x0", information: "0x10", stackCount: "1", currentLocation: "1", cancel: "0", pendingReturned: "0", flags: "0x0" },
+        { kind: "IoStackLocation", address: "0xffff8000000010d0", slot: "1", current: true, majorName: "DEVICE_CONTROL", minor: "0x0",
+            DeviceObject: "0xffff800000002000", FileObject: "0x0", CompletionRoutine: "0x0", ioctl: { code: "0x222003" }, inputLength: "0", outputLength: "16" }
+    ]);
+    assert.equal(tableCell(app, 0, "Information"), "0x10");
+    assert.equal(tableCell(app, 1, "Major Name"), "DEVICE_CONTROL");
+    assert.equal(tableCell(app, 1, "IOCTL / Code"), "0x222003");
+    assert.equal(tableCell(app, 1, "Output Length"), "16");
+});
+
 await check("T-UI-STACK captured identity survives sorting, context changes and retained-result recall", async () =>
 {
     const app = harness({ breakpointAuto: false });

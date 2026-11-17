@@ -1,5 +1,6 @@
 #include "CollectorSupport.h"
 #include "../core/ObjectRead.h"
+#include "../core/DriverRecord.h"
 #include "../core/KernelAnalysis.h"
 #include <tuple>
 #include "../engine/ObjectDirectory.h"
@@ -76,8 +77,10 @@ bool DriverObject(Ctx &ctx, knengine::LayoutResolver &layout, uint64_t *address)
     if (found == 0 || !walked)
     {
         ctx.Out.Details = objects.Report();
-        ctx.Out.Fail(kncore::Status::Unavailable, unreadable != 0 ? L"Driver name not resolved; some directory candidates unreadable"
-                                                                  : L"Driver not observed in directory");
+        ctx.Out.Fail(kncore::Status::Unavailable,
+                     !walked ? L"Driver directory lookup incomplete: " + objects.Report().Collected.StopReason
+                     : unreadable != 0 ? L"Driver name not resolved; some directory candidates unreadable"
+                                       : L"Driver not observed in completed directory walk");
         return false;
     }
     *address = found;
@@ -154,9 +157,7 @@ void ScanDrvobj(Ctx &ctx)
         return;
     }
     const auto nameField = layout.Field(L"nt", L"_DRIVER_OBJECT", L"DriverName");
-    const auto startField = layout.Field(L"nt", L"_DRIVER_OBJECT", L"DriverStart");
     const auto sizeField = layout.Field(L"nt", L"_DRIVER_OBJECT", L"DriverSize");
-    const auto deviceField = layout.Field(L"nt", L"_DRIVER_OBJECT", L"DeviceObject");
     const auto majors = layout.Field(L"nt", L"_DRIVER_OBJECT", L"MajorFunction");
     if (!nameField || !sizeField || sizeField->Size != sizeof(ULONG) || !majors || !majors->ArrayCount || !majors->ElementSize ||
         *majors->ElementSize != 8 || *majors->ArrayCount > 256)
@@ -167,28 +168,32 @@ void ScanDrvobj(Ctx &ctx)
     std::wstring name;
     const bool nameKnown = kncore::ValidRange(object, static_cast<uint64_t>(nameField->Offset) + nameField->Size) &&
                            ReadUnicodeString(ctx.Session, layout, object + nameField->Offset, &name);
-    const auto start = kncore::ReadField(ctx.Session, object, startField);
-    const auto size = kncore::ReadField(ctx.Session, object, sizeField);
-    const auto device = kncore::ReadField(ctx.Session, object, deviceField);
+    const auto fields = kncore::ReadDriverRecordFields(ctx.Session, architecture, object, [&](const wchar_t *field)
+    {
+        return layout.Field(L"nt", L"_DRIVER_OBJECT", field);
+    });
+    const auto device = fields.FirstDevice;
     auto driver = knjson::Value::MakeObject();
     driver.Set(L"kind", knjson::Value(L"Driver"));
     driver.Set(L"object", knjson::Value(kncore::Hex(object)));
     driver.Set(L"name", nameKnown ? knjson::Value(name) : knjson::Value());
-    driver.Set(L"start", kncore::OptionalNumber(start, true));
-    driver.Set(L"size", kncore::OptionalNumber(size, true));
-    driver.Set(L"firstDevice", kncore::OptionalNumber(device, true));
+    for (const auto &[key, value] : fields.Fields.Fields())
+    {
+        driver.Set(key, value);
+    }
+    budget.Report.Collected.Unknown += fields.Unknown;
     budget.Report.Rows.Push(driver);
-    if (!nameKnown || !start || !size || !device)
+    if (!nameKnown)
     {
         ++budget.Report.Collected.Unknown;
     }
     ctx.Out.AddLine(L"[driver] " + driver.Write());
     const auto owners = knengine::CollectOwnershipIndex(ctx.Session);
+    budget.StartTraversal(std::chrono::steady_clock::now(), std::chrono::seconds(60));
     for (uint32_t index = 0; index < *majors->ArrayCount; ++index)
     {
-        if (ctx.Session.Cancelled())
+        if (!CheckCollection(ctx, budget))
         {
-            budget.Stop(kncore::Status::Cancelled, L"DriverDispatchCancelled");
             break;
         }
         auto field = *majors;

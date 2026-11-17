@@ -81,6 +81,11 @@ class PartialReader final : public kncore::TargetReader
 
 inline void RunFaultRegression(CheckFn check)
 {
+    check(std::wstring(knutil::WfpActionName(FWP_ACTION_BLOCK)) == L"Block" &&
+              std::wstring(knutil::WfpActionName(FWP_ACTION_PERMIT)) == L"Permit" &&
+              std::wstring(knutil::WfpActionName(FWP_ACTION_CALLOUT_INSPECTION)) == L"Inspection callout" &&
+              std::wstring(knutil::WfpActionName(0xffffffff)) == L"Unknown",
+          "wfp.action-labels-preserve-block-permit-callout-and-unknown-semantics");
     using kncore::Status;
     size_t fallbackCalls = 0;
     const auto legacy = [&](size_t *count) -> int32_t

@@ -147,6 +147,8 @@ Select the **EmbeddedSignature** row and inspect **interpretation**, **scope**, 
 
 Run `!driver` to find driver objects, then inspect an observed name or address with `!drvobj`. The example uses `!drvobj \Driver\fvevol` and completes with 34 rows covering the object, MajorFunction slots and device chain. A partial namespace walk cannot establish that an unlisted driver is absent.
 
+The driver list now includes image start/size, first device, flags, DriverInit, DriverUnload and DriverStartIo, with separately annotated routine symbols. Image size is a decimal byte count. `!drvobj` retains these fields alongside dispatch and device rows. A verified zero routine is distinct from an unreadable pointer; unsupported or inconsistent field metadata remains unknown. Directory lookup has one 60-second budget across root and driver-directory traversal; dispatch/device collection has its own shared 60-second budget. An incomplete name lookup reports the traversal reason.
+
 ![Driver dispatch slots with handler symbols and module ownership](screenshots/driver-dispatch.png)
 
 **handler** is the dispatch address, while **ownership** describes the loaded module range containing it. Shared dispatch implementations can legitimately belong to another module.
@@ -187,6 +189,8 @@ These permissions come from page-table entries, unlike static PE section flags. 
 Find `!pool` and use `!pool big /wx /limit 16` to collect big-pool allocations with permission samples. Remote KD reads the target's `PoolBigPageTable` using verified layout information. Use an observed four-character, case-sensitive `/tag`, hexadecimal `/min` and `/max` byte sizes, or `/addr` to narrow matching allocations.
 
 Select a row and compare **wxObserved**, **inspectedPages**, **unavailablePages**, **skippedPages** and **rangeClassified**. `/wx` samples the first page of each matching allocation; it does not filter the result to W+X rows. `/full` requests all pages within the global time/page budget. `/limit` caps console output, not the retained rows.
+
+`!pool summary` stores one row per tag with **Allocation Count** and **Total Bytes**, so table/export totals agree with the console summary. With `/wx`, the tag rows also retain counts of allocations with observed W+X, fully classified allocations, incomplete allocations and inspected/unavailable pages. These totals cover collected matching allocations; Partial coverage cannot establish a complete pool inventory or a W+X-free range.
 
 ![Big-pool allocation samples with skipped pages and incomplete range classification](screenshots/pool-permissions.png)
 
@@ -356,6 +360,8 @@ Run `dt nt!_EPROCESS` in the KNDbgX input to retain verified field metadata in R
 
 This completed capture has 265 field rows and requests no instance address. Append an observed instance address to request values; the layout alone is not a capture of a process's contents. Empty type names or unknown optional fields remain visible. Matching PDB/type metadata is required; reload cannot manufacture unavailable private fields.
 
+Instance rows show **Value**, raw **Bytes** and **Value Status** together. Integer/pointer values retain all 64 bits; signed integers and bitfields use the matched type metadata. Arrays and composites retain raw bytes instead of an invented scalar. Fields larger than the 256-byte per-field read limit are explicitly `NotRead:FieldSizeLimit` and make the instance capture Partial. `uf` retains bounded native function output in its row and export, with completion/truncation flags; that unparsed native output remains Partial.
+
 `setfield <address> <type> <field> <value>` belongs to the approved mutation flow, not this read-only layout view. See [Execution and changes](#execution-and-changes) before preparing a field change.
 
 ### More starting points
@@ -387,6 +393,10 @@ Registered names, including `.reload`, use KNDbgX validation. Unregistered comma
 ## Inspect results
 
 Each retained result opens a tab. Double-click a tab or press F2 to rename it, drag to reorder, and use the tab menu to close tabs. **Rows / Findings**, **Capture info**, **Row details** and **View output** show the collected records, coverage, raw fields and saved console output. Selecting a tab or changing its columns/sort order uses saved data.
+
+Default columns follow each command's observation fields. Named fields remain visible beyond the generic nine-column fallback, including mixed driver/device, IRP/stack, ETL/event-summary and file-audit records. Horizontal scrolling and keyboard header focus reach the remaining columns; manual column choices stay unchanged. Missing fields show a dash, unreadable values show Unknown, and observed zero/false values remain visible. Nested metadata and raw records are still available in Row details and export.
+
+Defaults also expose token selection and process identity, snapshot change/unknown state, result-page offsets and delivery, and CI/HV host-versus-target scope. Local-KD `!wfp` filter rows include action name/raw code, filter ID, layer/sublayer, condition count, provider and callout keys. A filter without a provider reports None; a non-callout action reports N/A for its callout key. These are BFE registration records, not a simulated packet-policy decision.
 
 Use **Columns** to keep the fields relevant to the current question. Here, Callback type, Routine / Pre and Symbol / Pre are selected. Hidden columns remain in the retained result and its export.
 

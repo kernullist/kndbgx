@@ -155,9 +155,7 @@ bool CollectTargetBigPool(Ctx &ctx, kncore::WalkBudget &budget, const kncore::Ta
 void ScanPool(Ctx &ctx)
 {
     const bool payload = ctx.Args[0] == L"!payload";
-    bool permissions = payload;
-    bool full = false;
-    bool summary = !payload;
+    kncore::PoolDisplayOptions mode(payload);
     std::wstring tag;
     uint64_t minimum = 0;
     uint64_t maximum = UINT64_MAX;
@@ -167,19 +165,9 @@ void ScanPool(Ctx &ctx)
     {
         auto option = ctx.Args[i];
         std::transform(option.begin(), option.end(), option.begin(), towlower);
-        if (option == L"big" || option == L"find")
+        if (mode.Apply(option))
         {
-            summary = false;
-        }
-        else if (option == L"summary")
-        {
-            summary = true;
-        }
-        else if (option == L"/wx" || option == L"/full")
-        {
-            permissions = true;
-            summary = false;
-            full = full || option == L"/full";
+            continue;
         }
         else if (option == L"/json")
         {
@@ -241,6 +229,9 @@ void ScanPool(Ctx &ctx)
             return;
         }
     }
+    const bool summary = mode.Summary;
+    const bool permissions = mode.Permissions;
+    const bool full = mode.Full;
     if (minimum > maximum)
     {
         ctx.Out.Fail(kncore::Status::InvalidInput, L"Pool minimum exceeds maximum");
@@ -299,6 +290,15 @@ void ScanPool(Ctx &ctx)
     uint64_t inspectedPages = 0;
     uint64_t matching = 0;
     std::map<std::wstring, std::pair<uint64_t, uint64_t>> totals;
+    struct PermissionTotals
+    {
+        uint64_t WxObserved = 0;
+        uint64_t FullyClassified = 0;
+        uint64_t Incomplete = 0;
+        uint64_t InspectedPages = 0;
+        uint64_t UnavailablePages = 0;
+    };
+    std::map<std::wstring, PermissionTotals> permissionTotals;
     for (const auto &entry : entries)
     {
         if (!CheckCollection(ctx, budget))
@@ -315,12 +315,12 @@ void ScanPool(Ctx &ctx)
         }
         ++matching;
         auto &aggregate = totals[entryTag];
-        ++aggregate.first;
         if (entry.Size > UINT64_MAX - aggregate.second)
         {
             budget.Stop(kncore::Status::Partial, L"AggregateSizeOverflow");
             break;
         }
+        ++aggregate.first;
         aggregate.second += entry.Size;
         auto row = knjson::Value::MakeObject();
         row.Set(L"kind", knjson::Value(L"BigPoolAllocation"));
@@ -368,17 +368,41 @@ void ScanPool(Ctx &ctx)
             row.Set(L"totalPages", knjson::Value(std::to_wstring(totalPages)));
             row.Set(L"skippedPages", knjson::Value(std::to_wstring(totalPages - tested)));
             row.Set(L"rangeClassified", knjson::Value(tested == totalPages && unknown == 0));
+            auto &permission = permissionTotals[entryTag];
+            permission.WxObserved += wx ? 1 : 0;
+            permission.FullyClassified += tested == totalPages && unknown == 0 ? 1 : 0;
+            permission.Incomplete += tested != totalPages || unknown != 0 ? 1 : 0;
+            permission.InspectedPages += tested;
+            permission.UnavailablePages += unknown;
             if (unknown != 0 || tested != totalPages)
             {
                 ++budget.Report.Collected.Unknown;
             }
         }
-        EmitRow(ctx, budget, row, summary ? 0 : static_cast<size_t>(display));
+        if (!summary)
+        {
+            EmitRow(ctx, budget, row, static_cast<size_t>(display));
+        }
     }
     if (summary)
     {
         for (const auto &[key, value] : totals)
         {
+            auto row = knjson::Value::MakeObject();
+            row.Set(L"kind", knjson::Value(L"PoolTagSummary"));
+            row.Set(L"tag", knjson::Value(key));
+            row.Set(L"allocationCount", knjson::Value(std::to_wstring(value.first)));
+            row.Set(L"totalBytes", knjson::Value(std::to_wstring(value.second)));
+            if (permissions)
+            {
+                const auto &permission = permissionTotals[key];
+                row.Set(L"wxObservedAllocations", knjson::Value(std::to_wstring(permission.WxObserved)));
+                row.Set(L"fullyClassifiedAllocations", knjson::Value(std::to_wstring(permission.FullyClassified)));
+                row.Set(L"incompleteAllocations", knjson::Value(std::to_wstring(permission.Incomplete)));
+                row.Set(L"inspectedPages", knjson::Value(std::to_wstring(permission.InspectedPages)));
+                row.Set(L"unavailablePages", knjson::Value(std::to_wstring(permission.UnavailablePages)));
+            }
+            budget.Report.Rows.Push(row);
             ctx.Out.AddLine(L"[pool.tag] " + key + L" count=" + std::to_wstring(value.first) + L" bytes=" +
                             std::to_wstring(value.second) + L" (" + kncore::HumanBytes(value.second) + L")");
         }

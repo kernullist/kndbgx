@@ -79,16 +79,30 @@ void ScanWfp(Ctx &ctx)
                 auto row = knjson::Value::MakeObject();
                 row.Set(L"kind", knjson::Value(kind));
                 row.Set(L"name", knjson::Value(name));
+                row.Set(L"description", knjson::Value(object.displayData.description != nullptr ? object.displayData.description : L""));
                 using T = std::decay_t<decltype(object)>;
                 if constexpr (std::is_same_v<T, FWPM_FILTER0>)
                 {
                     row.Set(L"key", knjson::Value(GuidToText(object.filterKey)));
                     row.Set(L"action", knjson::Value(kncore::Hex(object.action.type)));
+                    row.Set(L"actionName", knjson::Value(knutil::WfpActionName(object.action.type)));
+                    row.Set(L"filterId", knjson::Value(std::to_wstring(object.filterId)));
+                    row.Set(L"layer", knjson::Value(GuidToText(object.layerKey)));
+                    row.Set(L"subLayer", knjson::Value(GuidToText(object.subLayerKey)));
+                    row.Set(L"conditionCount", knjson::Value(std::to_wstring(object.numFilterConditions)));
+                    row.Set(L"flags", knjson::Value(kncore::Hex(object.flags)));
+                    row.Set(L"hasProviderKey", knjson::Value(object.providerKey != nullptr));
+                    row.Set(L"usesCallout", knjson::Value((object.action.type & FWP_ACTION_FLAG_CALLOUT) != 0));
+                    row.Set(L"providerKey", object.providerKey != nullptr ? knjson::Value(GuidToText(*object.providerKey)) : knjson::Value());
+                    row.Set(L"calloutKey", (object.action.type & FWP_ACTION_FLAG_CALLOUT) != 0
+                                               ? knjson::Value(GuidToText(object.action.calloutKey)) : knjson::Value());
                 }
                 else if constexpr (std::is_same_v<T, FWPM_CALLOUT0>)
                 {
                     row.Set(L"key", knjson::Value(GuidToText(object.calloutKey)));
                     row.Set(L"layer", knjson::Value(GuidToText(object.applicableLayer)));
+                    row.Set(L"calloutId", knjson::Value(std::to_wstring(object.calloutId)));
+                    row.Set(L"flags", knjson::Value(kncore::Hex(object.flags)));
                 }
                 else if constexpr (std::is_same_v<T, FWPM_PROVIDER0>)
                 {
@@ -97,6 +111,7 @@ void ScanWfp(Ctx &ctx)
                 else if constexpr (std::is_same_v<T, FWPM_SUBLAYER0>)
                 {
                     row.Set(L"key", knjson::Value(GuidToText(object.subLayerKey)));
+                    row.Set(L"weight", knjson::Value(std::to_wstring(object.weight)));
                 }
                 else
                 {

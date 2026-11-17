@@ -895,42 +895,71 @@
     { commands: "fwtable", kinds: "", fields: "provider routine symbol module ownership signature record" },
     { commands: "idt", kinds: "IdtGate", fields: "cpu vector routine symbol symbolSource module ownership type dpl present validGate slot" },
     { commands: "ssdt", kinds: "", fields: "pid image filterMode filterSet filterDecision session serviceId serviceName blockedServices allowedServices auditServices unknownServices win32kDisable family symbol routine dispatchState entryRoutine ownership index slot" },
-    { commands: "process procscan dml_proc", kinds: "Process", fields: "eprocess pid image dtb createTime" },
+    { commands: "process procscan dml_proc processes", kinds: "Process", fields: "eprocess pid image dtb createTime" },
     { commands: "threads thread", kinds: "Thread", fields: "tid ethread process.pid process.image start startSymbol win32Start win32StartSymbol startOwner win32StartOwner" },
-    { commands: "lm modules", kinds: "Module", fields: "name base symbol size path moduleIdentity" },
+    { commands: "lm modules", kinds: "Module", fields: "name base size path timestamp symbolType symbol" },
     { commands: "stack k kb kp kv", kinds: "StackFrame", fields: "index address symbol module stack return sourceFile sourceLine" },
     { commands: "registers r", kinds: "Register", fields: "name value rawBytes type" },
     { commands: "cr", kinds: "", fields: "cpu register value writeProtect smep smap la57 unavailableReason registerSource" },
     { commands: "msrcheck", kinds: "ProcessorRegister", fields: "cpu register value unavailableReason registerSource" },
     { commands: "breakpoints bl", kinds: "Breakpoint", fields: "address symbol condition enabled id expression trigger command passCount currentPassCount matchThreadId oneShot goOnly" },
     { commands: "event", kinds: "LastEvent Breakpoint", fields: "address symbol condition enabled id expression trigger command passCount matchThreadId description" },
-    { commands: "u ub uf", kinds: "HostFunctionDisassembly", fields: "address bytes instruction symbol" },
-    { commands: "dt", kinds: "", fields: "field offset type pointer symbol size bitOffset bitWidth arrayCount bytes valueStatus" },
+    { commands: "u ub", kinds: "", fields: "address bytes instruction symbol" },
+    { commands: "uf", kinds: "HostFunctionDisassembly", fields: "address symbol output engineCompleted outputTruncated source interpretation" },
+    { commands: "dt", kinds: "", fields: "field offset type value pointer symbol bytes valueStatus size bitOffset bitWidth arrayCount" },
     { commands: "x ln", kinds: "", fields: "symbol address displacement type" },
     { commands: "vad", kinds: "Vad", fields: "start end pageProtection executableByVad object process.pid process.image protectionIndex" },
     { commands: "handles", kinds: "ProcessHandle", fields: "ownerPid targetPid handle object typeIndex grantedAccess crossProcess" },
     { commands: "hiddenproc", kinds: "ProcessCrossView", fields: "pid observation activeList.image cidTable.image activeList.eprocess cidTable.eprocess activeList.createTime cidTable.createTime kernel.image host.image kernel.eprocess kernel.createTime host.createTime" },
-    { commands: "drvobj", kinds: "DriverDispatch Driver", fields: "name major handler symbol ownership driverName device driverObject object start size" },
+    { commands: "drvobj", kinds: "DriverDispatch Driver", fields: "name major handler symbol ownership driverName device driverObject object start startSymbol size firstDevice flags driverInit driverInitSymbol driverUnload driverUnloadSymbol driverStartIo driverStartIoSymbol type stackSize link" },
+    { commands: "driver", kinds: "DriverObject", fields: "name address start startSymbol size firstDevice flags driverInit driverInitSymbol driverUnload driverUnloadSymbol driverStartIo driverStartIoSymbol" },
     { commands: "devstack", kinds: "Device DeviceAttachment", fields: "driverName device type stackSize flags driverObject link attachedFrom attachedTo" },
-    { commands: "etw", kinds: "EtwLoggerContext EtwSession", fields: "name loggerId loggerStatus loggerMode eventsLost logFile clockType rawClock object clockRepresentation" },
-    { commands: "alpc", kinds: "AlpcPort", fields: "name portType owner.pid owner.image connectionName address peerPort connectionPort nameState ownerProcess" },
-    { commands: "minifilter", kinds: "Minifilter", fields: "name altitude family major routine symbol module ownership filter object frame" },
+    { commands: "etw", kinds: "EtwLoggerContext EtwSession", fields: "name loggerId id loggerStatus loggerMode logFileMode eventsLost logFile clockType clockConfiguration rawClock object clockRepresentation source" },
+    { commands: "alpc", kinds: "AlpcPort", fields: "name portType owner.pid owner.image connectionName address peerPort connectionPort portStateRaw nameState ownerProcess" },
+    { commands: "minifilter fltmgr", kinds: "Minifilter", fields: "name altitude family major routine symbol module ownership filter object frame" },
     { commands: "dds dqs dps", kinds: "MemoryPointer", fields: "address pointer symbol symbolSource readable width" },
     { commands: "?", kinds: "ExpressionValue", fields: "expression value symbol symbolSource unsigned signed" },
     { commands: "vtop kpage", kinds: "PageTranslation", fields: "va symbol pa dtb pageSize writable executable error entries" },
-    { commands: "module", kinds: "ModulePeObservation", fields: "module base symbol size timestamp sections" },
+    { commands: "module", kinds: "ModulePeObservation", fields: "module base symbol size timestamp sections diskIdentityMatches diskPath diskSamples" },
     { commands: "unloaded", kinds: "UnloadedDriver", fields: "name StartAddress EndAddress CurrentTime timeBasis index record ringNextIndex" },
     { commands: "piddb", kinds: "PiDDBEntry", fields: "name timeDateStamp loadStatus loadStatusClass entry reason" },
     { commands: "cihash", kinds: "CiHashEntry", fields: "name hash secondaryHash cacheStatusRaw entry reason" },
-    { commands: "token", kinds: "ProcessToken", fields: "process.pid tokenTypeName mandatoryLabelRid privilegesPresent privilegesEnabled privilegesEnabledByDefault address AuthenticationId TokenId SessionId" },
+    { commands: "token", kinds: "ProcessToken ThreadToken", fields: "process.pid process.image selection tokenTypeName mandatoryLabelRid privilegesPresent privilegesEnabled privilegesEnabledByDefault address AuthenticationId TokenId SessionId ethread" },
     { commands: "mapper", kinds: "", fields: "sourceCommand name timeDateStamp loadStatus hash StartAddress EndAddress cacheStatusRaw entry" },
     { commands: "wnf", kinds: "WnfNameDecode", fields: "encoded lifetimeName scopeName permanentData ownerTagText sequence version" },
-    { commands: "etl-import", kinds: "EtwEvent", fields: "providerName eventId taskName opcodeName pid tid timestampFileTime payloadBytes provider" },
-    { commands: "pool bigpool", kinds: "BigPoolAllocation", fields: "address symbol tag size nonPaged" },
+    { commands: "etl-import", kinds: "EtwEvent EtlSummary", fields: "providerName eventId taskName opcodeName pid tid timestampFileTime payloadBytes provider path eventsLost buffersLost metadataUnavailable processTraceStatus targetAssociation" },
+    { commands: "pool bigpool", kinds: "BigPoolAllocation PoolTagSummary", fields: "tag allocationCount totalBytes wxObservedAllocations fullyClassifiedAllocations incompleteAllocations address symbol size nonPaged ownership wxObserved rangeClassified inspectedPages totalPages unavailablePages" },
     { commands: "payload", kinds: "", fields: "address tag size wxObserved rangeClassified inspectedPages totalPages unavailablePages ownership mode" },
-    { commands: "ioctl", kinds: "IoctlDecode", fields: "code deviceType function method access" },
-    { commands: "ntstatus", kinds: "NtStatusDecode", fields: "value name severity facility code" },
-    { commands: "diag-catalog diagnose triage", kinds: "DiagnosticRecipe DiagnosticStep HostDiagnostic", fields: "id name category recipe command status description reason" }
+    { commands: "ioctl", kinds: "Ioctl", fields: "code deviceType function method access vendorDevice vendorFunction" },
+    { commands: "ntstatus", kinds: "NtStatus", fields: "code severity ntSuccess facility statusCode customer reservedBit" },
+    { commands: "bugcheck bugcheck-decode", kinds: "Bugcheck", fields: "code name parameters address instructionPointer access accessBytes shadowByte shadowMeaning uninterpretedBits" },
+    { commands: "irp", kinds: "Irp IoStackLocation", fields: "address slot current majorName minor status information stackCount currentLocation cancel pendingReturned DeviceObject FileObject CompletionRoutine CompletionRoutineSymbol ioctl.code inputLength outputLength flags" },
+    { commands: "diag-catalog diagnose triage", kinds: "DiagnosticRecipe DiagnosticStep HostDiagnostic", fields: "name group recipe command status description reason operand hostCommand engineAccepted contextRestored outputTruncated output" },
+    { commands: "address", kinds: "Address", fields: "address space physical dtb pageSize writable executable error moduleObservation pageTableLevels" },
+    { commands: "query", kinds: "MemoryReadability", fields: "address requestedBytes readBytes readable" },
+    { commands: "db dw dd dq dc", kinds: "MemoryBytes", fields: "address bytes addressSpace" },
+    { commands: "da du", kinds: "MemoryString", fields: "address text encoding terminated bytesRead bytesExamined invalidUnits" },
+    { commands: "source", kinds: "", fields: "address symbol sourceFile sourceLine" },
+    { commands: "navigate history back forward bookmark bookmarks", kinds: "AddressObservation", fields: "address addressSpace symbol note historical dtb readStatus rawBytes sourceFile sourceLine" },
+    { commands: "diff", kinds: "SnapshotDifference", fields: "collector state key knownChanged unknownFields beforeCount afterCount before after" },
+    { commands: "driver-audit", kinds: "DriverImage PeSection PeImport EmbeddedSignature FileEvidence", fields: "name module status path sha256 machine subsystem imageSize entryRva timestamp rva virtualBytes fileBytes readable writable executable nxCompatible dynamicBase highEntropyVa guardCfDeclared forceIntegrity relocationsStripped loadConfigValid certificateTablePresent certificateTableBoundsValid trustedByHostOfflinePolicy revocationChecked catalogChecked scope targetAssociation" },
+    { commands: "sarif-import", kinds: "SarifRun StaticFinding StaticResult", fields: "tool ruleId level message locations baselineState suppressions runIndex version resultsAvailable" },
+    { commands: "dump-analyze", kinds: "DumpMetadata DumpModule", fields: "name base size path format bytes architecture build processors exceptionCode source" },
+    { commands: ".dump dump-raw dump-pe result-export", kinds: "DumpArtifact ResultArtifact", fields: "path bytes format resultId" },
+    { commands: "ci", kinds: "HostCodeIntegrity", fields: "scope known codeIntegrityEnabled testSign umciEnabled umciAuditMode hvciEnabled hvciAuditMode hvciStrictMode hvciIumEnabled raw unknownOptions ntStatus" },
+    { commands: "hv", kinds: "HostCpuObservation TargetControlRegister", fields: "scope cpuVendor hypervisorBit hypervisorVendor microsoftInterface hardwareFeaturesStatus hardwareFeatures cr4 bit13 source" },
+    { commands: "dma", kinds: "", fields: "table available bytes error" },
+    { commands: "wfp", kinds: "", fields: "name actionName filterId calloutId layer subLayer conditionCount action calloutKey providerKey flags weight key description" },
+    { commands: "byovd", kinds: "ModuleFileCatalogObservation HashCatalog", fields: "module path imageIdentityMatches sha256 catalogMatch source version count catalogSha256" },
+    { commands: "features", kinds: "", fields: "feature enabled status reason" },
+    { commands: "results", kinds: "", fields: "commandId status rowCount findingCount historical resultId" },
+    { commands: "jobs job submit cancel", kinds: "", fields: "jobId commandId state cancelRequested resultId output" },
+    { commands: "plan", kinds: "", fields: "commandId address length before after addressSpace verification atomic expiresInSeconds planId arguments" },
+    { commands: "approve setfield f eb ew ed eq", kinds: "", fields: "address status requestedBytes appliedBytes verified" },
+    { commands: "debug-plan debug-approve", kinds: "", fields: "operation operand original applied breakpointId effect expiresAfterSeconds planId" },
+    { commands: "result-read model", kinds: "", fields: "ResultId Metadata.commandId Metadata.status HistoricalAtPublication RowCount Offset Rows Next PageComplete RowsDelivery FindingCount FindingOffset Findings NextFinding FindingPageComplete FindingsDelivery available namespace mode" },
+    { commands: "status", kinds: "", fields: "kind engineReady targetPresent stopped architecture targetVersion hostVersion" },
+    { commands: "command-schema", kinds: "", fields: "name summary grammar group capability targetModes support aliases options effectMask" }
   ];
 
   function columnValue(row, path)
@@ -1160,11 +1189,11 @@
     }
   }
 
-  function columnPriority()
+  function tableProfile()
   {
     var layout = state.tableLayout;
     var command = firstToken(state.resultMeta.commandId || state.resultCommand).replace(/^!/, "").toLowerCase();
-    var profile = tableProfiles.find(function (item)
+    return tableProfiles.find(function (item)
     {
       return item.commands.split(" ").indexOf(command) >= 0;
     }) || tableProfiles.find(function (item)
@@ -1174,6 +1203,13 @@
         return item.kinds.split(" ").indexOf(kind) >= 0;
       });
     });
+  }
+
+  function columnPriority()
+  {
+    var layout = state.tableLayout;
+    var command = firstToken(state.resultMeta.commandId || state.resultCommand).replace(/^!/, "").toLowerCase();
+    var profile = tableProfile();
     var preferred = state.resultCollection === "findings" ? "severity ruleId message reason address module source file line" :
       command === "callbacks" && layout.callbackRegistrations ? "callbackType preRoutine postRoutine flags preSymbol postSymbol" :
       command === "ssdt" && layout.kinds.indexOf("Win32kServicePolicy") >= 0 ?
@@ -1203,6 +1239,7 @@
   {
     var layout = state.tableLayout;
     var priority = columnPriority();
+    var profile = tableProfile();
     function rank(column)
     {
       var field = column.path.join(".");
@@ -1225,10 +1262,13 @@
         layout.kinds.indexOf("RecordReference") < 0;
       column.visible = index < (callbackColumns ? 6 : 9) && (rank(column) < 200 || layout.columns.length <= 3) &&
         (!callbackColumns || priority.indexOf(column.path.join(".")) >= 0);
-      var command = firstToken(state.resultMeta.commandId || state.resultCommand).replace(/^!/, "").toLowerCase();
-      if (state.resultCollection === "rows" &&
-          ((layout.kinds.indexOf("PiDDBEntry") >= 0 && command === "piddb") ||
-           (layout.kinds.indexOf("CiHashEntry") >= 0 && command === "cihash")))
+      // Named observation fields must survive mixed row kinds and the generic
+      // nine-column fallback. Manual layouts still remain under user control.
+      if (state.resultCollection === "rows" && !callbackColumns && profile && priority.indexOf(column.path.join(".")) >= 0)
+      {
+        column.visible = true;
+      }
+      if (state.resultCollection === "rows" && profile && (profile.commands === "piddb" || profile.commands === "cihash"))
       {
         column.visible = priority.indexOf(column.path.join(".")) >= 0;
       }
@@ -1908,6 +1948,11 @@
       }
     }
     var field = path.join(".");
+    if (row && row.kind === "filters" && value === null &&
+        ((field === "providerKey" && row.hasProviderKey === false) || (field === "calloutKey" && row.usesCallout === false)))
+    {
+      return field === "providerKey" ? "None" : "N/A";
+    }
     if (row && row.kind === "AlpcPort" && field === "name" && value == null)
     {
       return row.nameState === "Unnamed" ? "Unnamed" : "Name unavailable";

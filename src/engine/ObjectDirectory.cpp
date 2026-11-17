@@ -216,6 +216,9 @@ bool ObjectDirectoryWalker::VisitDirectoryNamed(const wchar_t *directoryName, co
             break;
         }
         ULONG64 found = 0;
+        // Driver records include names and dispatch metadata over remote KD.
+        // Keep one bounded deadline across root lookup and the target directory.
+        budget.StartTraversal(std::chrono::steady_clock::now(), std::chrono::seconds(60));
         Entries(rootDirectory_, budget,
                 [&](ULONG64 body)
                 {

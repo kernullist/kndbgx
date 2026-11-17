@@ -5,6 +5,9 @@
 #include "../core/HistoryRows.h"
 #include "../core/KernelSymbolProfile.h"
 #include "../core/ResultAddress.h"
+#include "../core/DriverRecord.h"
+#include "../core/FieldObservation.h"
+#include "../core/Pool.h"
 
 namespace knself
 {
@@ -16,6 +19,100 @@ template <typename Check> void RunCommandRecordRegression(Check check)
     constexpr uint64_t first = base + 0x2000;
     constexpr uint64_t second = base + 0x3000;
     const TargetArchitecture architecture{0x8664, 8, 48, {}};
+    for (const auto &options : {std::vector<std::wstring>{L"summary", L"/wx"}, {L"/wx", L"summary"}, {L"summary", L"/full"}})
+    {
+        PoolDisplayOptions mode(false);
+        for (const auto &option : options)
+        {
+            mode.Apply(option);
+        }
+        check(mode.Summary && mode.Permissions && mode.Full == (options.back() == L"/full"),
+              "pool.explicit-summary-preserves-permission-observations-in-either-option-order");
+    }
+    {
+        PoolDisplayOptions mode(false);
+        check(mode.Summary && !mode.Permissions && !mode.Apply(L"/tag") && mode.Summary,
+              "pool.default-summary-and-unrelated-options-remain-unchanged");
+        mode.Apply(L"/wx");
+        check(!mode.Summary && mode.Permissions, "pool.permissions-without-explicit-mode-retain-allocation-default");
+        PoolDisplayOptions payload(true);
+        check(!payload.Summary && payload.Permissions, "pool.payload-retains-allocation-permission-view");
+    }
+    {
+        ByteFixture memory;
+        std::map<std::wstring, FieldInfo> fields;
+        unsigned offset = 0;
+        for (const auto name : {L"DriverStart", L"DriverSize", L"DeviceObject", L"Flags", L"DriverInit", L"DriverUnload", L"DriverStartIo"})
+        {
+            const bool pointer = std::wstring_view(name) != L"DriverSize" && std::wstring_view(name) != L"Flags";
+            auto field = FixtureField(offset, pointer ? 8 : 4);
+            field.Kind = pointer ? FieldKind::Pointer : FieldKind::Unsigned;
+            fields[name] = field;
+            memory.Put(first + offset, std::wstring_view(name) == L"DriverStart" ? base
+                                      : std::wstring_view(name) == L"DriverSize" ? 4096 : 0, field.Size);
+            offset += 8;
+        }
+        const auto collect = [&]()
+        {
+            return ReadDriverRecordFields(memory, architecture, first, [&](const wchar_t *name) -> std::optional<FieldInfo>
+            {
+                const auto found = fields.find(name);
+                return found == fields.end() ? std::nullopt : std::optional<FieldInfo>(found->second);
+            });
+        };
+        const auto full = collect();
+        check(full.Unknown == 0 && full.FirstDevice == 0 && full.Fields.Get(L"start").AsString(L"") == Hex(base) &&
+                  full.Fields.Get(L"size").AsString(L"") == L"4096" &&
+                  full.Fields.Get(L"driverUnload").AsString(L"") == Hex(0),
+              "driver.record-retains-image-and-verified-null-device-and-routines");
+        memory.Bytes.erase(first + fields[L"DriverInit"].Offset);
+        const auto partial = collect();
+        check(partial.Unknown == 1 && partial.Fields.Get(L"driverInit").IsNull() &&
+                  partial.Fields.Get(L"driverUnload").AsString(L"") == Hex(0),
+              "driver.unreadable-routine-is-not-null-registration");
+        fields[L"DriverSize"].Size = 8;
+        fields.erase(L"Flags");
+        memory.Put(first + fields[L"DeviceObject"].Offset, 0x1000);
+        const auto invalid = collect();
+        check(invalid.Unknown == 4 && !invalid.FirstDevice && invalid.Fields.Get(L"size").IsNull(),
+              "driver.missing-layout-wrong-width-and-nonkernel-pointer-remain-unknown");
+        auto row = full.Fields;
+        row.Set(L"kind", knjson::Value(L"DriverObject"));
+        const auto addresses = ResultAddressFields(row).Write();
+        check(addresses.find(L"driverUnload") != std::wstring::npos && addresses.find(L"firstDevice") != std::wstring::npos &&
+                  addresses.find(L"size") == std::wstring::npos && addresses.find(L"flags") == std::wstring::npos,
+              "driver.only-pointer-fields-offer-address-navigation");
+    }
+    {
+        ByteFixture memory;
+        memory.Put(first, 0xffffffffffffffff);
+        auto field = FixtureField(0, 8);
+        auto read = memory.Read(AddressSpace::Virtual, first, 8);
+        check(ScalarFieldObservation(field, read).AsString(L"") == Hex(UINT64_MAX), "dt.scalar-keeps-full-64-bit-precision");
+        field.Kind = FieldKind::Signed;
+        check(ScalarFieldObservation(field, read).AsString(L"") == L"-1", "dt.signed-scalar-preserves-negative-values");
+        field.BitOffset = 61;
+        field.BitWidth = 3;
+        check(ScalarFieldObservation(field, read).AsString(L"") == L"-1", "dt.signed-bitfield-is-extracted-and-sign-extended");
+        field.Kind = FieldKind::Unsigned;
+        check(ScalarFieldObservation(field, read).AsString(L"") == Hex(7), "dt.bitfield-displays-field-value-not-storage-word");
+        field.BitWidth = 4;
+        check(ScalarFieldObservation(field, read).IsNull(), "dt.invalid-bit-range-is-not-decoded");
+        field.BitWidth.reset();
+        field.BitOffset.reset();
+        read.Valid[0] = 0;
+        check(ScalarFieldObservation(field, read).IsNull(), "dt.invalid-byte-mask-is-not-a-value");
+        read.Valid[0] = 1;
+        --read.Transferred;
+        check(ScalarFieldObservation(field, read).IsNull(), "dt.short-transfer-is-not-a-value");
+        memory.Put(first, 0);
+        read = memory.Read(AddressSpace::Virtual, first, 8);
+        field.Kind = FieldKind::Boolean;
+        check(!ScalarFieldObservation(field, read).IsNull() && !ScalarFieldObservation(field, read).AsBool(true),
+              "dt.false-is-a-known-value");
+        field.Kind = FieldKind::Composite;
+        check(ScalarFieldObservation(field, read).IsNull(), "dt.composite-bytes-are-not-invented-scalars");
+    }
     ByteFixture fixture;
     const auto entry = [&](uint64_t address, uint64_t next, const std::wstring &name, uint32_t status)
     {

@@ -236,11 +236,13 @@ void AnnotateResultSymbols(knengine::DbgSession &session, kncore::Result &report
                 }
             }
         }
-        for (const wchar_t *field : {L"CompletionRoutine", L"CancelRoutine", L"DispatchRoutine", L"win32Start"})
+        for (const wchar_t *field : {L"CompletionRoutine", L"CancelRoutine", L"DispatchRoutine", L"win32Start",
+                                   L"driverInit", L"driverUnload", L"driverStartIo"})
         {
             annotate(field, std::wstring(field) + L"Symbol", true);
         }
-        if (row.Get(L"kind").AsString(L"") == L"Thread")
+        if (row.Get(L"kind").AsString(L"") == L"Thread" || row.Get(L"kind").AsString(L"") == L"Driver" ||
+            row.Get(L"kind").AsString(L"") == L"DriverObject")
         {
             annotate(L"start", L"startSymbol", true);
         }

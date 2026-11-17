@@ -146,6 +146,7 @@ async function main()
                 "help ui": [],
                 "notice-fixture": []
             };
+            Object.assign(fixtures, options.observations || {});
             const reply = (request, result) => queueMicrotask(() => receive({ data: {
                 schema: "kndbgx.rpc.v3", requestId: request.requestId, type: "completed", uiGeneration: "7", ok: true,
                 result: JSON.parse(JSON.stringify(result))
@@ -748,6 +749,61 @@ async function main()
                 await workspace.locator("#prompt").press("Enter");
                 await workspace.waitForFunction(() => document.getElementById("process-comparison-note").classList.contains("hidden"));
                 assert.equal(await workspace.locator("#result-count").textContent(), "1 rows / 0 findings");
+            }
+            finally
+            {
+                await local.close();
+            }
+        });
+        await check("T-UI-BROWSER semantic columns stay reachable beyond nine fields", async () =>
+        {
+            const local = await browser.newContext({ viewport: { width: 900, height: 720 } });
+            try
+            {
+                const workspace = await local.newPage();
+                await workspace.addInitScript(fixtureInit, { adaptiveLayout: true, observations: {
+                    "!drvobj sample": [
+                        { kind: "Driver", name: "\\Driver\\Sample", object: "0xffff800000001000", start: "0xffff800000002000", size: "0x1000", firstDevice: "0x0" },
+                        { kind: "DriverDispatch", major: "14", majorName: "DEVICE_CONTROL", handler: "0xffff800000002100", symbol: "sample!Dispatch", ownership: "KnownModule", driverObject: "0xffff800000001000" },
+                        { kind: "Device", driverName: "\\Driver\\Sample", device: "0xffff800000003000", type: "0x22", stackSize: "1", flags: "0x0", link: "NextDevice" }
+                    ],
+                    "dt nt!_EXAMPLE 0x1000": [{ field: "Bits", offset: "0x0", type: "unsigned long", value: "0x3", pointer: null, symbol: null,
+                        bytes: "18000000", valueStatus: "Success", size: "4", bitOffset: "3", bitWidth: "2", arrayCount: null }]
+                } });
+                await workspace.goto(`http://127.0.0.1:${server.address().port}/`);
+                await workspace.waitForFunction(() => !document.getElementById("btn-palette").disabled);
+                await workspace.locator("#prompt").fill("!drvobj sample");
+                await workspace.locator("#prompt").press("Enter");
+                await workspace.waitForFunction(() => document.querySelectorAll("#result-rows > div").length === 3);
+                await hideInspection(workspace);
+                const labels = await workspace.locator("#table-head [role=columnheader]").allTextContents();
+                assert.ok(labels.some(label => label.includes("Size")));
+                assert.ok(labels.some(label => label.includes("Stack Size")));
+                assert.ok(labels.length > 10);
+                // Keyboard navigation must reveal fields outside the initial viewport.
+                const headerButton = workspace.locator("#table-head button").filter({ hasText: /^Link$/ });
+                await headerButton.focus();
+                await headerButton.press("Enter");
+                await workspace.waitForFunction(() =>
+                {
+                    const node = [...document.querySelectorAll("#table-head button")].find(item => item.textContent === "Link");
+                    const rect = node.getBoundingClientRect();
+                    const pane = document.getElementById("result-view").getBoundingClientRect();
+                    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+                    return rect.left >= pane.left && rect.right <= pane.right && (hit === node || node.contains(hit));
+                }, null, { timeout: 3000 });
+                assert.match(await workspace.locator("#result-rows").innerText(), /NextDevice/);
+                if (evidence)
+                {
+                    await workspace.screenshot({ path: path.join(evidence, "semantic-driver-columns.png") });
+                }
+                await workspace.locator("#prompt").fill("dt nt!_EXAMPLE 0x1000");
+                await workspace.locator("#prompt").press("Enter");
+                await workspace.waitForFunction(() => document.querySelector("#result-rows").textContent.includes("18000000"));
+                const dtLabels = await workspace.locator("#table-head [role=columnheader]").allTextContents();
+                assert.ok(dtLabels.some(label => label.includes("Value Status")));
+                assert.match(await workspace.locator("#result-rows").innerText(), /0x3/);
+                assert.match(await workspace.locator("#result-rows").innerText(), /Success/);
             }
             finally
             {
