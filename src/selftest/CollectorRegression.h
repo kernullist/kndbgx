@@ -96,6 +96,94 @@ template <typename Check> void RunCollectorRegression(Check check)
               }) &&
               sparse.Reads == beforeSparse,
           "object.sparse-type-table-overflow-rejected-before-read");
+    constexpr uint64_t typeReference = 0xffff800000010000, typeTable = typeReference + 0x1000, typeObject = typeReference + 0x2000;
+    ByteFixture directType;
+    directType.Put(typeReference, typeObject);
+    directType.Put(typeObject + 0x28, 45, 1);
+    directType.Put(typeTable + 45 * 8, typeObject);
+    const auto typeIndexField = FixtureField(0x28, 1);
+    bool matchCalled = false;
+    const auto matchesType = [&](unsigned index, uint64_t object)
+    {
+        matchCalled = true;
+        return index == 45 && object == typeObject;
+    };
+    const auto neverCancel = []()
+    {
+        return false;
+    };
+    const auto findDirectType = [&](ByteFixture &source, const auto &cancel)
+    {
+        return kncore::FindReferencedPointerSlot(source, typeReference, typeTable, 256, typeIndexField,
+                                                 sparseArchitecture, matchesType, cancel);
+    };
+    check(findDirectType(directType, neverCancel) == 45 && directType.Reads == 3 && matchCalled,
+          "object.direct-type-reference-is-checked-against-index-slot-and-name");
+    for (const uint64_t wrongObject : {uint64_t(0), typeObject + 8})
+    {
+        auto wrongSlot = directType;
+        wrongSlot.Put(typeTable + 45 * 8, wrongObject);
+        matchCalled = false;
+        check(!findDirectType(wrongSlot, neverCancel) && !matchCalled,
+              "object.direct-type-reference-rejects-empty-or-different-table-slot");
+    }
+    check(!kncore::FindReferencedPointerSlot(directType, typeReference, typeTable, 256, typeIndexField, sparseArchitecture,
+        [](unsigned, uint64_t)
+        {
+            return false;
+        }, neverCancel), "object.direct-type-reference-does-not-bypass-name-corroboration");
+    for (const uint64_t badObject : {uint64_t(0), uint64_t(0x1000), typeObject + 1, UINT64_MAX - 7})
+    {
+        auto invalidType = directType;
+        invalidType.Put(typeReference, badObject);
+        invalidType.Reads = 0;
+        check(!findDirectType(invalidType, neverCancel) && invalidType.Reads == 1,
+              "object.direct-type-reference-rejects-null-user-unaligned-and-overflow-pointers");
+    }
+    for (const size_t missing : {size_t(0), size_t(1), size_t(2)})
+    {
+        auto unreadableType = directType;
+        unreadableType.Bytes.erase(missing == 0 ? typeReference : missing == 1 ? typeObject + 0x28 : typeTable + 45 * 8);
+        matchCalled = false;
+        check(!findDirectType(unreadableType, neverCancel) && !matchCalled,
+              "object.direct-type-reference-rejects-partial-storage-index-and-slot");
+    }
+    for (const size_t cancelRead : {size_t(0), size_t(1), size_t(2), size_t(3)})
+    {
+        auto cancelledType = directType;
+        cancelledType.Reads = 0;
+        matchCalled = false;
+        check(!findDirectType(cancelledType, [&]()
+            {
+                return cancelledType.Reads >= cancelRead;
+            }) && cancelledType.Reads == cancelRead && !matchCalled,
+            "object.direct-type-reference-stops-at-each-cancelled-read");
+    }
+    for (const uint64_t invalidIndex : {uint64_t(0), uint64_t(46)})
+    {
+        auto invalidType = directType;
+        invalidType.Put(typeObject + 0x28, invalidIndex, 1);
+        invalidType.Reads = 0;
+        check(!kncore::FindReferencedPointerSlot(invalidType, typeReference, typeTable, 46, typeIndexField, sparseArchitecture,
+            matchesType, neverCancel) && invalidType.Reads == 2, "object.direct-type-index-must-be-nonzero-and-inside-table");
+    }
+    auto invalidField = typeIndexField;
+    invalidField.BitOffset = 0;
+    invalidField.BitWidth = 7;
+    const auto beforeInvalidType = directType.Reads;
+    check(!kncore::FindReferencedPointerSlot(directType, typeReference, typeTable, 256, invalidField, sparseArchitecture,
+        matchesType, neverCancel) && directType.Reads == beforeInvalidType,
+        "object.direct-type-reference-rejects-bitfield-layout-before-reading");
+    bool cancelledMatch = false;
+    check(!kncore::FindReferencedPointerSlot(directType, typeReference, typeTable, 256, typeIndexField, sparseArchitecture,
+        [&](unsigned, uint64_t)
+        {
+            cancelledMatch = true;
+            return true;
+        }, [&]()
+        {
+            return cancelledMatch;
+        }), "object.direct-type-reference-does-not-publish-a-match-after-cancellation");
     using namespace kncore;
     constexpr uint64_t head = 0xffff800000001000;
     constexpr uint64_t process = 0xffff800000002000;

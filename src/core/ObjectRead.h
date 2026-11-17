@@ -38,6 +38,41 @@ inline unsigned StructurallyBoundedTypeSlotCount(TargetReader &reader, uint64_t 
 }
 
 template <typename Match, typename Cancel>
+// A public symbol is only a candidate; the table and matcher corroborate it.
+std::optional<unsigned> FindReferencedPointerSlot(TargetReader &reader, uint64_t reference, uint64_t table, unsigned count,
+    const std::optional<FieldInfo> &index, const TargetArchitecture &architecture, Match match, Cancel cancel)
+{
+    const auto kernelRange = [&](uint64_t address, uint64_t size)
+    {
+        return ValidRange(address, size) && architecture.KernelPointer(address) && architecture.KernelPointer(address + size - 1);
+    };
+    if (architecture.PointerBytes != 8 || count == 0 || count > 256 || !index || index->Size != 1 ||
+        index->Kind != FieldKind::Unsigned || index->BitOffset || index->BitWidth || !index->ValidFor(4096) ||
+        reference % 8 != 0 || table % 8 != 0 || !kernelRange(reference, 8) || !kernelRange(table, uint64_t(count) * 8) || cancel())
+    {
+        return {};
+    }
+    uint64_t object = 0;
+    if (!reader.ReadExact(AddressSpace::Virtual, reference, &object) || cancel() || object % 8 != 0 ||
+        !kernelRange(object, uint64_t(index->Offset) + 1))
+    {
+        return {};
+    }
+    const auto slot = ReadField(reader, object, index);
+    if (cancel() || !slot || *slot == 0 || *slot >= count)
+    {
+        return {};
+    }
+    uint64_t observed = 0;
+    if (!reader.ReadExact(AddressSpace::Virtual, table + *slot * 8, &observed) || cancel() || observed != object ||
+        !match(static_cast<unsigned>(*slot), object) || cancel())
+    {
+        return {};
+    }
+    return static_cast<unsigned>(*slot);
+}
+
+template <typename Match, typename Cancel>
 std::optional<unsigned> FindSparsePointerSlot(TargetReader &reader, uint64_t table, unsigned count, const TargetArchitecture &architecture,
                                               Match match, Cancel cancel)
 {

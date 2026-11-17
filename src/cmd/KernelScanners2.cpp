@@ -370,7 +370,8 @@ void ScanAlpc(Ctx &ctx)
     knengine::LayoutResolver layout(ctx.Session);
     kncore::TargetArchitecture architecture;
     unsigned typeIndex = 0;
-    if (!KernelArchitecture(ctx.Session, &architecture) || !walker.Initialize() || !walker.ResolveTypeIndex(L"ALPC Port", &typeIndex))
+    if (!KernelArchitecture(ctx.Session, &architecture) || !walker.Initialize() ||
+        !walker.ResolveTypeIndex(L"ALPC Port", &typeIndex, L"AlpcPortObjectType"))
     {
         ctx.Out.Fail(kncore::Status::Unavailable, L"ALPC object namespace/type unavailable");
         return;
@@ -413,7 +414,8 @@ void ScanAlpc(Ctx &ctx)
                                           : layout.PublicOnlySymbol(L"nt", L"AlpcpPortList");
         uint64_t root = 0;
         unsigned directoryType = 0;
-        if (!head || !rootAddress || !cookie || !offsets || !listStorage || !walker.ResolveTypeIndex(L"Directory", &directoryType) ||
+        if (!head || !rootAddress || !cookie || !offsets || !listStorage ||
+            !walker.ResolveTypeIndex(L"Directory", &directoryType, L"ObpDirectoryObjectType") ||
             !ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *rootAddress, &root))
         {
             budget.Stop(ctx.Session.Cancelled() ? kncore::Status::Cancelled : kncore::Status::Unavailable,
@@ -445,6 +447,7 @@ void ScanAlpc(Ctx &ctx)
             budget.Report.Analysis.Set(L"portRequestedBytes", knjson::Value(std::to_wstring(measured.Bytes)));
             budget.Report.Analysis.Set(L"portReadElapsedMs", knjson::Value(std::to_wstring(
                 std::chrono::duration_cast<std::chrono::milliseconds>(measured.Elapsed).count())));
+            budget.Report.Analysis.Set(L"portReadLatency", measured.Latency.ToJson());
             budget.Report.Analysis.Set(L"setupElapsedMs", knjson::Value(std::to_wstring(
                 std::chrono::duration_cast<std::chrono::milliseconds>(setupElapsed).count())));
             budget.Report.Analysis.Set(L"processInventoryElapsedMs", knjson::Value(std::to_wstring(

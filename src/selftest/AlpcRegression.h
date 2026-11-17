@@ -38,6 +38,43 @@ template <typename Check> void RunAlpcRegression(Check check)
     constexpr uint64_t head = base + 0x1000, root = base + 0x2000, directory = base + 0x3000;
     constexpr uint64_t connection = base + 0x4000, client = base + 0x5000, server = base + 0x6000;
     constexpr uint64_t owner = base + 0x7000, info = base + 0x8000, cookie = base + 0x9000, offsets = base + 0x9100;
+    ReadLatency latency;
+    ReadResult sample;
+    sample.State = Status::Success;
+    sample.Transferred = 4;
+    for (const int64_t us : {100, 999, 1000, 10000, 50000, 249999, 250000, 999999, 1000000})
+    {
+        latency.Observe(AddressSpace::Virtual, client, 4, sample, std::chrono::microseconds(us));
+    }
+    const auto histogram = latency.ToJson();
+    const auto &buckets = histogram.Get(L"buckets").Items();
+    check(buckets.size() == 6 && buckets[0].Get(L"count").AsString(L"") == L"2" &&
+        buckets[1].Get(L"count").AsString(L"") == L"1" && buckets[2].Get(L"count").AsString(L"") == L"1" &&
+        buckets[3].Get(L"count").AsString(L"") == L"2" && buckets[4].Get(L"count").AsString(L"") == L"2" &&
+        buckets[5].Get(L"count").AsString(L"") == L"1" && buckets[5].Get(L"upperExclusiveUs").IsNull(),
+        "alpc.latency-buckets-use-exclusive-microsecond-boundaries");
+    sample.State = Status::Partial;
+    sample.Transferred = 2;
+    sample.Error.Code = 0x80004005;
+    for (unsigned i = 0; i < 11; ++i)
+    {
+        latency.Observe(AddressSpace::Physical, info, 4, sample, std::chrono::microseconds(1500000));
+    }
+    const auto slow = latency.ToJson();
+    check(slow.Get(L"slowReadCount").AsString(L"") == L"14" &&
+        slow.Get(L"slowReadElapsedUs").AsString(L"") == L"18749999" &&
+        slow.Get(L"maximumReadUs").AsString(L"") == L"1500000" &&
+        slow.Get(L"firstSlowReads").Items().size() == 8 && slow.Get(L"slowSamplesTruncated").AsBool(false),
+        "alpc.latency-sampling-is-bounded-with-untruncated-aggregate-cost");
+    const auto &partialSample = slow.Get(L"firstSlowReads").Items()[3];
+    check(partialSample.Get(L"space").AsString(L"") == L"physical" &&
+        partialSample.Get(L"address").AsString(L"") == Hex(info) &&
+        partialSample.Get(L"requestedBytes").AsString(L"") == L"4" &&
+        partialSample.Get(L"transferredBytes").AsString(L"") == L"2" &&
+        partialSample.Get(L"status").AsString(L"") == L"Partial" &&
+        partialSample.Get(L"errorCode").AsString(L"") == Hex(0x80004005) &&
+        partialSample.Get(L"readOrdinal").AsString(L"") == L"10",
+        "alpc.slow-read-evidence-preserves-error-and-transfer-extent");
     const TargetArchitecture architecture{0x8664, 8, 48, {}};
     const auto field = [](unsigned offset, unsigned size, FieldKind kind = FieldKind::Unsigned)
     {

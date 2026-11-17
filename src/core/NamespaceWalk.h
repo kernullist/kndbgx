@@ -2,6 +2,7 @@
 
 #include "ObjectRead.h"
 #include "ServiceTable.h"
+#include "ReadLatency.h"
 #include <array>
 
 namespace kncore
@@ -18,12 +19,15 @@ class NamespaceReadMeter final : public TargetReader
         Bytes += length;
         const auto start = std::chrono::steady_clock::now();
         auto result = reader_.Read(space, address, length);
-        Elapsed += std::chrono::steady_clock::now() - start;
+        const auto elapsed = std::chrono::steady_clock::now() - start;
+        Elapsed += elapsed;
+        Latency.Observe(space, address, length, result, elapsed);
         return result;
     }
     uint64_t Requests = 0;
     uint64_t Bytes = 0;
     std::chrono::steady_clock::duration Elapsed{};
+    ReadLatency Latency;
 
   private:
     TargetReader &reader_;

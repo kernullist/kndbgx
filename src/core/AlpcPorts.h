@@ -354,6 +354,7 @@ void CollectAlpcPorts(TargetReader &reader, const TargetArchitecture &architectu
         measured.Set(L"requestedBytes", knjson::Value(std::to_wstring(meter->Bytes)));
         measured.Set(L"readElapsedMs", knjson::Value(std::to_wstring(
             std::chrono::duration_cast<std::chrono::milliseconds>(meter->Elapsed).count())));
+        measured.Set(L"latency", meter->Latency.ToJson());
         budget.Report.Analysis.Set(name, std::move(measured));
     }
     budget.Report.Analysis.Set(

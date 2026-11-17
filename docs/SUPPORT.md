@@ -38,6 +38,8 @@ Session dispatch covers populated win32k global slots, including session zero, w
 
 ALPC global-list decoding also requires its reviewed NT profile and matching PDB fields, including port-state bitfields. It includes unnamed endpoints linked in `AlpcpPortList`; detached/freed objects and objects not yet linked are outside its scope. The entire list shares a 180-second traversal deadline and a 65,536-port limit. Other kernels can retain named-namespace observations with an explicit unnamed-port coverage gap and the existing 120-second namespace deadline. A missing name header is verified unnamed; unreadable or contradictory name metadata stays unknown.
 
+ALPC type discovery first tries the matched kernel's `AlpcPortObjectType` and `ObpDirectoryObjectType` symbols. Each candidate must agree with its `_OBJECT_TYPE.Index`, `ObTypeIndexTable` slot and requested type name; missing or contradictory candidates fall back to the existing table search. Read latency diagnostics retain a histogram, maximum duration, total cost of reads lasting at least 250 ms, and the first eight such reads. They measure reader calls, including debugger waits, and do not count wire packets or prove a transport fault.
+
 ## Interpretation limits
 
 **Partial** results may contain useful observations. Missing pages, layouts, ownership, identities or budget-limited traversal prevent a complete conclusion. An empty Partial result does not establish absence; an external routine address or cross-view difference is not proof of a hook or hidden object.

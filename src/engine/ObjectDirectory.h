@@ -53,7 +53,8 @@ class ObjectDirectoryWalker
     // Resolves an object-manager type index (e.g. "Directory",
     // "ALPC Port") through ObTypeIndexTable. Cached per name.
     // Returns false when the name is absent; index becomes 0xFFFFFFFF.
-    bool ResolveTypeIndex(const wchar_t *typeName, unsigned *index);
+    // A symbol hint must agree with the table slot, object index and name.
+    bool ResolveTypeIndex(const wchar_t *typeName, unsigned *index, const wchar_t *typeSymbol = nullptr);
     bool ObjectTypeIndex(ULONG64 body, unsigned *index);
     const kncore::Result &Report() const;
 

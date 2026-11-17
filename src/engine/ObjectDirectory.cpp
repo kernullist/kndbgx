@@ -245,7 +245,7 @@ bool ObjectDirectoryWalker::VisitDirectoryNamed(const wchar_t *directoryName, co
     return report_.State == kncore::Status::Success;
 }
 
-bool ObjectDirectoryWalker::ResolveTypeIndex(const wchar_t *typeName, unsigned *index)
+bool ObjectDirectoryWalker::ResolveTypeIndex(const wchar_t *typeName, unsigned *index, const wchar_t *typeSymbol)
 {
     if (index == nullptr || typeName == nullptr || !Initialize())
     {
@@ -277,34 +277,46 @@ bool ObjectDirectoryWalker::ResolveTypeIndex(const wchar_t *typeName, unsigned *
     {
         return false;
     }
-    const auto found = kncore::FindSparsePointerSlot(
-        session_, *table, slots, architecture_,
-        [&](unsigned slot, uint64_t object)
+    const auto matches = [&](unsigned slot, uint64_t object)
+    {
+        unsigned char indexByte = 0;
+        std::wstring text;
+        const bool readable = kncore::ValidRange(object,
+                                                 std::max<uint64_t>(typeIndex->Offset + 1, static_cast<uint64_t>(name->Offset) + name->Size)) &&
+                               session_.ReadExact(kncore::AddressSpace::Virtual, object + typeIndex->Offset, &indexByte) &&
+                               ReadUnicode(object + name->Offset, &text);
+        if (!readable)
         {
-            unsigned char indexByte = 0;
-            std::wstring text;
-            const bool readable = kncore::ValidRange(object,
-                                                     std::max<uint64_t>(typeIndex->Offset + 1, static_cast<uint64_t>(name->Offset) + name->Size)) &&
-                                   session_.ReadExact(kncore::AddressSpace::Virtual, object + typeIndex->Offset, &indexByte) &&
-                                   ReadUnicode(object + name->Offset, &text);
-            if (!readable)
-            {
-                return false;
-            }
-            if (indexByte != slot)
-            {
-                // Type objects whose recorded Index disagrees with their table
-                // slot are refused; keep the mismatch visible for diagnosis.
-                knlog::Write(L"ObjectType slot " + std::to_wstring(slot) + L" name=" + text + L" indexByte=" +
-                             std::to_wstring(indexByte) + L" (mismatch; refused)");
-                return false;
-            }
-            return _wcsicmp(text.c_str(), typeName) == 0;
-        },
-        [&]()
+            return false;
+        }
+        if (indexByte != slot)
         {
-            return session_.Cancelled();
-        });
+            // Type objects whose recorded Index disagrees with their table
+            // slot are refused; keep the mismatch visible for diagnosis.
+            knlog::Write(L"ObjectType slot " + std::to_wstring(slot) + L" name=" + text + L" indexByte=" +
+                         std::to_wstring(indexByte) + L" (mismatch; refused)");
+            return false;
+        }
+        return _wcsicmp(text.c_str(), typeName) == 0;
+    };
+    const auto cancelled = [&]()
+    {
+        return session_.Cancelled();
+    };
+    std::optional<unsigned> found;
+    if (typeSymbol != nullptr && !cancelled())
+    {
+        const auto reference = layout_.Address(L"nt", typeSymbol);
+        if (reference)
+        {
+            found = kncore::FindReferencedPointerSlot(session_, *reference, *table, slots, typeIndex, architecture_, matches, cancelled);
+        }
+    }
+    if (!found && !cancelled())
+    {
+        // Missing or contradictory hints retain the established table search.
+        found = kncore::FindSparsePointerSlot(session_, *table, slots, architecture_, matches, cancelled);
+    }
     if (found)
     {
         *index = *found;
