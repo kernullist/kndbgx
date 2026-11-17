@@ -7,11 +7,19 @@
 
 namespace kncore
 {
+struct ReadTiming
+{
+    uint64_t StartedUtc100ns = 0;
+    uint32_t ProcessId = 0;
+    uint32_t ThreadId = 0;
+    std::chrono::steady_clock::duration EngineElapsed{};
+};
+
 class ReadLatency
 {
   public:
-    void Observe(AddressSpace space, uint64_t address, size_t requested, const ReadResult &result,
-                 std::chrono::steady_clock::duration elapsed)
+    void Observe(AddressSpace space, uint64_t address, size_t requested, const TransferResult &result,
+                 std::chrono::steady_clock::duration elapsed, const ReadTiming *timing = nullptr)
     {
         const auto us = static_cast<uint64_t>((std::max)(int64_t(0),
             std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()));
@@ -29,7 +37,8 @@ class ReadLatency
             slowUs_ += us;
             if (samples_.size() < 8)
             {
-                samples_.push_back({space, address, requested, result.Transferred, result.State, result.Error.Code, reads_, us});
+                samples_.push_back({space, address, requested, result.Transferred, result.State, result.Error.Code, reads_, us,
+                    timing ? std::optional<ReadTiming>(*timing) : std::nullopt});
             }
         }
     }
@@ -62,6 +71,16 @@ class ReadLatency
             row.Set(L"errorCode", knjson::Value(Hex(sample.ErrorCode)));
             row.Set(L"readOrdinal", knjson::Value(std::to_wstring(sample.Ordinal)));
             row.Set(L"elapsedUs", knjson::Value(std::to_wstring(sample.ElapsedUs)));
+            if (sample.Timing)
+            {
+                const auto engineUs = static_cast<uint64_t>((std::max)(int64_t(0),
+                    std::chrono::duration_cast<std::chrono::microseconds>(sample.Timing->EngineElapsed).count()));
+                row.Set(L"startedUtc100ns", knjson::Value(std::to_wstring(sample.Timing->StartedUtc100ns)));
+                row.Set(L"processId", knjson::Value(std::to_wstring(sample.Timing->ProcessId)));
+                row.Set(L"threadId", knjson::Value(std::to_wstring(sample.Timing->ThreadId)));
+                row.Set(L"engineElapsedUs", knjson::Value(std::to_wstring(engineUs)));
+                row.Set(L"outsideEngineUs", knjson::Value(std::to_wstring(sample.ElapsedUs - (std::min)(engineUs, sample.ElapsedUs))));
+            }
             samples.Push(std::move(row));
         }
         value.Set(L"firstSlowReads", std::move(samples));
@@ -80,6 +99,7 @@ class ReadLatency
         uint64_t ErrorCode;
         uint64_t Ordinal;
         uint64_t ElapsedUs;
+        std::optional<ReadTiming> Timing;
     };
     static constexpr std::array<uint64_t, 5> limitsUs_{1000, 10000, 50000, 250000, 1000000};
     std::array<uint64_t, 6> buckets_{};

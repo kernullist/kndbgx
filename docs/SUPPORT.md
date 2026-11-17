@@ -40,6 +40,8 @@ ALPC global-list decoding also requires its reviewed NT profile and matching PDB
 
 ALPC type discovery first tries the matched kernel's `AlpcPortObjectType` and `ObpDirectoryObjectType` symbols. Each candidate must agree with its `_OBJECT_TYPE.Index`, `ObTypeIndexTable` slot and requested type name; missing or contradictory candidates fall back to the existing table search. Read latency diagnostics retain a histogram, maximum duration, total cost of reads lasting at least 250 ms, and the first eight such reads. They measure reader calls, including debugger waits, and do not count wire packets or prove a transport fault.
 
+The reviewed ALPC global-list path also records session-level reads separately for discovery, process inventory and ports. Bounded slow-read samples carry host UTC, process/thread IDs and engine-transfer time for correlation with host ETW. Symbol/context API internals remain outside these read counters. Telemetry is scoped to the collecting thread, restores enclosing scopes on exit and cannot change a memory transfer's success or failure. Blocking engine calls still cannot be interrupted by the collector's deadline.
+
 ## Interpretation limits
 
 **Partial** results may contain useful observations. Missing pages, layouts, ownership, identities or budget-limited traversal prevent a complete conclusion. An empty Partial result does not establish absence; an external routine address or cross-view difference is not proof of a hook or hidden object.

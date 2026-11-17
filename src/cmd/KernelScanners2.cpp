@@ -9,6 +9,7 @@
 #include "../core/QueueRead.h"
 #include "../core/Piddb.h"
 #include "../core/AlpcPorts.h"
+#include "../core/ReadTelemetry.h"
 #include "../util/FileReader.h"
 
 #include <dbgeng.h>
@@ -365,6 +366,8 @@ void ScanTimer(Ctx &ctx)
 void ScanAlpc(Ctx &ctx)
 {
     const auto setupStart = std::chrono::steady_clock::now();
+    kncore::ReadTelemetry discoveryReads, processReads, portReads;
+    kncore::ReadTelemetryScope discoveryScope(discoveryReads);
     CollectorWalk collection;
     knengine::ObjectDirectoryWalker walker(ctx.Session);
     knengine::LayoutResolver layout(ctx.Session);
@@ -384,7 +387,10 @@ void ScanAlpc(Ctx &ctx)
     std::vector<ProcRow> processes;
     CmdText processReport;
     const auto inventoryStart = std::chrono::steady_clock::now();
-    CollectProcesses(ctx.Session, layout, &processes, processReport);
+    {
+        kncore::ReadTelemetryScope processScope(processReads);
+        CollectProcesses(ctx.Session, layout, &processes, processReport);
+    }
     const auto inventoryElapsed = std::chrono::steady_clock::now() - inventoryStart;
     if (layout.VerifyProfile(kncore::KernelLayoutFamily::AlpcPorts) &&
         layout.VerifyProfile(kncore::KernelLayoutFamily::ObjectTypes) && layout.VerifyProfile(kncore::KernelLayoutFamily::ObjectNames))
@@ -430,19 +436,27 @@ void ScanAlpc(Ctx &ctx)
             }
             kncore::NamespaceReadMeter measured(ctx.Session);
             const auto setupElapsed = std::chrono::steady_clock::now() - setupStart;
-            kncore::CollectAlpcPorts(measured, architecture, fields, *head, root, *cookie, *offsets, typeIndex, directoryType, budget,
-                [&](knjson::Value row)
-                {
-                    uint64_t ownerAddress = 0;
-                    kncore::ParseUnsigned(row.Get(L"ownerProcess").AsString(L""), 16, &ownerAddress);
-                    const auto owner = owners.find(ownerAddress);
-                    row.Set(L"owner", owner != owners.end() ? owner->second->ToJson() : knjson::Value());
-                    if (owner == owners.end() || !owner->second->PidKnown || !owner->second->ImageKnown)
+            {
+                kncore::ReadTelemetryScope portScope(portReads);
+                kncore::CollectAlpcPorts(measured, architecture, fields, *head, root, *cookie, *offsets, typeIndex, directoryType, budget,
+                    [&](knjson::Value row)
                     {
-                        ++budget.Report.Collected.Unknown;
-                    }
-                    EmitRow(ctx, budget, row);
-                });
+                        uint64_t ownerAddress = 0;
+                        kncore::ParseUnsigned(row.Get(L"ownerProcess").AsString(L""), 16, &ownerAddress);
+                        const auto owner = owners.find(ownerAddress);
+                        row.Set(L"owner", owner != owners.end() ? owner->second->ToJson() : knjson::Value());
+                        if (owner == owners.end() || !owner->second->PidKnown || !owner->second->ImageKnown)
+                        {
+                            ++budget.Report.Collected.Unknown;
+                        }
+                        EmitRow(ctx, budget, row);
+                    });
+            }
+            auto sessionReads = knjson::Value::MakeObject();
+            sessionReads.Set(L"discovery", discoveryReads.ToJson());
+            sessionReads.Set(L"processInventory", processReads.ToJson());
+            sessionReads.Set(L"ports", portReads.ToJson());
+            budget.Report.Analysis.Set(L"sessionReads", std::move(sessionReads));
             budget.Report.Analysis.Set(L"portTargetReads", knjson::Value(std::to_wstring(measured.Requests)));
             budget.Report.Analysis.Set(L"portRequestedBytes", knjson::Value(std::to_wstring(measured.Bytes)));
             budget.Report.Analysis.Set(L"portReadElapsedMs", knjson::Value(std::to_wstring(

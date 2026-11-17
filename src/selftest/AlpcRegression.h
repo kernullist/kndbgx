@@ -3,6 +3,7 @@
 #include "CollectorRegression.h"
 #include "../core/AlpcPorts.h"
 #include "../core/ResultAddress.h"
+#include "../core/ReadTelemetry.h"
 
 namespace knself
 {
@@ -76,6 +77,41 @@ template <typename Check> void RunAlpcRegression(Check check)
         partialSample.Get(L"readOrdinal").AsString(L"") == L"10",
         "alpc.slow-read-evidence-preserves-error-and-transfer-extent");
     const TargetArchitecture architecture{0x8664, 8, 48, {}};
+    ReadTelemetry outerReads, innerReads;
+    {
+        ReadTelemetryScope outerScope(outerReads);
+        try
+        {
+            ReadTelemetryScope innerScope(innerReads);
+            ReadTiming timing;
+            timing.StartedUtc100ns = 123456789;
+            timing.ProcessId = 456;
+            timing.ThreadId = 123;
+            timing.EngineElapsed = std::chrono::microseconds(5500000);
+            CurrentReadTelemetry->Observe(AddressSpace::Virtual, client, 4, sample,
+                std::chrono::microseconds(5500010), timing);
+            throw 1;
+        }
+        catch (int)
+        {
+            check(CurrentReadTelemetry == &outerReads, "read-telemetry.nested-scope-restored-on-exception");
+        }
+    }
+    check(CurrentReadTelemetry == nullptr && outerReads.Requests == 0 && innerReads.Requests == 1 &&
+        sample.State == Status::Partial && sample.Transferred == 2,
+        "read-telemetry.scope-and-result-do-not-leak");
+    const auto timingJson = innerReads.ToJson();
+    const auto &timedSample = timingJson.Get(L"latency").Get(L"firstSlowReads").Items()[0];
+    check(timingJson.Get(L"requestedBytes").AsString(L"") == L"4" &&
+        timingJson.Get(L"readElapsedUs").AsString(L"") == L"5500010" &&
+        timingJson.Get(L"engineElapsedUs").AsString(L"") == L"5500000" &&
+        !timingJson.Get(L"evidenceIncomplete").AsBool(true) &&
+        timedSample.Get(L"startedUtc100ns").AsString(L"") == L"123456789" &&
+        timedSample.Get(L"processId").AsString(L"") == L"456" &&
+        timedSample.Get(L"threadId").AsString(L"") == L"123" &&
+        timedSample.Get(L"engineElapsedUs").AsString(L"") == L"5500000" &&
+        timedSample.Get(L"outsideEngineUs").AsString(L"") == L"10",
+        "read-telemetry.correlates-engine-wait-with-host-time-and-thread");
     const auto field = [](unsigned offset, unsigned size, FieldKind kind = FieldKind::Unsigned)
     {
         auto result = FixtureField(offset, size);

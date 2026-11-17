@@ -11,6 +11,7 @@
 
 #include "../util/Text.h"
 #include "../util/ArtifactWriter.h"
+#include "../core/ReadTelemetry.h"
 
 namespace knengine
 {
@@ -442,6 +443,17 @@ void DbgSession::Shutdown()
 
 kncore::TransferResult DbgSession::TransferMemory(kncore::AddressSpace space, bool write, ULONG64 address, void *buffer, ULONG length)
 {
+    auto *const telemetry = write ? nullptr : kncore::CurrentReadTelemetry;
+    const auto readStart = telemetry ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    kncore::ReadTiming timing;
+    if (telemetry != nullptr)
+    {
+        FILETIME utc = {};
+        GetSystemTimePreciseAsFileTime(&utc);
+        timing.StartedUtc100ns = (uint64_t(utc.dwHighDateTime) << 32) | utc.dwLowDateTime;
+        timing.ProcessId = GetCurrentProcessId();
+        timing.ThreadId = GetCurrentThreadId();
+    }
     const kncore::ObservedStage progress(kncore::OperationStage::MemoryIo);
     owner_.Require();
     std::lock_guard<std::recursive_mutex> lock(ioLock_);
@@ -475,6 +487,7 @@ kncore::TransferResult DbgSession::TransferMemory(kncore::AddressSpace space, bo
             result.State = kncore::Status::InvalidInput;
             break;
         }
+        const auto engineStart = telemetry ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         if (space == kncore::AddressSpace::Physical)
         {
             const auto primary = [&](size_t *transferred)
@@ -503,7 +516,15 @@ kncore::TransferResult DbgSession::TransferMemory(kncore::AddressSpace space, bo
             result = kncore::TransferStatus(length, moved, static_cast<int32_t>(hr));
         }
         result.Error.Operation = write ? L"WriteMemory" : L"ReadMemory";
+        if (telemetry != nullptr)
+        {
+            timing.EngineElapsed = std::chrono::steady_clock::now() - engineStart;
+        }
     } while (false);
+    if (telemetry != nullptr)
+    {
+        telemetry->Observe(space, address, length, result, std::chrono::steady_clock::now() - readStart, timing);
+    }
     return result;
 }
 
