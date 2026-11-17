@@ -57,7 +57,7 @@ template <typename Check> void RunKernelPartialRegression(Check check)
         services.Put(table + i * 4, static_cast<uint32_t>(-0x1000 * 16) | (i & 15), 4);
     }
     OwnershipIndex owners({{base, 0x20000, L"fixture", L"fixture"}}, true, {});
-    const auto collect = [&](ByteFixture &memory, WalkBudget &budget)
+    const auto collect = [&](TargetReader &memory, WalkBudget &budget)
     {
         CollectServiceEntries(memory, architecture, owners, table, 600, L"ShadowSSDT", 0x1000, L"fixture", budget,
                               [&](const knjson::Value &row)
@@ -67,6 +67,20 @@ template <typename Check> void RunKernelPartialRegression(Check check)
     };
     WalkBudget ssdt;
     collect(services, ssdt);
+    for (const auto state : {Status::Cancelled, Status::StaleContext, Status::InternalFault})
+    {
+        for (size_t failure = 1; failure <= services.Reads; ++failure)
+        {
+            auto memory = services;
+            TerminalReadFixture stopped(memory, state, failure);
+            WalkBudget budget;
+            collect(stopped, budget);
+            budget.Complete();
+            check(budget.Report.State == state && !budget.Report.Collected.Complete && stopped.Requests == failure &&
+                      budget.Report.Rows.Items().size() == (failure - 1) * 256,
+                  "ssdt.terminal-batch-read-stops-before-fallback-or-emission");
+        }
+    }
     check(ssdt.Report.Rows.Items().size() == 600 && services.Reads == 3 && services.LargestRead == 1024 &&
               ssdt.Report.Rows.Items()[599].Get(L"routine").AsString(L"") == Hex(table - 0x1000) &&
               ssdt.Report.Rows.Items()[599].Get(L"serviceId").AsString(L"") == Hex(0x1257),
@@ -102,6 +116,23 @@ template <typename Check> void RunKernelPartialRegression(Check check)
     descriptor.Put(base + 16, 1497, 4);
     descriptor.Put(base + 24, table + 0x2000);
     WalkBudget stableDescriptor;
+    for (const auto state : {Status::Cancelled, Status::StaleContext, Status::InternalFault})
+    {
+        TerminalReadFixture stopped(descriptor, state, 1);
+        WalkBudget budget;
+        check(!RecheckServiceDescriptor(stopped, base, {table, 0, 1497, table + 0x2000}, budget) &&
+                  budget.Report.State == state && stopped.Requests == 1,
+              "ssdt.final-descriptor-preserves-terminal-read-status");
+        TerminalReadFixture stoppedLimit(descriptor, state, 1);
+        WalkBudget limitBudget;
+        check(!RecheckServiceLimit(stoppedLimit, base + 16, 1497, limitBudget) && limitBudget.Report.State == state &&
+                  stoppedLimit.Requests == 1,
+              "ssdt.final-limit-preserves-terminal-read-status");
+    }
+    WalkBudget stableLimit, changedLimit;
+    check(RecheckServiceLimit(descriptor, base + 16, 1497, stableLimit) &&
+              !RecheckServiceLimit(descriptor, base + 16, 1496, changedLimit) && changedLimit.Report.State == Status::StaleContext,
+          "ssdt.limit-recheck-distinguishes-unchanged-and-changed-values");
     check(RecheckServiceDescriptor(descriptor, base, {table, 0, 1497, table + 0x2000}, stableDescriptor),
           "ssdt.unchanged-descriptor-survives-final-read");
     descriptor.Put(base + 16, 1496, 4);
@@ -194,6 +225,23 @@ template <typename Check> void RunKernelPartialRegression(Check check)
     };
     WalkBudget full;
     walk(ns, full);
+    for (const auto state : {Status::Cancelled, Status::StaleContext, Status::InternalFault})
+    {
+        for (size_t failure = 1; failure <= ns.Reads; ++failure)
+        {
+            auto memory = ns;
+            TerminalReadFixture stopped(memory, state, failure);
+            WalkBudget budget;
+            WalkNamedNamespace(stopped, architecture, fields, root, cookie, offsets, 3, 45, 16, budget,
+                               [](uint64_t, unsigned, unsigned, const std::wstring &)
+                               {
+                                   return true;
+                               });
+            budget.Complete();
+            check(budget.Report.State == state && !budget.Report.Collected.Complete && stopped.Requests == failure,
+                  "namespace.terminal-read-stops-before-retry-or-visiting-another-object");
+        }
+    }
     check(full.Report.Collected.Complete && full.Report.Collected.Visited == 3 && full.Report.Rows.Items().size() == 1 &&
               full.Report.Rows.Items()[0].Get(L"name").AsString(L"") == L"\\RPC Control\\TestPort" && ns.Reads <= 17,
           "alpc.filtered-batched-walk-finds-nested-port-without-reading-unrelated-names");

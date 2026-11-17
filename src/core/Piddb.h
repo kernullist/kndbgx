@@ -28,9 +28,10 @@ inline bool PiddbKernelRange(const TargetArchitecture &architecture, uint64_t ad
 }
 
 // Call only after the exact image, code windows and PDB field shapes are verified.
-inline void CollectPiddbEntries(TargetReader &reader, const TargetArchitecture &architecture, uint64_t table,
+inline void CollectPiddbEntries(TargetReader &source, const TargetArchitecture &architecture, uint64_t table,
                                uint64_t compareRoutine, WalkBudget &budget)
 {
+    CollectionReadGuard reader(source, budget);
     budget.StartTraversal(std::chrono::steady_clock::now(), std::chrono::seconds(30));
     const auto checkBudget = [&]()
     {
@@ -110,6 +111,10 @@ inline void CollectPiddbEntries(TargetReader &reader, const TargetArchitecture &
             break;
         }
         const auto bytes = reader.Read(AddressSpace::Virtual, node, 0x48);
+        if (!checkBudget())
+        {
+            break;
+        }
         if (!ExactBytes(bytes, 0x48))
         {
             ++budget.Report.Collected.Unreadable;
@@ -157,6 +162,10 @@ inline void CollectPiddbEntries(TargetReader &reader, const TargetArchitecture &
             buffer % 2 == 0 && PiddbKernelRange(architecture, buffer, static_cast<size_t>(length)))
         {
             const auto nameBytes = reader.Read(AddressSpace::Virtual, buffer, static_cast<size_t>(length));
+            if (!checkBudget())
+            {
+                break;
+            }
             if (ExactBytes(nameBytes, static_cast<size_t>(length)))
             {
                 std::wstring name(static_cast<size_t>(length / 2), L'\0');

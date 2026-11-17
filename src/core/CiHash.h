@@ -24,8 +24,9 @@ inline bool KernelRecordRange(const TargetArchitecture &architecture, uint64_t a
 }
 
 // The caller must verify the exact CI image, PDB, root storage and code windows.
-inline void CollectCiHashEntries(TargetReader &reader, const TargetArchitecture &architecture, uint64_t root, WalkBudget &budget)
+inline void CollectCiHashEntries(TargetReader &source, const TargetArchitecture &architecture, uint64_t root, WalkBudget &budget)
 {
+    CollectionReadGuard reader(source, budget);
     budget.StartTraversal(std::chrono::steady_clock::now(), std::chrono::seconds(30));
     if (!CheckRecordBudget(budget))
     {
@@ -106,6 +107,10 @@ inline void CollectCiHashEntries(TargetReader &reader, const TargetArchitecture 
             KernelRecordRange(architecture, buffer, static_cast<size_t>(length)))
         {
             const auto nameBytes = reader.Read(AddressSpace::Virtual, buffer, static_cast<size_t>(length));
+            if (!CheckRecordBudget(budget))
+            {
+                break;
+            }
             if (ExactBytes(nameBytes, static_cast<size_t>(length)))
             {
                 std::wstring name(static_cast<size_t>(length / 2), L'\0');

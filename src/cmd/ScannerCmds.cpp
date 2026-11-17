@@ -286,13 +286,7 @@ void ScanSsdt(Ctx &ctx)
         {
             kncore::RecheckServiceDescriptor(ctx.Session, *filterAddress + 32, *filterGui, budget);
         }
-        uint32_t observed = 0;
-        const bool stable = kncore::CheckWalkDeadline(budget) &&
-            ctx.Session.ReadExact(kncore::AddressSpace::Virtual, guiIdentity->Base + 0xa5074, &observed) && observed == filterLimit;
-        if (kncore::CheckWalkDeadline(budget) && !stable)
-        {
-            budget.Stop(kncore::Status::StaleContext, L"FilteredServiceLimitChanged");
-        }
+        kncore::RecheckServiceLimit(ctx.Session, guiIdentity->Base + 0xa5074, filterLimit, budget, L"FilteredServiceLimitChanged");
     }
     else
     {
@@ -301,14 +295,9 @@ void ScanSsdt(Ctx &ctx)
     for (const auto &[address, expectedLimit] : {std::pair(nativeReady ? limitAddress : std::nullopt, limit),
                                                std::pair(shadowReady ? guiLimitAddress : std::nullopt, guiLimit)})
     {
-        uint32_t observed = 0;
         if (address && !budget.Stopped)
         {
-            const bool stable = ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *address, &observed) && observed == expectedLimit;
-            if (kncore::CheckWalkDeadline(budget) && !stable)
-            {
-                budget.Stop(kncore::Status::StaleContext, L"ServiceLimitChanged");
-            }
+            kncore::RecheckServiceLimit(ctx.Session, *address, expectedLimit, budget);
         }
     }
     if (nativeReady || shadowReady)

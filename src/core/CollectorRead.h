@@ -6,6 +6,38 @@
 
 namespace kncore
 {
+// A terminal target failure ends the collection, including fallback reads.
+class CollectionReadGuard final : public TargetReader
+{
+  public:
+    CollectionReadGuard(TargetReader &source, WalkBudget &budget) : source_(source), budget_(budget)
+    {
+    }
+
+    ReadResult Read(AddressSpace space, uint64_t address, size_t length) override
+    {
+        if (budget_.Stopped)
+        {
+            ReadResult result;
+            result.Space = space;
+            result.Address = address;
+            result.Requested = length;
+            result.State = budget_.Report.State;
+            return result;
+        }
+        auto result = source_.Read(space, address, length);
+        if (result.State == Status::Cancelled || result.State == Status::StaleContext || result.State == Status::InternalFault)
+        {
+            budget_.Stop(result.State, L"CollectionReadStopped");
+        }
+        return result;
+    }
+
+  private:
+    TargetReader &source_;
+    WalkBudget &budget_;
+};
+
 inline std::optional<FieldInfo> NestedField(const std::optional<FieldInfo> &outer, const std::optional<FieldInfo> &inner)
 {
     if (!outer || !inner || outer->Kind != FieldKind::Composite || outer->BitOffset || outer->BitWidth || !outer->ValidFor(UINT32_MAX) ||

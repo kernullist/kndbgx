@@ -54,6 +54,19 @@ template <typename Check> void RunPiddbRegression(Check check)
         return budget.Report;
     };
     const auto valid = collect(fixture);
+    for (const auto state : {Status::Cancelled, Status::StaleContext, Status::InternalFault})
+    {
+        for (size_t read = 1; read <= fixture.Reads; ++read)
+        {
+            auto bytes = fixture;
+            TerminalReadFixture source(bytes, state, read);
+            WalkBudget stopped;
+            CollectPiddbEntries(source, architecture, table, compare, stopped);
+            stopped.Complete();
+            check(stopped.Report.State == state && !stopped.Report.Collected.Complete && source.Requests == read,
+                  "piddb.terminal-read-stops-at-each-record-boundary");
+        }
+    }
     check(valid.State == Status::Success && valid.Collected.Complete && valid.Collected.Expected == 2 &&
               valid.Collected.Visited == 2 && valid.Collected.Decoded == 2 && valid.Rows.Items().size() == 2,
           "piddb.verified-tree-produces-complete-driver-records");
@@ -144,11 +157,26 @@ template <typename Check> void RunPiddbRegression(Check check)
     WalkBudget cancelled;
     cancelled.Cancelled = [&]()
     {
-        return cancelled.Report.Collected.Visited == 1;
+        return cancelled.Report.Rows.Items().size() == 1;
     };
     CollectPiddbEntries(broken, architecture, table, compare, cancelled);
     check(cancelled.Report.State == Status::Cancelled && cancelled.Report.Collected.StopReason == L"Cancelled" &&
               cancelled.Report.Rows.Items().size() == 1, "piddb.cancellation-retains-status-and-partial-records");
+    broken = fixture;
+    broken.Reads = 0;
+    WalkBudget cancelledRecord;
+    bool cancelDuringRead = false;
+    cancelledRecord.Cancelled = [&]()
+    {
+        return cancelDuringRead;
+    };
+    broken.BeforeRead = [&]()
+    {
+        cancelDuringRead = broken.Reads == 2;
+    };
+    CollectPiddbEntries(broken, architecture, table, compare, cancelledRecord);
+    check(cancelledRecord.Report.State == Status::Cancelled && cancelledRecord.Report.Rows.Items().empty() && broken.Reads == 2,
+          "piddb.cancellation-during-entry-read-stops-before-name-read-and-emission");
     for (const bool cancelAtEnd : {false, true})
     {
         broken = fixture;

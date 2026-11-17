@@ -141,6 +141,19 @@ template <typename Check> void RunCommandRecordRegression(Check check)
         return budget.Report;
     };
     const auto result = collect(fixture);
+    for (const auto state : {Status::Cancelled, Status::StaleContext, Status::InternalFault})
+    {
+        for (size_t failure = 1; failure <= fixture.Reads; ++failure)
+        {
+            auto memory = fixture;
+            TerminalReadFixture stopped(memory, state, failure);
+            WalkBudget budget;
+            CollectCiHashEntries(stopped, architecture, root, budget);
+            budget.Complete();
+            check(budget.Report.State == state && !budget.Report.Collected.Complete && stopped.Requests == failure,
+                  "cihash.terminal-read-stops-at-each-record-boundary");
+        }
+    }
     const auto &row = result.Rows.Items().front();
     check(result.State == Status::Success && result.Collected.Complete && result.Collected.Decoded == 2 &&
               row.Get(L"name").AsString(L"") == L"alpha.sys" && row.Get(L"cacheStatusRaw").AsString(L"") == L"0x00000000" &&

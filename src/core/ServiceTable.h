@@ -66,8 +66,9 @@ inline bool ServiceDescriptorMatches(const ServiceDescriptor &descriptor, uint64
     return descriptor.Table == table && descriptor.Limit == limit && descriptor.Arguments == arguments && limit > 0 && limit <= 4096;
 }
 
-inline bool RecheckServiceDescriptor(TargetReader &reader, uint64_t address, const ServiceDescriptor &expected, WalkBudget &budget)
+inline bool RecheckServiceDescriptor(TargetReader &source, uint64_t address, const ServiceDescriptor &expected, WalkBudget &budget)
 {
+    CollectionReadGuard reader(source, budget);
     if (!CheckWalkDeadline(budget))
     {
         return false;
@@ -76,11 +77,25 @@ inline bool RecheckServiceDescriptor(TargetReader &reader, uint64_t address, con
     return CheckWalkDeadline(budget) && (observed == expected || budget.Stop(Status::StaleContext, L"ServiceDescriptorsChanged"));
 }
 
+inline bool RecheckServiceLimit(TargetReader &source, uint64_t address, uint32_t expected, WalkBudget &budget,
+                                const wchar_t *reason = L"ServiceLimitChanged")
+{
+    CollectionReadGuard reader(source, budget);
+    if (!CheckWalkDeadline(budget))
+    {
+        return false;
+    }
+    uint32_t observed = 0;
+    const bool stable = reader.ReadExact(AddressSpace::Virtual, address, &observed) && observed == expected;
+    return CheckWalkDeadline(budget) && (stable || budget.Stop(Status::StaleContext, reason));
+}
+
 template <typename Emit>
-void CollectServiceEntries(TargetReader &reader, const TargetArchitecture &architecture, const OwnershipIndex &owners, uint64_t table,
+void CollectServiceEntries(TargetReader &source, const TargetArchitecture &architecture, const OwnershipIndex &owners, uint64_t table,
                            uint32_t count, const wchar_t *family, uint32_t serviceBase, const std::wstring &profile, WalkBudget &budget,
                            Emit emit)
 {
+    CollectionReadGuard reader(source, budget);
     budget.StartTraversal(std::chrono::steady_clock::now(), std::chrono::seconds(30));
     if (count == 0 || count > 4096 || !architecture.KernelPointer(table) || !ValidRange(table, uint64_t(count) * 4) ||
         !architecture.KernelPointer(table + uint64_t(count) * 4 - 1))

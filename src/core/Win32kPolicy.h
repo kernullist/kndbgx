@@ -220,6 +220,10 @@ class Win32kPolicySnapshot
         capture({{image + 0x89ca0, 8}, {image + 0x89cd8, 8}, {image + 0x89ce0, 4}, {image + 0x73a80, 16}});
         const auto high = Memory.Number(image + 0x89ca0);
         const auto count = Memory.Number(image + 0x89ce0, 4);
+        if (!CheckWalkDeadline(budget))
+        {
+            return;
+        }
         if (!count || *count > 255 || (*count && !DispatchPointer(architecture, high)))
         {
             budget.Stop(Status::Unavailable, L"Win32kPolicySessionSlotsUnavailable");

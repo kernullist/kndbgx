@@ -12,8 +12,9 @@ class DispatchSnapshot
   public:
     using Range = std::pair<uint64_t, size_t>;
 
-    void Capture(TargetReader &reader, const TargetArchitecture &architecture, WalkBudget &budget, std::vector<Range> ranges)
+    void Capture(TargetReader &source, const TargetArchitecture &architecture, WalkBudget &budget, std::vector<Range> ranges)
     {
+        CollectionReadGuard reader(source, budget);
         std::sort(ranges.begin(), ranges.end());
         for (size_t i = 0; i < ranges.size() && CheckWalkDeadline(budget);)
         {

@@ -21,7 +21,7 @@ class BfeResourceResolver
             if (source->Ready)
             {
                 source->Mui = source->Pe->Mui();
-                source->Ready = source->Mui.has_value() || source->Pe->Error == L"ResourceNotFound";
+                source->Ready = source->Mui.has_value() || source->Pe->Error == L"ResourceTypeNotFound";
             }
             sources_.push_back(std::move(source));
         }

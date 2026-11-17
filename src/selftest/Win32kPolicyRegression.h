@@ -42,6 +42,32 @@ template <typename Check> void RunWin32kPolicyRegression(Check check)
         return ReadWin32kProcessPolicy(snapshot, architecture, process);
     };
     auto policy = read();
+    for (const auto state : {Status::Cancelled, Status::StaleContext, Status::InternalFault})
+    {
+        for (size_t failure = 1; failure <= memory.Reads; ++failure)
+        {
+            auto source = memory;
+            TerminalReadFixture stopped(source, state, failure);
+            DispatchSnapshot snapshot;
+            WalkBudget budget;
+            snapshot.Capture(stopped, architecture, budget, ranges);
+            budget.Complete();
+            check(budget.Report.State == state && !budget.Report.Collected.Complete && stopped.Requests == failure,
+                  "dispatch.terminal-read-stops-remaining-snapshot-ranges");
+        }
+        auto source = memory;
+        TerminalReadFixture stopped(source, state, 1);
+        Win32kPolicySnapshot snapshot;
+        WalkBudget budget;
+        snapshot.Capture(stopped, architecture, {process}, address + 0x2000000, address + 0x4000000, address + 0x6000000,
+                         budget, [](std::span<const unsigned char>)
+                         {
+                             return std::wstring();
+                         });
+        budget.Complete();
+        check(budget.Report.State == state && !budget.Report.Collected.Complete && stopped.Requests == 1,
+              "policy.terminal-snapshot-read-is-not-demoted-to-unavailable-layout");
+    }
     check(policy.IdentityValid && policy.Session == 1 && policy.Set == 3 && policy.Flags == 0x4000,
           "policy.reads-current-process-fields-and-session-id");
     memory.Put(address + 0x1f8, 201);

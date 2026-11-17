@@ -136,10 +136,11 @@ inline bool ReadNamespaceName(TargetReader &reader, const TargetArchitecture &ar
 }
 
 template <typename Visitor>
-void WalkNamedNamespace(TargetReader &reader, const TargetArchitecture &architecture, const NamespaceLayout &layout, uint64_t root,
+void WalkNamedNamespace(TargetReader &source, const TargetArchitecture &architecture, const NamespaceLayout &layout, uint64_t root,
                         uint64_t cookieAddress, uint64_t offsetsAddress, unsigned directoryType, unsigned selectedType, unsigned maxDepth,
                         WalkBudget &budget, Visitor visitor)
 {
+    CollectionReadGuard reader(source, budget);
     uint8_t cookie = 0;
     std::array<uint8_t, 4> offsets{};
     if (budget.Cancelled && budget.Cancelled())
@@ -152,13 +153,19 @@ void WalkNamedNamespace(TargetReader &reader, const TargetArchitecture &architec
         !reader.ReadExact(AddressSpace::Virtual, cookieAddress, &cookie) ||
         !reader.ReadExact(AddressSpace::Virtual, offsetsAddress, &offsets))
     {
-        budget.Stop(Status::Unavailable, L"NamespaceLayoutOrDecoderUnavailable");
+        if (!budget.Stopped)
+        {
+            budget.Stop(Status::Unavailable, L"NamespaceLayoutOrDecoderUnavailable");
+        }
         return;
     }
     const auto rootRaw = ReadField(reader, root - layout.Body->Offset, layout.Type);
     if (!rootRaw || static_cast<uint8_t>(*rootRaw ^ cookie ^ ((root - layout.Body->Offset) >> 8)) != directoryType)
     {
-        budget.Stop(Status::Unavailable, L"ObjectCookieDecodeNotCorroboratedByRootType");
+        if (!budget.Stopped)
+        {
+            budget.Stop(Status::Unavailable, L"ObjectCookieDecodeNotCorroboratedByRootType");
+        }
         return;
     }
     struct Directory

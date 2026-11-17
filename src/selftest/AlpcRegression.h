@@ -196,6 +196,18 @@ template <typename Check> void RunAlpcRegression(Check check)
     };
     WalkBudget full;
     collect(memory, full);
+    for (const auto state : {Status::Cancelled, Status::StaleContext, Status::InternalFault})
+    {
+        for (size_t read = 1; read <= memory.Reads; ++read)
+        {
+            auto bytes = memory;
+            TerminalReadFixture source(bytes, state, read);
+            WalkBudget stopped;
+            collect(source, stopped);
+            check(stopped.Report.State == state && !stopped.Report.Collected.Complete && source.Requests == read,
+                  "alpc.terminal-read-never-retries-or-continues-collection");
+        }
+    }
     check(full.Report.State == Status::Success && full.Report.Collected.Complete && full.Report.Rows.Items().size() == 3 &&
               full.Report.Analysis.Get(L"namedPorts").AsString(L"") == L"1" &&
               full.Report.Analysis.Get(L"unnamedPorts").AsString(L"") == L"2",

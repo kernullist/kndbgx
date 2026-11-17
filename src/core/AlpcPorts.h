@@ -134,10 +134,11 @@ class AlpcObjectNames
 };
 
 template <typename Emit>
-void CollectAlpcPorts(TargetReader &reader, const TargetArchitecture &architecture, const AlpcPortLayout &layout, uint64_t head,
+void CollectAlpcPorts(TargetReader &source, const TargetArchitecture &architecture, const AlpcPortLayout &layout, uint64_t head,
                       uint64_t root, uint64_t cookieAddress, uint64_t offsetsAddress, unsigned portType, unsigned directoryType,
                       WalkBudget &budget, Emit emit)
 {
+    CollectionReadGuard reader(source, budget);
     const auto begin = std::chrono::steady_clock::now();
     StartAlpcTraversal(budget, begin);
     uint8_t cookie = 0;

@@ -365,7 +365,7 @@ class PeResources
             }
             if (!found || found->Directory != (level < 2))
             {
-                Fail(found ? L"ResourceDirectoryShapeInvalid" : L"ResourceNotFound");
+                Fail(found ? L"ResourceDirectoryShapeInvalid" : level == 0 ? L"ResourceTypeNotFound" : L"ResourceNotFound");
                 return {};
             }
             offset = found->Offset;

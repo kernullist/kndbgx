@@ -149,12 +149,7 @@ void ScanWin32kPolicy(Ctx &ctx, const std::wstring &selector)
     {
         kncore::RecheckServiceDescriptor(ctx.Session, *descriptorAddress + 32, *descriptor, budget);
     }
-    uint32_t finalLimit = 0;
-    if (kncore::CheckWalkDeadline(budget) &&
-        (!ctx.Session.ReadExact(kncore::AddressSpace::Virtual, image->Base + 0xa5074, &finalLimit) || finalLimit != limit))
-    {
-        budget.Stop(kncore::Status::StaleContext, L"Win32kPolicyServiceLimitChanged");
-    }
+    kncore::RecheckServiceLimit(ctx.Session, image->Base + 0xa5074, limit, budget, L"Win32kPolicyServiceLimitChanged");
     budget.Report.Analysis = knjson::Value::MakeObject();
     budget.Report.Analysis.Set(L"policyTargetReads", knjson::Value(std::to_wstring(measured.Requests)));
     budget.Report.Analysis.Set(L"policyRequestedBytes", knjson::Value(std::to_wstring(measured.Bytes)));

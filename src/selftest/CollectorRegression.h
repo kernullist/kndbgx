@@ -57,6 +57,33 @@ class ByteFixture final : public kncore::TargetReader
     }
 };
 
+class TerminalReadFixture final : public kncore::TargetReader
+{
+  public:
+    TerminalReadFixture(kncore::TargetReader &source, kncore::Status state, size_t failAt)
+        : source_(source), state_(state), failAt_(failAt)
+    {
+    }
+    size_t Requests = 0;
+    kncore::ReadResult Read(kncore::AddressSpace space, uint64_t address, size_t length) override
+    {
+        if (++Requests == failAt_)
+        {
+            kncore::ReadResult result;
+            result.Space = space;
+            result.Address = address;
+            result.Requested = length;
+            result.State = state_;
+            return result;
+        }
+        return source_.Read(space, address, length);
+    }
+  private:
+    kncore::TargetReader &source_;
+    kncore::Status state_;
+    size_t failAt_;
+};
+
 inline kncore::FieldInfo FixtureField(uint32_t offset, uint32_t size)
 {
     kncore::FieldInfo field;

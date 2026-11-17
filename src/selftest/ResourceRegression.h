@@ -298,7 +298,7 @@ template <typename Check> void RunResourceRegression(Check check)
         check(initialized && !file.Read(0, bytes) && file.Error == L"ResourcePageChanged",
               "resource.changed-prototype-pte-rejects-copied-page");
     }
-    for (unsigned mutation = 0; mutation < 6; ++mutation)
+    for (unsigned mutation = 0; mutation < 8; ++mutation)
     {
         ByteFixture memory;
         const auto mapFile = [&](uint64_t sub, uint64_t area, uint64_t pte, uint64_t physical, const std::vector<unsigned char> &bytes)
@@ -328,6 +328,17 @@ template <typename Check> void RunResourceRegression(Check check)
         else if (mutation == 5)
         {
             mui[0x4a0] = 9;
+        }
+        else if (mutation == 6)
+        {
+            base[0x40e] = 1;
+            base[0x440] = 2;
+        }
+        else if (mutation == 7)
+        {
+            base[0x40c] = 0;
+            base[0x40e] = 1;
+            std::memcpy(base.data() + 0x410, base.data() + 0x418, 8);
         }
         mapFile(subsection, control, ptes, 0x10000, base);
         mapFile(subsection + 0x100, control + 0x100, ptes + 0x100, 0x20000, mui);
@@ -416,6 +427,11 @@ template <typename Check> void RunResourceRegression(Check check)
                           "resource.incomplete-vad-scan-does-not-claim-absence");
                 }
             }
+        }
+        else if (mutation == 7)
+        {
+            check(result.Get(L"state").AsString(L"") == L"Resolved" && result.Get(L"language").IsNull() &&
+                  result.Get(L"file").AsString(L"").ends_with(L"bfe.dll"), "resource.module-without-mui-uses-direct-string-table");
         }
         else
         {
