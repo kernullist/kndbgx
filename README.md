@@ -25,7 +25,7 @@ Open **Library** or press **Ctrl+K**. Search by purpose, such as `callback`, cho
 
 The screenshots were captured on 2026-11-15 from the actual **0.2.0-preview.7** workspace connected to a Windows 11 x64 VMware guest. Host-only observations and synthetic file/decoder examples are labeled separately. Counts and addresses belong to those captures; use your own target's values. Kernel collectors and Data Model integration remain experimental; see [supported sessions and limits](docs/SUPPORT.md).
 
-`0.2.0-preview.8` includes the driver-history, ALPC, timer, SSDT and WFP changes described below. The results were captured on 2026-11-18 with a build from `main` and a stopped Windows 11 x64 VM (NT 28000.2952). [Build from source](#build-from-source) · [WinDbg validation](docs/VALIDATION.md#paged-command-tables-and-collector-setup)
+`0.2.0-preview.9` keeps the result table in place during idle status checks. It includes the driver-history, ALPC, timer, SSDT and WFP changes described below. The results were captured on 2026-11-18 with a build from `main` and a stopped Windows 11 x64 VM (NT 28000.2952). [Build from source](#build-from-source) · [WinDbg validation](docs/VALIDATION.md#paged-command-tables-and-collector-setup)
 
 ![Finding callback-related tasks in the command palette](docs/screenshots/command-palette.png)
 

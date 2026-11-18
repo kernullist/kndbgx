@@ -5485,6 +5485,57 @@ async function main()
                 });
             }
         });
+        await check("T-UI-BROWSER idle status polls keep the result table in place", async () =>
+        {
+            const local = await browser.newContext({ viewport: { width: 1200, height: 800 } });
+            const workspace = await local.newPage();
+            try
+            {
+                await workspace.addInitScript(fixtureInit, { adaptiveLayout: true });
+                await workspace.goto(`http://127.0.0.1:${server.address().port}/`);
+                await workspace.waitForFunction(() => document.getElementById("current-process-image").textContent === "System");
+                await hideInspection(workspace);
+                if (await workspace.locator("#btn-sidebar").getAttribute("aria-expanded") !== "true")
+                {
+                    await workspace.locator("#btn-sidebar").click();
+                }
+                await workspace.locator("#prompt").fill("sort-fixture");
+                await workspace.locator("#prompt").press("Enter");
+                await workspace.waitForFunction(() => document.querySelector(".result-row") &&
+                    !document.getElementById("btn-stack").disabled && !document.getElementById("current-process-notice").textContent);
+                const table = workspace.locator("#result-view");
+                const before = await table.boundingBox();
+                assert.ok(before && before.height > 0 && before.width > 0, "Expected a visible result table");
+                const notice = workspace.locator("#current-process-notice");
+                const originalNotice = await notice.textContent();
+                const refresh = workspace.locator("#btn-refresh-status");
+                await workspace.evaluate(() =>
+                {
+                    window.knTestHoldStatus = true;
+                });
+                await workspace.waitForFunction(() => typeof window.knTestReleaseStatus === "function");
+                assert.deepEqual(await table.boundingBox(), before, "Pending idle status moved the table");
+                assert.equal(await notice.textContent(), originalNotice);
+                assert.equal(await refresh.getAttribute("aria-busy"), "true");
+                await workspace.evaluate(() =>
+                {
+                    window.knTestHoldStatus = false;
+                    window.knTestReleaseStatus();
+                });
+                await workspace.waitForFunction(() => document.getElementById("btn-refresh-status").getAttribute("aria-busy") === "false");
+                assert.deepEqual(await table.boundingBox(), before, "Unchanged status reply moved the table");
+                await workspace.evaluate(() =>
+                {
+                    window.knTestStopped = false;
+                });
+                await workspace.waitForFunction(() => document.getElementById("current-process-notice").textContent === "Target running");
+                assert.equal(await workspace.locator("#prompt").isDisabled(), true);
+            }
+            finally
+            {
+                await local.close();
+            }
+        });
         await check("T-UI-BROWSER Current process polling preserves text selection and keyboard copy", async () =>
         {
             const selected = await page.locator("#current-process-eprocess").evaluate(node =>

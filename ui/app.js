@@ -7241,9 +7241,15 @@
   function updateCurrentProcess()
   {
     var status = state.sessionStatus;
-    uiElement("context-state").textContent = !state.statusKnown ? "Context unconfirmed" : !state.connected ? "Disconnected" :
+    var stateLabel = !state.statusKnown ? "Context unconfirmed" : !state.connected ? "Disconnected" :
       (status.sessionKind || (status.kernelMode ? "Kernel" : "User") + (status.dumpFile ? " dump" : " live")) +
       " / " + (status.stopped ? "Stopped" : "Running");
+    var contextState = uiElement("context-state");
+    if (contextState.textContent !== stateLabel)
+    {
+      contextState.textContent = stateLabel;
+    }
+    uiElement("btn-refresh-status").setAttribute("aria-busy", String(state.statusPending === true));
     var process = status.currentProcess || {};
     var expected = (state.target.contextIdentity || {}).implicitProcess;
     var valid = state.connected && status.stopped && status.kernelMode &&
@@ -7275,13 +7281,18 @@
         closeCopyMenu();
       }
     });
-    uiElement("current-process-notice").textContent = !state.ready ? "Connecting..." :
+    var message = !state.ready ? "Connecting..." :
       state.statusBusy ? (state.connected ? "Debugger busy; showing last checked process" : "Debugger busy; waiting for target status") :
       !state.statusKnown ? "Waiting for target status" :
       !state.connected ? "No target" : !status.stopped ? "Target running" :
       !status.kernelMode ? "Requires an x64 kernel target" :
       process.reason || (!valid ? "Current process unavailable" :
-        state.busy || state.statusPending ? "Last checked; refreshing when idle" : "");
+        state.busy ? "Last checked; refreshing when idle" : "");
+    var notice = uiElement("current-process-notice");
+    if (notice.textContent !== message)
+    {
+      notice.textContent = message;
+    }
   }
 
   ["image", "pid", "eprocess"].forEach(function (field)

@@ -13,7 +13,7 @@ from privacy import check_repository, git_names, load_private_terms, private_pat
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-VERSION = "0.2.0-preview.8"
+VERSION = "0.2.0-preview.9"
 
 
 def digest(data):

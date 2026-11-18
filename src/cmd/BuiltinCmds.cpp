@@ -532,7 +532,7 @@ void BuiltinCommand(Ctx &ctx)
     }
     else if (name == L"version")
     {
-        ctx.Out.AddLine(L"KNDbgX 0.2.0-preview.8 (DbgEng ABI)");
+        ctx.Out.AddLine(L"KNDbgX 0.2.0-preview.9 (DbgEng ABI)");
     }
     else if (name == L"features")
     {
