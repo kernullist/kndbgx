@@ -13,6 +13,7 @@ from privacy import check_repository, git_names, load_private_terms, private_pat
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+VERSION = "0.2.0-preview.8"
 
 
 def digest(data):
@@ -270,7 +271,7 @@ def package(configuration, output, private_patterns=()):
         name = "profiles/" + profile
         files[name] = read_public_file(ROOT, name)
     sources = source_manifest(private_patterns)
-    manifest = {"schema": "kndbgx.release.v1", "version": "0.2.0-preview.7", "configuration": configuration,
+    manifest = {"schema": "kndbgx.release.v1", "version": VERSION, "configuration": configuration,
                 "baseCommit": run("git", "rev-parse", "HEAD"), "workingTreeDirty": bool(run("git", "status", "--porcelain")),
                 "hardening": info, "commandCount": len(contract), "files": {name: digest(content) for name, content in sorted(files.items())},
                 "sourceFiles": sources,
@@ -279,7 +280,7 @@ def package(configuration, output, private_patterns=()):
                 "claims": "Preview; kernel collectors and Data Model remain Experimental; see SUPPORT.md"}
     files["release-manifest.json"] = (json.dumps(manifest, indent=2) + "\n").encode()
     sbom = {"bomFormat": "CycloneDX", "specVersion": "1.6", "version": 1,
-            "metadata": {"component": {"type": "application", "name": "KNDbgX", "version": "0.2.0-preview.7", "bom-ref": "kndbgx",
+            "metadata": {"component": {"type": "application", "name": "KNDbgX", "version": VERSION, "bom-ref": "kndbgx",
                                        "licenses": [{"license": {"id": "MIT"}}], "copyright": "Copyright (c) 2026 kernullist"}},
             "components": [{"type": "library", "name": lock["package"], "version": lock["version"], "bom-ref": "webview2-sdk",
                             "purl": f"pkg:nuget/{lock['package']}@{lock['version']}", "hashes": [{"alg": "SHA-256", "content": lock["packageSha256"]}],
@@ -328,7 +329,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("docs", "check-docs", "inspect", "package", "check-deps", "check-artifacts", "check-rebuilds", "check-privacy"))
     parser.add_argument("--configuration", default="Release", choices=("Debug", "Release"))
-    parser.add_argument("--output", type=pathlib.Path, default=ROOT / "artifacts/KNDbgX-0.2.0-preview.7-Windows-x64.zip")
+    parser.add_argument("--output", type=pathlib.Path, default=ROOT / "artifacts" / f"KNDbgX-{VERSION}-Windows-x64.zip")
     parser.add_argument("--first-directory", type=pathlib.Path)
     parser.add_argument("--private-terms-file", type=pathlib.Path,
                         help="Local-only terms for check-privacy or package; defaults to .publication-terms.local.json when present")

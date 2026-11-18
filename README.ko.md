@@ -25,7 +25,7 @@ WinDbg를 대상에 연결하고 메모리를 조사하기 전에 대상을 중�
 
 아래 이미지는 2026-11-15에 **0.2.0-preview.7**을 WinDbg에 로드하고 Windows 11 x64 VMware 게스트에 연결한 실제 작업 화면에서 촬영했다. 호스트 전용 관찰과 인위적으로 만든 파일·디코더 예제는 별도로 표시했다. 수와 주소는 해당 캡처의 값이므로 자신의 대상에서 관찰한 값으로 바꿔 사용한다. 커널 수집기와 Data Model 연동은 실험적 기능이다. [지원 환경과 제약](docs/SUPPORT.md)을 참고한다.
 
-아래 드라이버 이력·ALPC·타이머·SSDT·WFP 결과는 2026-11-18에 `main` 소스를 빌드해 정지된 Windows 11 x64 VM(NT 28000.2952)에서 검증했다. [소스 빌드](#소스-빌드) · [WinDbg 검증 기록](docs/VALIDATION.md#paged-command-tables-and-collector-setup)
+아래에 설명한 드라이버 이력·ALPC·타이머·SSDT·WFP 변경 사항은 `0.2.0-preview.8`에 포함돼 있다. 수집 결과는 2026-11-18에 `main` 소스를 빌드해 정지된 Windows 11 x64 VM(NT 28000.2952)에서 확인했다. [소스 빌드](#소스-빌드) · [WinDbg 검증 기록](docs/VALIDATION.md#paged-command-tables-and-collector-setup)
 
 ![명령 팔레트에서 콜백 관련 작업 검색](docs/screenshots/command-palette.png)
 

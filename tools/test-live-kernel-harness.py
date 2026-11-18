@@ -259,7 +259,7 @@ class HarnessTests(unittest.TestCase):
 
     def test_detached_command_requires_expected_text(self):
         session = Mock()
-        session.run.return_value = "KNDbgX 0.2.0-preview.7"
+        session.run.return_value = "KNDbgX 0.2.0-preview.8"
         self.harness.sync_check(session, "version", "version", must=("KNDbgX 0.2.0",), require_result=False)
         self.assertTrue(self.harness.checks["version"]["ok"])
         session.run.return_value = "unrelated output"
