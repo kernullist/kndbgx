@@ -242,16 +242,30 @@ template <typename Check> void RunPiddbRegression(Check check)
             code.Put(base + window.SymbolRva + window.Offset + i / 2, std::stoul(bytes.substr(i, 2), nullptr, 16), 1);
         }
     }
+    const auto lookup = [&](const wchar_t *symbol) -> std::optional<uint64_t>
+    {
+        const auto found = symbols.find(symbol);
+        return found == symbols.end() ? std::nullopt : std::optional<uint64_t>(found->second);
+    };
     const auto verify = [&](const ModuleIdentity &target)
     {
-        return std::wstring_view(VerifyKernelProfile(code, target, KernelLayoutFamily::Piddb,
-            [&](const wchar_t *symbol) -> std::optional<uint64_t>
-            {
-                const auto found = symbols.find(symbol);
-                return found == symbols.end() ? std::nullopt : std::optional<uint64_t>(found->second);
-            }));
+        return std::wstring_view(VerifyKernelProfile(code, target, KernelLayoutFamily::Piddb, lookup));
     };
     check(verify(identity) == L"Verified", "piddb.exact-image-symbols-and-code-required");
+    for (const auto state : {Status::Cancelled, Status::StaleContext, Status::InternalFault})
+    {
+        WalkBudget setup;
+        TerminalReadFixture fault(code, state, 2);
+        CollectionReadGuard guarded(fault, setup);
+        const auto reason = VerifyKernelProfile(guarded, identity, KernelLayoutFamily::Piddb, lookup);
+        check(std::wstring_view(reason) == L"KernelProfileBytesUnavailable" && !setup.CanRead() &&
+                  setup.Report.State == state && fault.Requests == 2, "profile.interrupted-code-window-retains-terminal-status");
+    }
+    WalkBudget coldSetup;
+    coldSetup.Deadline = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+    CollectionReadGuard guarded(code, coldSetup);
+    check(std::wstring_view(VerifyKernelProfile(guarded, identity, KernelLayoutFamily::Piddb, lookup)) == L"Verified" &&
+              !coldSetup.Stopped, "profile.cold-symbol-setup-does-not-consume-traversal-time");
     auto different = identity;
     different.Timestamp ^= 1;
     const auto reads = code.Reads;

@@ -18,7 +18,7 @@ static_assert(sizeof(FWP_VALUE0) == 16 && sizeof(FWP_BYTE_BLOB) == 16 && sizeof(
 
 inline bool WfpTerminalRead(Status state)
 {
-    return state == Status::Cancelled || state == Status::StaleContext || state == Status::InternalFault;
+    return TerminalReadStatus(state);
 }
 
 inline uint64_t WfpInteger(std::span<const unsigned char> bytes, size_t offset, size_t width)

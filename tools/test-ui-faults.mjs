@@ -3465,6 +3465,66 @@ await check("T-UI-COLUMNS metadata cannot consume the field budget before comman
     assert.ok(app.nodes.get("column-status").textContent.includes("Field limit"));
 });
 
+await check("T-UI-COLUMNS late WFP record kinds retain payload columns after metadata fills the first page", async () =>
+{
+    for (const manual of [false, true])
+    {
+        const app = harness();
+        await app.boot();
+        const metadata = Object.fromEntries(Array.from({ length: 100 }, (_, i) => ["detail" + i, i]));
+        const callout = { kind: "callouts", calloutId: "7", registered: true, name: "Example callout", metadata };
+        const rows = Array(128).fill(callout);
+        const total = 200;
+        await openTable(app, "!wfp", rows, { total });
+        assert.ok(!headers(app).includes("Condition Summary"), "Do not show fields before observing them");
+        if (manual)
+        {
+            app.nodes.get("btn-columns-all").fire("click");
+        }
+        const initial = headers(app);
+        const view = app.nodes.get("result-view");
+        view.scrollTop = 160 * 28;
+        view.fire("scroll");
+        const offset = Number(app.latest("resultPage").params.offset);
+        const filter = { kind: "filters", name: "Example filter", filterId: "123", actionName: "Permit", conditionSummary: "Protocol = 6" };
+        const layer = { kind: "layers", name: "Example layer", fieldCount: "4" };
+        await app.reply("resultPage", { ok: true, result: {
+            resultId: "!wfp", collection: "rows", offset: String(offset), next: String(total), complete: true,
+            rows: [filter, layer, ...Array(total - offset - 2).fill(filter)]
+        } });
+        if (manual)
+        {
+            assert.deepEqual(headers(app), initial, "A late page changed a manual selection");
+            const choice = app.nodes.get("column-list").children.find(item => item.children[1].textContent === "Action Name");
+            assert.ok(choice, "Later WFP fields must remain available in the chooser");
+            choice.children[0].checked = true;
+            choice.children[0].fire("change");
+        }
+        else
+        {
+            assert.equal(tableCell(app, 0, "Condition Summary"), "Protocol = 6");
+            assert.equal(tableCell(app, 1, "Field Count"), "4");
+        }
+        assert.equal(tableCell(app, 0, "Action Name"), "Permit");
+        assert.ok(app.nodes.get("column-list").children.length <= 96);
+        app.nodes.get("result-rows").children[0].fire("click");
+        assert.deepEqual(JSON.parse(app.nodes.get("result-detail").textContent), filter);
+    }
+});
+
+await check("T-UI-WFP unresolved display strings do not report a stopped runtime inventory", async () =>
+{
+    const app = harness();
+    await app.boot();
+    await openTable(app, "!wfp", [{ kind: "providers", name: "@example.dll,-12" }], { metadata: {
+        status: "Partial", coverage: { complete: false, visitedEntries: "1", readEntries: "1", stopReason: "BfeResourceUnavailable" }
+    } });
+    const notice = app.nodes.get("result-notice-summary").textContent;
+    assert.match(notice, /names or descriptions/i);
+    assert.doesNotMatch(notice, /collection stopped/i);
+    assert.equal(tableCell(app, 0, "Name"), "@example.dll,-12");
+});
+
 await check("T-UI-PAGE premature completion and excess rows cannot silently change retained counts", async () =>
 {
     for (const [total, rows, complete, reportedTotal] of [

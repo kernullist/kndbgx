@@ -8,14 +8,18 @@
 
 namespace knengine
 {
-ObjectDirectoryWalker::ObjectDirectoryWalker(DbgSession &session)
-    : session_(session), layout_(session), rootDirectory_(0), initialized_(false)
+ObjectDirectoryWalker::ObjectDirectoryWalker(DbgSession &session) : ObjectDirectoryWalker(session, session)
+{
+}
+
+ObjectDirectoryWalker::ObjectDirectoryWalker(DbgSession &session, kncore::TargetReader &reader)
+    : session_(session), reader_(reader), layout_(session, reader), rootDirectory_(0), initialized_(false)
 {
 }
 
 bool ObjectDirectoryWalker::ReadU64(ULONG64 address, ULONG64 *value)
 {
-    return session_.ReadExact(kncore::AddressSpace::Virtual, address, value);
+    return reader_.ReadExact(kncore::AddressSpace::Virtual, address, value);
 }
 
 bool ObjectDirectoryWalker::Initialize()
@@ -46,7 +50,7 @@ bool ObjectDirectoryWalker::Initialize()
 
 bool ObjectDirectoryWalker::ReadUnicode(ULONG64 address, std::wstring *text)
 {
-    return kncore::ReadUnicodeValue(session_, address, layout_.Field(L"nt", L"_UNICODE_STRING", L"Length"),
+    return kncore::ReadUnicodeValue(reader_, address, layout_.Field(L"nt", L"_UNICODE_STRING", L"Length"),
                                     layout_.Field(L"nt", L"_UNICODE_STRING", L"MaximumLength"),
                                     layout_.Field(L"nt", L"_UNICODE_STRING", L"Buffer"), architecture_, text);
 }
@@ -69,7 +73,7 @@ bool ObjectDirectoryWalker::ReadName(ULONG64 body, ULONG64 parent, std::wstring 
     const auto legacy = layout_.Field(L"nt", L"_OBJECT_HEADER", L"NameInfoOffset");
     if (legacy && legacy->Size == 1)
     {
-        if (!session_.ReadExact(kncore::AddressSpace::Virtual, header + legacy->Offset, &offset))
+        if (!reader_.ReadExact(kncore::AddressSpace::Virtual, header + legacy->Offset, &offset))
         {
             return false;
         }
@@ -83,9 +87,9 @@ bool ObjectDirectoryWalker::ReadName(ULONG64 body, ULONG64 parent, std::wstring 
         // the bounded read below keeps untyped public storage (Insider PDBs
         // ship no array shape) as safe as the shaped form. The decoded
         // offset must still hold a plausible name-info extent above.
-        if (!info || info->Size != 1 || !session_.ReadExact(kncore::AddressSpace::Virtual, header + info->Offset, &mask) ||
+        if (!info || info->Size != 1 || !reader_.ReadExact(kncore::AddressSpace::Virtual, header + info->Offset, &mask) ||
             (mask & 2) == 0 || !table || !kncore::ValidRange(*table, 4) ||
-            !session_.ReadExact(kncore::AddressSpace::Virtual, *table + (mask & 3), &offset))
+            !reader_.ReadExact(kncore::AddressSpace::Virtual, *table + (mask & 3), &offset))
         {
             return false;
         }
@@ -129,7 +133,7 @@ bool ObjectDirectoryWalker::Entries(ULONG64 directory, kncore::WalkBudget &budge
         // Begin once after root/type/layout discovery and the first KD read.
         // Child directories and later buckets share the same deadline.
         budget.StartTraversal();
-        kncore::WalkChain(session_, first, 0, next->Offset, architecture_, budget,
+        kncore::WalkChain(reader_, first, 0, next->Offset, architecture_, budget,
                           [&](uint64_t entry)
                           {
                               ULONG64 body = 0;
@@ -274,7 +278,7 @@ bool ObjectDirectoryWalker::ResolveTypeIndex(const wchar_t *typeName, unsigned *
     {
         // Untyped public storage (Insider PDBs): bound the search by the
         // table's own structure. Slot entries remain self-verified below.
-        slots = StructurallyBoundedTypeSlotCount(session_, *table);
+        slots = StructurallyBoundedTypeSlotCount(reader_, *table);
     }
     if (!name || !typeIndex || typeIndex->Size != 1 || !table || slots == 0)
     {
@@ -286,7 +290,7 @@ bool ObjectDirectoryWalker::ResolveTypeIndex(const wchar_t *typeName, unsigned *
         std::wstring text;
         const bool readable = kncore::ValidRange(object,
                                                  std::max<uint64_t>(typeIndex->Offset + 1, static_cast<uint64_t>(name->Offset) + name->Size)) &&
-                               session_.ReadExact(kncore::AddressSpace::Virtual, object + typeIndex->Offset, &indexByte) &&
+                               reader_.ReadExact(kncore::AddressSpace::Virtual, object + typeIndex->Offset, &indexByte) &&
                                ReadUnicode(object + name->Offset, &text);
         if (!readable)
         {
@@ -312,13 +316,13 @@ bool ObjectDirectoryWalker::ResolveTypeIndex(const wchar_t *typeName, unsigned *
         const auto reference = layout_.Address(L"nt", typeSymbol);
         if (reference)
         {
-            found = kncore::FindReferencedPointerSlot(session_, *reference, *table, slots, typeIndex, architecture_, matches, cancelled);
+            found = kncore::FindReferencedPointerSlot(reader_, *reference, *table, slots, typeIndex, architecture_, matches, cancelled);
         }
     }
     if (!found && !cancelled())
     {
         // Missing or contradictory hints retain the established table search.
-        found = kncore::FindSparsePointerSlot(session_, *table, slots, architecture_, matches, cancelled);
+        found = kncore::FindSparsePointerSlot(reader_, *table, slots, architecture_, matches, cancelled);
     }
     if (found)
     {
@@ -349,8 +353,8 @@ unsigned ObjectDirectoryWalker::DecodeTypeIndex(ULONG64 header)
     unsigned char cookie = 0;
     const auto cookieAddress = layout_.Address(L"nt", L"ObHeaderCookie");
     if (!typeIndex || typeIndex->Size != 1 || !kncore::ValidRange(header, static_cast<uint64_t>(typeIndex->Offset) + 1) ||
-        !session_.ReadExact(kncore::AddressSpace::Virtual, header + typeIndex->Offset, &raw) || !cookieAddress ||
-        !session_.ReadExact(kncore::AddressSpace::Virtual, *cookieAddress, &cookie))
+        !reader_.ReadExact(kncore::AddressSpace::Virtual, header + typeIndex->Offset, &raw) || !cookieAddress ||
+        !reader_.ReadExact(kncore::AddressSpace::Virtual, *cookieAddress, &cookie))
     {
         return UINT32_MAX;
     }
@@ -401,7 +405,7 @@ bool ObjectDirectoryWalker::VisitNamespace(const NamespaceVisitor &visitor, unsi
             break;
         }
         const auto fields = ResolveNamespaceLayout(layout_);
-        kncore::NamespaceReadMeter measured(session_);
+        kncore::NamespaceReadMeter measured(reader_);
         kncore::WalkNamedNamespace(measured, architecture_, fields, rootDirectory_, *cookie, *offsets, directoryType,
                                   selectedType, static_cast<unsigned>(maxDepth), budget, visitor);
         budget.Report.Analysis.Set(L"namespaceTargetReads", knjson::Value(std::to_wstring(measured.Requests)));

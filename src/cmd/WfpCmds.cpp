@@ -56,7 +56,8 @@ void CollectBfeMetadata(Ctx &ctx, const kncore::TargetArchitecture &architecture
 {
     using namespace kncore;
     knengine::ContextGuard restore(ctx.Session);
-    knengine::LayoutResolver layout(ctx.Session);
+    CollectionReadGuard setup(ctx.Session, budget);
+    knengine::LayoutResolver layout(ctx.Session, setup);
     uint64_t process = 0;
     uint64_t module = 0;
     uint64_t pid = 0;
@@ -111,7 +112,11 @@ void CollectBfeMetadata(Ctx &ctx, const kncore::TargetArchitecture &architecture
                 break;
             }
             ++candidates;
-            const auto peb = ReadField(ctx.Session, candidate.Eprocess, pebField);
+            const auto peb = ReadField(setup, candidate.Eprocess, pebField);
+            if (budget.Stopped)
+            {
+                break;
+            }
             if (!peb || *peb == 0 || ctx.Session.SystemObjects()->SetImplicitProcessDataOffset(candidate.Eprocess) != S_OK)
             {
                 discoveryComplete = false;
@@ -275,7 +280,8 @@ void ScanTargetWfp(Ctx &ctx)
         return;
     }
     CollectorWalk walk;
-    knengine::LayoutResolver layout(ctx.Session);
+    CollectionReadGuard setup(ctx.Session, budget);
+    knengine::LayoutResolver layout(ctx.Session, setup);
     WfpReader read(ctx.Session, architecture, budget);
     uint64_t globalSymbol = 0;
     uint64_t keyRoot = 0;
@@ -284,13 +290,16 @@ void ScanTargetWfp(Ctx &ctx)
         for (const auto module : {L"NETIO", L"fwpkclnt", L"nt"})
         {
             const auto identity = layout.Identity(module);
-            const auto reason = identity ? VerifyWfpProfile(ctx.Session, *identity, module, [&](const wchar_t *symbol)
+            const auto reason = identity ? VerifyWfpProfile(setup, *identity, module, [&](const wchar_t *symbol)
             {
                 return layout.Address(module, symbol);
             }) : L"WfpModuleIdentityUnavailable";
             if (std::wstring_view(reason) != L"Verified")
             {
-                budget.Stop(Status::Unavailable, reason);
+                if (!budget.Stopped)
+                {
+                    budget.Stop(Status::Unavailable, reason);
+                }
                 ctx.Out.AddLine(L"[wfp.profile] " + std::wstring(module) + L": " + reason + L"; " + layout.Diagnostic());
                 break;
             }

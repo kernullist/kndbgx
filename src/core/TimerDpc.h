@@ -12,6 +12,26 @@ struct TimerDpcKeys
     bool operator==(const TimerDpcKeys &) const = default;
 };
 
+inline std::optional<TimerDpcKeys> ReadTimerDpcKeys(TargetReader &source, uint64_t never, uint64_t always, WalkBudget &budget)
+{
+    CollectionReadGuard reader(source, budget);
+    TimerDpcKeys keys;
+    if (reader.ReadExact(AddressSpace::Virtual, never, &keys.Never) && reader.ReadExact(AddressSpace::Virtual, always, &keys.Always))
+    {
+        return keys;
+    }
+    return {};
+}
+
+inline void RecheckTimerDpcKeys(TargetReader &reader, uint64_t never, uint64_t always, const TimerDpcKeys &expected, WalkBudget &budget)
+{
+    const auto observed = ReadTimerDpcKeys(reader, never, always, budget);
+    if (!budget.Stopped && observed != expected)
+    {
+        budget.Stop(Status::StaleContext, observed ? L"TimerDpcKeysChanged" : L"TimerDpcKeysUnreadable");
+    }
+}
+
 inline uint64_t DecodeTimerDpc(uint64_t raw, uint64_t timer, const TimerDpcKeys &keys)
 {
     const uint64_t rotated = std::rotl(raw ^ keys.Never, static_cast<int>(keys.Never & 63)) ^ timer;

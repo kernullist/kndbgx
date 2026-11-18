@@ -7,7 +7,9 @@ namespace kncmd
 void ScanWin32kPolicy(Ctx &ctx, const std::wstring &selector)
 {
     CollectorWalk collection;
-    knengine::LayoutResolver layout(ctx.Session);
+    kncore::WalkBudget budget;
+    kncore::CollectionReadGuard setup(ctx.Session, budget);
+    knengine::LayoutResolver layout(ctx.Session, setup);
     std::vector<ProcRow> processes;
     CmdText inventory;
     if (selector.empty())
@@ -27,7 +29,6 @@ void ScanWin32kPolicy(Ctx &ctx, const std::wstring &selector)
         }
         processes.push_back(process);
     }
-    kncore::WalkBudget budget;
     kncore::TargetArchitecture architecture;
     if (!BeginCollection(ctx, budget, architecture, L"TargetMemory:Win32kProcessFilterPolicy"))
     {
@@ -59,16 +60,21 @@ void ScanWin32kPolicy(Ctx &ctx, const std::wstring &selector)
     bool verified = nt && image && base && fields && createdMatches && descriptorAddress &&
         layout.VerifyProfile(kncore::KernelLayoutFamily::FilteredService) &&
         layout.VerifyProfile(kncore::KernelLayoutFamily::Win32kDispatch) &&
-        kncore::VerifyWin32kPolicyProfile(ctx.Session, *nt, *image, *base,
+        kncore::VerifyWin32kPolicyProfile(setup, *nt, *image, *base,
             [&](const wchar_t *module, const wchar_t *symbol)
             {
                 return layout.Address(module, symbol);
             }, hash) &&
-        ctx.Session.ReadExact(kncore::AddressSpace::Virtual, image->Base + 0xa5074, &limit) && limit == 1497;
+        setup.ReadExact(kncore::AddressSpace::Virtual, image->Base + 0xa5074, &limit) && limit == 1497;
     if (verified)
     {
-        descriptor = kncore::ReadServiceDescriptor(ctx.Session, *descriptorAddress + 32);
+        descriptor = kncore::ReadServiceDescriptor(setup, *descriptorAddress + 32);
         verified = descriptor && kncore::ServiceDescriptorMatches(*descriptor, image->Base + 0xa3330, limit, image->Base + 0xa5078);
+    }
+    if (!budget.CanRead())
+    {
+        FinishCollection(ctx, budget);
+        return;
     }
     if (!verified)
     {

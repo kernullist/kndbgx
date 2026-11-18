@@ -227,7 +227,8 @@ void ScanUnloadedDrivers(Ctx &ctx)
     {
         return;
     }
-    knengine::LayoutResolver layout(ctx.Session);
+    kncore::CollectionReadGuard reader(ctx.Session, budget);
+    knengine::LayoutResolver layout(ctx.Session, reader);
     const auto symbol = SymbolAddress(ctx.Session, layout, L"nt", L"MmUnloadedDrivers");
     const auto arrayType = layout.Symbol(L"nt", L"MmUnloadedDrivers");
     auto name = layout.Field(L"nt", L"_UNLOADED_DRIVERS", L"Name");
@@ -250,8 +251,8 @@ void ScanUnloadedDrivers(Ctx &ctx)
              layout.VerifyProfile(kncore::KernelLayoutFamily::Unloaded))
     {
         const auto indexAddress = layout.Address(L"nt", L"MmLastUnloadedDriver");
-        nextIndex = indexAddress ? kncore::ReadField(ctx.Session, *indexAddress, kncore::KernelProfileField(0, 4)) : std::nullopt;
-        const auto pointer = kncore::ReadField(ctx.Session, *symbol, kncore::KernelProfileField(0, 8));
+        nextIndex = indexAddress ? kncore::ReadField(reader, *indexAddress, kncore::KernelProfileField(0, 4)) : std::nullopt;
+        const auto pointer = kncore::ReadField(reader, *symbol, kncore::KernelProfileField(0, 8));
         known = pointer && nextIndex && *nextIndex <= 50 && layout.CanProfileField(L"nt", L"_UNLOADED_DRIVERS", L"Name") &&
                 layout.CanProfileField(L"nt", L"_UNLOADED_DRIVERS", L"StartAddress") &&
                 layout.CanProfileField(L"nt", L"_UNLOADED_DRIVERS", L"EndAddress") &&
@@ -270,6 +271,11 @@ void ScanUnloadedDrivers(Ctx &ctx)
             }
         }
     }
+    if (!budget.CanRead())
+    {
+        FinishCollection(ctx, budget);
+        return;
+    }
     if (!known || count > 4096 || !name || !start || !end || !time || recordSize == 0 || recordSize > 4096 || !name->ValidFor(recordSize) ||
         !start->ValidFor(recordSize) || !end->ValidFor(recordSize) || !time->ValidFor(recordSize) ||
         (count != 0 && (!architecture.KernelPointer(table) || !kncore::ValidRange(table, uint64_t(count) * recordSize))))
@@ -284,18 +290,24 @@ void ScanUnloadedDrivers(Ctx &ctx)
     {
         budget.Report.Collected.Expected = count;
         const auto length = layout.Field(L"nt", L"_UNICODE_STRING", L"Length");
+        const auto maximum = layout.Field(L"nt", L"_UNICODE_STRING", L"MaximumLength");
+        const auto buffer = layout.Field(L"nt", L"_UNICODE_STRING", L"Buffer");
         for (uint32_t index = 0; index < count && CheckCollection(ctx, budget); ++index)
         {
             ++budget.Report.Collected.Visited;
             const uint64_t address = table + uint64_t(index) * recordSize;
-            const auto bytes = ctx.Session.Read(kncore::AddressSpace::Virtual, address, recordSize);
+            const auto bytes = reader.Read(kncore::AddressSpace::Virtual, address, recordSize);
+            if (budget.Stopped)
+            {
+                break;
+            }
             if (!kncore::ExactBytes(bytes, recordSize))
             {
                 ++budget.Report.Collected.Unreadable;
                 continue;
             }
             ++budget.Report.Collected.Read;
-            const auto nameLength = kncore::ReadField(ctx.Session, address + name->Offset, length);
+            const auto nameLength = kncore::ReadField(reader, address + name->Offset, length);
             if (nameLength == 0)
             {
                 ++budget.Report.Collected.Decoded;
@@ -307,10 +319,14 @@ void ScanUnloadedDrivers(Ctx &ctx)
             row.Set(L"record", knjson::Value(kncore::Hex(address)));
             row.Set(L"ringNextIndex", kncore::OptionalNumber(nextIndex));
             std::wstring text;
-            const bool named = ReadUnicodeString(ctx.Session, layout, address + name->Offset, &text);
-            const auto from = kncore::ReadField(ctx.Session, address, start);
-            const auto to = kncore::ReadField(ctx.Session, address, end);
-            const auto when = kncore::ReadField(ctx.Session, address, time);
+            const bool named = kncore::ReadUnicodeValue(reader, address + name->Offset, length, maximum, buffer, architecture, &text);
+            const auto from = kncore::ReadField(reader, address, start);
+            const auto to = kncore::ReadField(reader, address, end);
+            const auto when = kncore::ReadField(reader, address, time);
+            if (budget.Stopped)
+            {
+                break;
+            }
             row.Set(L"name", named ? knjson::Value(text) : knjson::Value());
             row.Set(L"StartAddress", kncore::OptionalNumber(from, true));
             row.Set(L"EndAddress", kncore::OptionalNumber(to, true));
@@ -343,7 +359,8 @@ void ScanPiddb(Ctx &ctx)
     {
         return;
     }
-    knengine::LayoutResolver layout(ctx.Session);
+    kncore::CollectionReadGuard reader(ctx.Session, budget);
+    knengine::LayoutResolver layout(ctx.Session, reader);
     const auto table = SymbolAddress(ctx.Session, layout, L"nt", L"PiDDBCacheTable");
     const auto compare = layout.Address(L"nt", L"PiCompareDDBCacheEntries");
     ULONG linksSize = 0;
@@ -365,6 +382,11 @@ void ScanPiddb(Ctx &ctx)
         field(L"_UNICODE_STRING", L"Length", 0, 2, FieldKind::Unsigned) &&
         field(L"_UNICODE_STRING", L"MaximumLength", 2, 2, FieldKind::Unsigned) &&
         field(L"_UNICODE_STRING", L"Buffer", 8, 8, FieldKind::Pointer);
+    if (!budget.CanRead())
+    {
+        FinishCollection(ctx, budget);
+        return;
+    }
     if (!verified)
     {
         UnknownScope(ctx, budget, L"PiDDBPayload", L"No verified PiDDB entry layout for this kernel: " + layout.Diagnostic());
@@ -397,7 +419,8 @@ void ScanCiHash(Ctx &ctx)
     {
         return;
     }
-    knengine::LayoutResolver layout(ctx.Session);
+    kncore::CollectionReadGuard reader(ctx.Session, budget);
+    knengine::LayoutResolver layout(ctx.Session, reader);
     const auto root = SymbolAddress(ctx.Session, layout, L"ci", L"g_KernelHashBucketList");
     const auto type = layout.Symbol(L"ci", L"g_KernelHashBucketList");
     if (root && kncore::ProfilePointerStorageAllowed(type, layout.PublicOnlySymbol(L"ci", L"g_KernelHashBucketList"), 8) &&
@@ -410,7 +433,7 @@ void ScanCiHash(Ctx &ctx)
             ctx.Out.AddLine(budget.Report.Rows.Items()[i].Write());
         }
     }
-    else
+    else if (budget.CanRead())
     {
         auto row = knjson::Value::MakeObject();
         row.Set(L"kind", knjson::Value(L"CiHashRoot"));
@@ -435,6 +458,7 @@ void ScanMapper(Ctx &ctx)
         if (ctx.Session.Cancelled())
         {
             ctx.Out.Fail(kncore::Status::Cancelled, L"Mapper collection cancelled");
+            ctx.Out.Details.Collected.StopReason = L"Cancelled";
             break;
         }
         CmdText child;

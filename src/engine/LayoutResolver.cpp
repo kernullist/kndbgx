@@ -20,7 +20,12 @@ std::wstring ModuleKey(const wchar_t *name)
 }
 } // namespace
 
-LayoutResolver::LayoutResolver(DbgSession &session) : session_(session), cacheStamp_(Epochs().Stamp())
+LayoutResolver::LayoutResolver(DbgSession &session) : LayoutResolver(session, session)
+{
+}
+
+LayoutResolver::LayoutResolver(DbgSession &session, kncore::TargetReader &profileReader)
+    : session_(session), profileReader_(profileReader), cacheStamp_(Epochs().Stamp())
 {
 }
 
@@ -297,7 +302,7 @@ bool LayoutResolver::VerifyProfile(kncore::KernelLayoutFamily family)
     {
         return false;
     }
-    const auto reason = kncore::VerifyKernelProfile(session_, *identity, family,
+    const auto reason = kncore::VerifyKernelProfile(profileReader_, *identity, family,
                                                     [&](const wchar_t *name)
                                                     {
                                                         return Address(module, name);

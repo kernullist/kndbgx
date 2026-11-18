@@ -32,6 +32,7 @@ class ObjectDirectoryWalker
 {
   public:
     explicit ObjectDirectoryWalker(DbgSession &session);
+    ObjectDirectoryWalker(DbgSession &session, kncore::TargetReader &reader);
 
     // Resolves nt!ObpRootDirectoryObject lazily; false when unavailable.
     bool Initialize();
@@ -70,6 +71,7 @@ class ObjectDirectoryWalker
     void Finish(const kncore::WalkBudget &budget, std::wstring *error);
 
     DbgSession &session_;
+    kncore::TargetReader &reader_;
     LayoutResolver layout_;
     ULONG64 rootDirectory_;
     bool initialized_;

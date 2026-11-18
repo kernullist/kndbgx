@@ -175,5 +175,55 @@ template <typename Check> void RunQueueReadRegression(Check check)
     check(!ReadField(expired, object, FixtureField(0, 8)) && sparse.Reads == beforeExpired &&
         timeout.Report.State == Status::Partial && timeout.Report.Collected.StopReason == L"CollectionBudget",
         "timer.blocking-read-over-deadline-cannot-publish-or-renew-budget");
+
+    ByteFixture keyMemory;
+    const uint64_t never = base + 0x6000, always = base + 0x6100;
+    keyMemory.Put(never, keys.Never);
+    keyMemory.Put(always, keys.Always);
+    for (const auto state : {Status::Cancelled, Status::StaleContext, Status::InternalFault})
+    {
+        for (size_t at = 1; at <= 2; ++at)
+        {
+            WalkBudget initial;
+            TerminalReadFixture initialFault(keyMemory, state, at);
+            check(!ReadTimerDpcKeys(initialFault, never, always, initial) && initial.Stopped &&
+                      initial.Report.State == state && initialFault.Requests == at, "timer.initial-key-read-preserves-terminal-cause");
+            WalkBudget final;
+            TerminalReadFixture fault(keyMemory, state, at);
+            RecheckTimerDpcKeys(fault, never, always, keys, final);
+            check(final.Stopped && final.Report.State == state && final.Report.Collected.StopReason != L"TimerDpcKeysChanged" &&
+                      fault.Requests == at, "timer.final-key-read-preserves-terminal-cause");
+        }
+        WalkBudget stoppedWalk;
+        stoppedWalk.Stop(state, L"InterruptedQueueRead");
+        const auto before = keyMemory.Reads;
+        RecheckTimerDpcKeys(keyMemory, never, always, keys, stoppedWalk);
+        check(stoppedWalk.Report.State == state && stoppedWalk.Report.Collected.StopReason == L"InterruptedQueueRead" &&
+                  keyMemory.Reads == before, "timer.no-validation-reads-after-interrupted-queue");
+    }
+    WalkBudget lateKeys;
+    lateKeys.StartTraversal();
+    const auto beforeLate = keyMemory.Reads;
+    keyMemory.BeforeRead = [&]()
+    {
+        lateKeys.Deadline = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+    };
+    RecheckTimerDpcKeys(keyMemory, never, always, keys, lateKeys);
+    check(lateKeys.Stopped && lateKeys.Report.State == Status::Partial && keyMemory.Reads == beforeLate + 1,
+          "timer.final-key-read-cannot-outlive-shared-deadline");
+    keyMemory.BeforeRead = {};
+    WalkBudget stableKeys;
+    RecheckTimerDpcKeys(keyMemory, never, always, keys, stableKeys);
+    check(!stableKeys.Stopped, "timer.equal-observed-key-pair-verifies");
+    keyMemory.Put(always, keys.Always ^ 1);
+    WalkBudget changedKeys;
+    RecheckTimerDpcKeys(keyMemory, never, always, keys, changedKeys);
+    check(changedKeys.Report.State == Status::StaleContext && changedKeys.Report.Collected.StopReason == L"TimerDpcKeysChanged",
+          "timer.changed-observed-key-pair-invalidates-decoding");
+    keyMemory.Bytes.erase(always);
+    WalkBudget missingKeys;
+    RecheckTimerDpcKeys(keyMemory, never, always, keys, missingKeys);
+    check(missingKeys.Stopped && missingKeys.Report.State == Status::StaleContext &&
+              missingKeys.Report.Collected.StopReason == L"TimerDpcKeysUnreadable", "timer.missing-key-is-not-evidence-of-change");
 }
 } // namespace knself

@@ -18,6 +18,7 @@ class LayoutResolver
 {
   public:
     explicit LayoutResolver(DbgSession &session);
+    LayoutResolver(DbgSession &session, kncore::TargetReader &profileReader);
 
     // Base address of the nt module (cached).
     bool NtBase(ULONG64 *base);
@@ -60,6 +61,7 @@ class LayoutResolver
     std::optional<kncore::FieldInfo> ProfileSymbol(const wchar_t *module, const wchar_t *symbolName);
 
     DbgSession &session_;
+    kncore::TargetReader &profileReader_;
 
     std::map<std::wstring, ULONG64> moduleBaseCache_;
     kncore::SessionStamp cacheStamp_;

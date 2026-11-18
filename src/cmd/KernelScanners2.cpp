@@ -109,7 +109,8 @@ void CpuQueues(Ctx &ctx, bool timers)
         ctx.Out.Fail(kncore::Status::Unavailable, L"Processor inventory unavailable");
         return;
     }
-    knengine::LayoutResolver layout(ctx.Session);
+    kncore::CollectionReadGuard setup(ctx.Session, budget);
+    knengine::LayoutResolver layout(ctx.Session, setup);
     const auto owners = knengine::CollectOwnershipIndex(ctx.Session);
     const auto routine = layout.Field(L"nt", L"_KDPC", L"DeferredRoutine");
     const auto link = layout.Field(L"nt", timers ? L"_KTIMER" : L"_KDPC", timers ? L"TimerListEntry" : L"DpcListEntry");
@@ -124,16 +125,6 @@ void CpuQueues(Ctx &ctx, bool timers)
     const auto never = timers ? layout.Address(L"nt", L"KiWaitNever") : std::nullopt;
     const auto always = timers ? layout.Address(L"nt", L"KiWaitAlways") : std::nullopt;
     std::optional<kncore::TimerDpcKeys> timerKeys;
-    const auto readKeys = [&]() -> std::optional<kncore::TimerDpcKeys>
-    {
-        kncore::TimerDpcKeys keys;
-        if (never && always && ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *never, &keys.Never) &&
-            ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *always, &keys.Always))
-        {
-            return keys;
-        }
-        return {};
-    };
     if (timers && never && always && layout.VerifyProfile(kncore::KernelLayoutFamily::TimerDpc) &&
         kncore::PiddbFieldMatches(timerDpc, 0x30, 8, kncore::FieldKind::Pointer) &&
         kncore::PiddbFieldMatches(dpcType, 0, 1, kncore::FieldKind::Unsigned) &&
@@ -146,8 +137,13 @@ void CpuQueues(Ctx &ctx, bool timers)
         };
         if (scalar(L"KiWaitNever") && scalar(L"KiWaitAlways"))
         {
-            timerKeys = readKeys();
+            timerKeys = kncore::ReadTimerDpcKeys(ctx.Session, *never, *always, budget);
         }
+    }
+    if (!budget.CanRead())
+    {
+        FinishCollection(ctx, budget);
+        return;
     }
     const auto queue = layout.Field(L"nt", L"_KPRCB", timers ? L"TimerTable" : L"DpcData");
     const auto entries = timers ? layout.Field(L"nt", L"_KTIMER_TABLE", L"TimerEntries") : queue;
@@ -254,6 +250,23 @@ void CpuQueues(Ctx &ctx, bool timers)
                         function.reset();
                     }
                 }
+                std::optional<uint64_t> due, interval, signal, parameter, priority;
+                if (timers)
+                {
+                    due = kncore::ReadField(queueReader, object, dueTime);
+                    interval = kncore::ReadField(queueReader, object, period);
+                    signal = kncore::ReadField(queueReader, object, signalState);
+                }
+                if (dpc && *dpc != 0)
+                {
+                    parameter = kncore::ReadField(queueReader, *dpc, context);
+                    priority = kncore::ReadField(queueReader, *dpc, importance);
+                }
+                // RoutineObservation updates coverage. Count only rows we can publish.
+                if (!budget.CanRead())
+                {
+                    return kncore::VisitDecision::Failed;
+                }
                 auto row = kncore::RoutineObservation(budget.Report, architecture, owners, timers ? L"Timer.Dpc" : L"Dpc.DeferredRoutine",
                                                       object, function, timers ? kncore::RoutinePresence::Optional : kncore::RoutinePresence::Required);
                 row.Set(L"kind", knjson::Value(timers ? L"KernelTimer" : L"QueuedDpc"));
@@ -264,9 +277,6 @@ void CpuQueues(Ctx &ctx, bool timers)
                 row.Set(L"dpc", kncore::OptionalNumber(dpc, true));
                 if (timers)
                 {
-                    const auto due = kncore::ReadField(queueReader, object, dueTime);
-                    const auto interval = kncore::ReadField(queueReader, object, period);
-                    const auto signal = kncore::ReadField(queueReader, object, signalState);
                     row.Set(L"dueTimeRaw", kncore::OptionalNumber(due, true));
                     row.Set(L"periodMs", kncore::OptionalNumber(interval));
                     row.Set(L"signalState", kncore::OptionalNumber(signal));
@@ -277,8 +287,6 @@ void CpuQueues(Ctx &ctx, bool timers)
                 }
                 if (dpc && *dpc != 0)
                 {
-                    const auto parameter = kncore::ReadField(queueReader, *dpc, context);
-                    const auto priority = kncore::ReadField(queueReader, *dpc, importance);
                     row.Set(L"deferredContext", kncore::OptionalNumber(parameter, true));
                     row.Set(L"importance", kncore::OptionalNumber(priority));
                     if (!parameter || !priority)
@@ -291,10 +299,6 @@ void CpuQueues(Ctx &ctx, bool timers)
                     row.Set(L"decode", knjson::Value(!timerKeys ? L"Timer DPC profile or keys unavailable" :
                         !dpc ? L"Encoded DPC unavailable or invalid" : *dpc == 0 ? L"Verified encoded NULL DPC" : L"Verified encoded DPC"));
                     row.Set(L"decoderProfile", timerKeys ? knjson::Value(kncore::KernelSymbolProfile28000Id) : knjson::Value());
-                }
-                if (budget.Stopped)
-                {
-                    return kncore::VisitDecision::Failed;
                 }
                 EmitRow(ctx, budget, row);
                 return kncore::VisitDecision::Continue;
@@ -325,14 +329,9 @@ void CpuQueues(Ctx &ctx, bool timers)
         knjson::Value(L"Queues are transient; completed/active work outside these declared queues is not covered."));
     if (timers)
     {
-        const bool stableKeys = !timerKeys || readKeys() == timerKeys;
-        if (ctx.Session.Cancelled())
+        if (budget.CanRead() && timerKeys)
         {
-            budget.Stop(kncore::Status::Cancelled, L"Cancelled");
-        }
-        else if (!stableKeys)
-        {
-            budget.Stop(kncore::Status::StaleContext, L"TimerDpcKeysChanged");
+            kncore::RecheckTimerDpcKeys(ctx.Session, *never, *always, *timerKeys, budget);
         }
         budget.Report.Limitations.Push(knjson::Value(L"DueTime is the raw kernel timer value in 100-nanosecond units, not a UTC date. "
             L"Period is in milliseconds; zero denotes a one-shot timer. DPC decoding requires the exact reviewed NT image and code."));
@@ -369,14 +368,23 @@ void ScanAlpc(Ctx &ctx)
     kncore::ReadTelemetry discoveryReads, processReads, portReads;
     kncore::ReadTelemetryScope discoveryScope(discoveryReads);
     CollectorWalk collection;
-    knengine::ObjectDirectoryWalker walker(ctx.Session);
-    knengine::LayoutResolver layout(ctx.Session);
+    kncore::WalkBudget budget;
     kncore::TargetArchitecture architecture;
-    unsigned typeIndex = 0;
-    if (!KernelArchitecture(ctx.Session, &architecture) || !walker.Initialize() ||
-        !walker.ResolveTypeIndex(L"ALPC Port", &typeIndex, L"AlpcPortObjectType"))
+    if (!BeginCollection(ctx, budget, architecture, L"TargetMemory:AlpcpPortList"))
     {
-        ctx.Out.Fail(kncore::Status::Unavailable, L"ALPC object namespace/type unavailable");
+        return;
+    }
+    kncore::CollectionReadGuard setup(ctx.Session, budget);
+    knengine::ObjectDirectoryWalker walker(ctx.Session, setup);
+    knengine::LayoutResolver layout(ctx.Session, setup);
+    unsigned typeIndex = 0;
+    if (!walker.Initialize() || !walker.ResolveTypeIndex(L"ALPC Port", &typeIndex, L"AlpcPortObjectType"))
+    {
+        if (!budget.Stopped)
+        {
+            budget.Stop(kncore::Status::Unavailable, L"AlpcObjectTypeUnavailable");
+        }
+        FinishCollection(ctx, budget);
         return;
     }
     const auto ownerField = layout.Field(L"nt", L"_ALPC_PORT", L"OwnerProcess");
@@ -392,14 +400,15 @@ void ScanAlpc(Ctx &ctx)
         CollectProcesses(ctx.Session, layout, &processes, processReport);
     }
     const auto inventoryElapsed = std::chrono::steady_clock::now() - inventoryStart;
+    if (kncore::TerminalReadStatus(processReport.Details.State))
+    {
+        budget.Stop(processReport.Details.State, L"AlpcProcessInventoryStopped");
+        FinishCollection(ctx, budget);
+        return;
+    }
     if (layout.VerifyProfile(kncore::KernelLayoutFamily::AlpcPorts) &&
         layout.VerifyProfile(kncore::KernelLayoutFamily::ObjectTypes) && layout.VerifyProfile(kncore::KernelLayoutFamily::ObjectNames))
     {
-        kncore::WalkBudget budget;
-        if (!BeginCollection(ctx, budget, architecture, L"TargetMemory:AlpcpPortList"))
-        {
-            return;
-        }
         kncore::AlpcPortLayout fields;
         fields.Names = knengine::ResolveNamespaceLayout(layout);
         fields.Links = layout.Field(L"nt", L"_ALPC_PORT", L"PortListEntry");
@@ -422,10 +431,12 @@ void ScanAlpc(Ctx &ctx)
         unsigned directoryType = 0;
         if (!head || !rootAddress || !cookie || !offsets || !listStorage ||
             !walker.ResolveTypeIndex(L"Directory", &directoryType, L"ObpDirectoryObjectType") ||
-            !ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *rootAddress, &root))
+            !setup.ReadExact(kncore::AddressSpace::Virtual, *rootAddress, &root))
         {
-            budget.Stop(ctx.Session.Cancelled() ? kncore::Status::Cancelled : kncore::Status::Unavailable,
-                        ctx.Session.Cancelled() ? L"Cancelled" : L"AlpcPortSymbolsUnavailable");
+            if (budget.CanRead())
+            {
+                budget.Stop(kncore::Status::Unavailable, L"AlpcPortSymbolsUnavailable");
+            }
         }
         else
         {
@@ -474,6 +485,11 @@ void ScanAlpc(Ctx &ctx)
         FinishCollection(ctx, budget);
         return;
     }
+    if (!budget.CanRead())
+    {
+        FinishCollection(ctx, budget);
+        return;
+    }
     knjson::Value rows = knjson::Value::MakeArray();
     uint64_t unknown = 0;
     std::wstring error;
@@ -491,11 +507,15 @@ void ScanAlpc(Ctx &ctx)
             row.Set(L"nameState", knjson::Value(path.empty() ? L"Unknown" : L"Named"));
             row.Set(L"source", knjson::Value(L"ObjectNamespace"));
             row.Set(L"depth", knjson::Value(std::to_wstring(depth)));
-            const auto owner = kncore::ReadField(ctx.Session, body, ownerField);
+            const auto owner = kncore::ReadField(setup, body, ownerField);
             const auto connection =
-                connectionField ? kncore::ReadField(ctx.Session, body, connectionField)
-                : allowIndirect ? kncore::ReadIndirectKernelPointer(ctx.Session, architecture, body, communicationField, indirectConnection)
+                connectionField ? kncore::ReadField(setup, body, connectionField)
+                : allowIndirect ? kncore::ReadIndirectKernelPointer(setup, architecture, body, communicationField, indirectConnection)
                                 : std::nullopt;
+            if (!budget.CanRead())
+            {
+                return false;
+            }
             row.Set(L"ownerProcess", kncore::OptionalNumber(owner, true));
             row.Set(L"connectionPort", kncore::OptionalNumber(connection, true));
             knjson::Value process;
@@ -530,6 +550,16 @@ void ScanAlpc(Ctx &ctx)
     ctx.Out.Details.CommandId = command;
     ctx.Out.Details.Rows = rows;
     ctx.Out.Details.Collected.Unknown += unknown;
+    if (budget.Stopped || kncore::TerminalReadStatus(ctx.Out.Details.State))
+    {
+        if (budget.Stopped)
+        {
+            ctx.Out.Details.State = budget.Report.State;
+            ctx.Out.Details.Collected.StopReason = budget.Report.Collected.StopReason;
+        }
+        ctx.Out.Details.Collected.Complete = false;
+        return;
+    }
     ++ctx.Out.Details.Collected.Unknown;
     auto gap = knjson::Value::MakeObject();
     gap.Set(L"kind", knjson::Value(L"CoverageGap"));

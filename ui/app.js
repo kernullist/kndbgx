@@ -1091,6 +1091,7 @@
     var changed = false;
     var wasLimited = layout.limited;
     var command = firstToken(state.resultMeta.commandId || state.resultCommand).replace(/^!/, "").toLowerCase();
+    var reserved = new Set();
     var recordWidths = {
       cihash: { name: 520, hash: 320, secondaryHash: 320 },
       mapper: { name: 480, hash: 320 },
@@ -1107,7 +1108,7 @@
       {
         if (!layout.keys[key])
         {
-          if (layout.columns.length >= 96)
+          if (layout.columns.length >= 96 || (!reserved.has(key) && layout.columns.length + reserved.size >= 96))
           {
             layout.limited = true;
             return;
@@ -1136,6 +1137,7 @@
           column.defaultWidth = column.width;
           layout.keys[key] = column;
           layout.columns.push(column);
+          reserved.delete(key);
           changed = true;
         }
       }
@@ -1167,6 +1169,31 @@
     });
     // Add command fields before metadata uses up the column limit.
     var priority = columnPriority();
+    if (state.resultCollection === "rows" && state.rowCount > rows.length)
+    {
+      // A later page can introduce a different record kind. Reserve its payload
+      // paths without adding empty columns or evicting the user's choices.
+      var profiles = tableProfiles.filter(function (item)
+      {
+        return item.commands.split(" ").indexOf(command) >= 0;
+      });
+      if (profiles.length)
+      {
+        var fields = priority.concat(["kind", "reason", "scope"]);
+        profiles.forEach(function (item)
+        {
+          fields = fields.concat(item.fields.split(" "));
+        });
+        fields.forEach(function (field)
+        {
+          var key = JSON.stringify(field.split("."));
+          if (field && !layout.keys[key])
+          {
+            reserved.add(key);
+          }
+        });
+      }
+    }
     rows.forEach(function (row)
     {
       priority.forEach(function (field)
@@ -3153,6 +3180,7 @@
       FrameBudget: "The requested frame limit was reached. Increase the frame count to inspect more of the stack.",
       RegisterUnavailable: "Some registers are unavailable in this debugger context. Unknown values were not read as zero.",
       MemoryReadIncomplete: "Part of the requested memory could not be read.",
+      BfeResourceUnavailable: "Some target names or descriptions could not be resolved. Unresolved strings retain their indirect resource references.",
       InstructionBytesUnavailable: "Instruction bytes or the decoder were unavailable. No unknown instruction is reported as decoded.",
       OutputBudgetExceeded: "Collection stopped at the output limit. Narrow the command's scope; Export contains only the retained result.",
       ResultRetentionBudget: "The result exceeded the storage limit. Run a smaller query.",

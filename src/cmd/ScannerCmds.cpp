@@ -150,7 +150,8 @@ void ScanSsdt(Ctx &ctx)
     {
         return;
     }
-    knengine::LayoutResolver layout(ctx.Session);
+    kncore::CollectionReadGuard setup(ctx.Session, budget);
+    knengine::LayoutResolver layout(ctx.Session, setup);
     const auto table = SymbolAddress(ctx.Session, layout, L"nt", L"KiServiceTable");
     const auto limitAddress = SymbolAddress(ctx.Session, layout, L"nt", L"KiServiceLimit");
     const auto tableType = layout.Symbol(L"nt", L"KiServiceTable");
@@ -182,7 +183,7 @@ void ScanSsdt(Ctx &ctx)
     }
     uint32_t limit = 0;
     const bool nativeReady = expected && table && limitAddress && architecture.KernelPointer(*table) &&
-        ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *limitAddress, &limit) && limit == *expected &&
+        setup.ReadExact(kncore::AddressSpace::Virtual, *limitAddress, &limit) && limit == *expected &&
         kncore::ValidRange(*table, *expected * 4);
     const auto shadowAddress = layout.Address(L"nt", L"KeServiceDescriptorTableShadow");
     const auto guiTable = layout.Address(L"win32k", L"W32pServiceTable");
@@ -202,10 +203,10 @@ void ScanSsdt(Ctx &ctx)
     if (nativeReady && identity && shadowAddress && guiTable && guiLimitAddress && guiIdentity &&
         layout.VerifyProfile(kncore::KernelLayoutFamily::ShadowService) && layout.VerifyProfile(kncore::KernelLayoutFamily::Win32kService) &&
         publicOrShape(L"W32pServiceTable", 1497 * 4, true) && publicOrShape(L"W32pServiceLimit", 4, false) &&
-        ctx.Session.ReadExact(kncore::AddressSpace::Virtual, *guiLimitAddress, &guiLimit) && guiLimit == 1497)
+        setup.ReadExact(kncore::AddressSpace::Virtual, *guiLimitAddress, &guiLimit) && guiLimit == 1497)
     {
-        nativeDescriptor = kncore::ReadServiceDescriptor(ctx.Session, *shadowAddress);
-        guiDescriptor = kncore::ReadServiceDescriptor(ctx.Session, *shadowAddress + 32);
+        nativeDescriptor = kncore::ReadServiceDescriptor(setup, *shadowAddress);
+        guiDescriptor = kncore::ReadServiceDescriptor(setup, *shadowAddress + 32);
         shadowReady = nativeDescriptor && guiDescriptor &&
             kncore::ServiceDescriptorMatches(*nativeDescriptor, *table, limit, identity->Base + 0xe823c) &&
             kncore::ServiceDescriptorMatches(*guiDescriptor, *guiTable, guiLimit, guiIdentity->Base + 0xa2d48);
@@ -217,12 +218,17 @@ void ScanSsdt(Ctx &ctx)
     bool filterReady = false;
     if (dispatchReady && filterAddress && layout.VerifyProfile(kncore::KernelLayoutFamily::FilteredService) &&
         publicOrShape(L"W32pServiceTableFilter", 1497 * 4, true) && publicOrShape(L"W32pServiceLimitFilter", 4, false) &&
-        ctx.Session.ReadExact(kncore::AddressSpace::Virtual, guiIdentity->Base + 0xa5074, &filterLimit) && filterLimit == 1497)
+        setup.ReadExact(kncore::AddressSpace::Virtual, guiIdentity->Base + 0xa5074, &filterLimit) && filterLimit == 1497)
     {
-        filterNative = kncore::ReadServiceDescriptor(ctx.Session, *filterAddress);
-        filterGui = kncore::ReadServiceDescriptor(ctx.Session, *filterAddress + 32);
+        filterNative = kncore::ReadServiceDescriptor(setup, *filterAddress);
+        filterGui = kncore::ReadServiceDescriptor(setup, *filterAddress + 32);
         filterReady = filterNative && filterGui && *filterNative == *nativeDescriptor &&
             kncore::ServiceDescriptorMatches(*filterGui, guiIdentity->Base + 0xa3330, filterLimit, guiIdentity->Base + 0xa5078);
+    }
+    if (!budget.CanRead())
+    {
+        FinishCollection(ctx, budget);
+        return;
     }
     if (dispatchReady)
     {
@@ -248,7 +254,7 @@ void ScanSsdt(Ctx &ctx)
     {
         collect(*table, limit, L"NativeSSDT", 0, profile);
     }
-    if (shadowReady)
+    if (!budget.Stopped && shadowReady)
     {
         if (dispatchReady)
         {
@@ -269,14 +275,17 @@ void ScanSsdt(Ctx &ctx)
         else
         {
             collect(*guiTable, guiLimit, L"ShadowSSDT", 0x1000, kncore::Win32kServiceProfileId);
-            UnknownScope(ctx, budget, L"Win32kSessionDispatch", L"Reviewed session dispatch profile unavailable; entry thunks retained");
+            if (!budget.Stopped)
+            {
+                UnknownScope(ctx, budget, L"Win32kSessionDispatch", L"Reviewed session dispatch profile unavailable; entry thunks retained");
+            }
         }
         if (kncore::RecheckServiceDescriptor(ctx.Session, *shadowAddress, *nativeDescriptor, budget))
         {
             kncore::RecheckServiceDescriptor(ctx.Session, *shadowAddress + 32, *guiDescriptor, budget);
         }
     }
-    else
+    else if (!budget.Stopped)
     {
         UnknownScope(ctx, budget, L"ShadowSSDT", L"Matched NT/win32k code, descriptor, table extent or mapping unavailable");
     }
@@ -288,7 +297,7 @@ void ScanSsdt(Ctx &ctx)
         }
         kncore::RecheckServiceLimit(ctx.Session, guiIdentity->Base + 0xa5074, filterLimit, budget, L"FilteredServiceLimitChanged");
     }
-    else
+    else if (!budget.Stopped)
     {
         UnknownScope(ctx, budget, L"FilteredShadowSSDT", L"Matched filtered descriptor, table or code profile unavailable");
     }

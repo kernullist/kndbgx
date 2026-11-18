@@ -206,3 +206,19 @@ On the stopped Windows 28000.2952 x64 VMware target, WinDbg's `.chain` showed th
 - `!wfp`: the combined table retained all 481 rows. The 958 resolved name/description fields matched the target module resources, and all 19,302 non-resource fields matched the management baseline. The UI showed Korean names and descriptions. BFE enumeration succeeded and all 1,868 entries were read; overall status remained `Partial` (`BfeResourceUnavailable`) because three of the 226 distinct displayed references could not be resolved. Their 14 field occurrences retained the original strings and reasons.
 
 Cancellation, stale contexts, internal read faults and malformed MUI trees were exercised by the synthetic regressions above; these failures were not induced on the VM.
+
+### Paged command tables and collector setup
+
+The WFP grid regression opens a page of callouts with enough metadata to fill the column chooser, then requests a page containing a filter and a layer. It checks the displayed action, condition summary and field count, the manual selection, and the complete row in the inspector. A separate case checks the coverage notice and raw indirect string when target resources are unavailable. Replaying the 481-row VM export exercised all five WFP record types in their original order.
+
+Native regressions inject cancellation, a stale context and an internal fault on each of the two timer key reads at setup and at completion. They check the number of target reads, the original stop status, and the outcome when a blocking read crosses the traversal deadline. Separate controls cover equal keys, changed keys and an unreadable final key. Profile fixtures cover interruption in an exact image-code window and cold symbol discovery before the traversal clock starts.
+
+Two WFP captures at the same VM stop both returned 481 rows. An initial incremental build reached the BFE read deadline at 1,822 of 1,868 total entries. Runtime filter and callout fields still matched for all 345 rows, while 264 rows reported unavailable management metadata. The subsequent clean Release DLL visited all 1,868 entries, read 481 BFE records and matched 339 runtime rows to management records. Its remaining partial status was limited to three unresolved resource references. These two outcomes can be distinguished using the BFE status and coverage reason even when the table row counts agree.
+
+WinDbg loaded the DLL produced byte-for-byte by both clean Release builds on the stopped Windows 28000.2952 x64 VM. All eight exports passed result and output checksum verification. Target time, uptime, implicit process, implicit thread and RIP matched before and after collection.
+
+- The 192 timer addresses, due times and DPC values matched a fresh native WinDbg timer enumeration. All 1,024 queues completed.
+- The same-stop native references matched the 144 PiDDB records, 1,183 ALPC ports, 6,478 service-table entries, 87 process policies and 1,497 service decisions for the selected process. The 266 mapper rows matched the earlier export in full.
+- In WFP, 958 displayed name or description fields matched target module resources. All 19,302 fields covered by the management-baseline comparison matched, and 14 occurrences of unresolved references retained their original strings. The WinDbg-hosted KNDbgX grid showed Korean callout names on the first page and filter actions, condition counts and condition summaries after scrolling. Microsoft Edge also rendered the exported rows at eight offsets.
+
+The final Debug and Release solution and direct-project runs each passed 2,011 native assertions. The frontend fault suite passed 313 scenarios, the rendered Edge suite passed 176 scenarios, and both engine integration modes passed.

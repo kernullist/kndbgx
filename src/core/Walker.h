@@ -46,6 +46,20 @@ class WalkBudget
         return false;
     }
 
+    bool CanRead()
+    {
+        if (!Stopped && Cancelled && Cancelled())
+        {
+            return Stop(Status::Cancelled, L"Cancelled");
+        }
+        // Profile discovery may precede the traversal clock.
+        if (!Stopped && traversalStarted_ && std::chrono::steady_clock::now() >= Deadline)
+        {
+            return Stop(Status::Partial, L"GlobalWalkBudget");
+        }
+        return !Stopped;
+    }
+
     bool Consume(uint64_t address, const TargetArchitecture &architecture)
     {
         StartTraversal();
