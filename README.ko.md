@@ -25,6 +25,8 @@ WinDbg를 대상에 연결하고 메모리를 조사하기 전에 대상을 중�
 
 아래 이미지는 2026-11-15에 **0.2.0-preview.7**을 WinDbg에 로드하고 Windows 11 x64 VMware 게스트에 연결한 실제 작업 화면에서 촬영했다. 호스트 전용 관찰과 인위적으로 만든 파일·디코더 예제는 별도로 표시했다. 수와 주소는 해당 캡처의 값이므로 자신의 대상에서 관찰한 값으로 바꿔 사용한다. 커널 수집기와 Data Model 연동은 실험적 기능이다. [지원 환경과 제약](docs/SUPPORT.md)을 참고한다.
 
+아래 드라이버 이력·ALPC·타이머·SSDT·WFP 결과는 2026-11-18에 `main` 소스를 빌드해 정지된 Windows 11 x64 VM(NT 28000.2952)에서 검증했다. [소스 빌드](#소스-빌드) · [WinDbg 검증 기록](docs/VALIDATION.md#paged-command-tables-and-collector-setup)
+
 ![명령 팔레트에서 콜백 관련 작업 검색](docs/screenshots/command-palette.png)
 
 **Pin left**로 Library를 Results 옆에 고정한다. 즐겨찾기·필터·그룹 접기로 자주 쓰는 명령을 정리하고, **Investigation starting points > Kernel investigation**을 펼쳐 크래시·I/O·드라이버 분석의 시작점을 선택한다. [명령 찾기](docs/UX.md#find-and-run-commands)
@@ -76,7 +78,7 @@ WinDbg를 대상에 연결하고 메모리를 조사하기 전에 대상을 중�
 
 ### 드라이버 객체·디스패치·디바이스 스택
 
-`!driver`로 관찰한 드라이버를 고른 뒤 `!drvobj \Driver\fvevol` 또는 객체 주소로 조사한다. MajorFunction 슬롯, 핸들러 심볼과 소유 모듈을 비교한다. 디바이스 주소는 `!devstack <device-address>`로 이어서 확인한다. 꺾쇠 인자는 실제 관찰한 값으로 바꾼다.
+`!driver`에서 드라이버 이름, 이미지 시작 주소와 크기, 첫 디바이스 객체를 확인한다. 드라이버를 고른 뒤 `!drvobj \Driver\fvevol`을 실행하거나 객체 주소를 인자로 넘겨 MajorFunction 슬롯, 핸들러 심볼과 소유 모듈을 비교한다. 디바이스 주소는 `!devstack <device-address>`로 이어서 확인한다.
 
 ![드라이버 디스패치 슬롯의 함수 심볼과 소유 모듈](docs/screenshots/driver-dispatch.png)
 
@@ -95,38 +97,50 @@ WinDbg를 대상에 연결하고 메모리를 조사하기 전에 대상을 중�
 
 ### 드라이버 로드 이력
 
-`!mapper`는 `!unloaded`·`!piddb`·`!cihash`의 결과를 함께 보관한다. 하위 레코드를 선택해 상태와 수집 범위를 보거나, 개별 명령을 실행해 별도 표로 연다. 화면의 페이지 크기 제한을 넘는 중첩 레코드는 **Export**로 보관한다.
+`!piddb`는 드라이버 캐시 항목 하나를 한 행에 표시한다. **Driver name**, **PE timestamp (raw)**, **Load status (NTSTATUS)**, **Cached result**에서 이름과 캐시된 로드 결과를 확인한다. 타임스탬프는 드라이버 PE 헤더에 기록된 값이다. AVL 링크는 **Row details**에 남는다.
 
-![수집 한계가 표시된 세 종류의 드라이버 이력 결과](docs/screenshots/driver-history-coverage.png)
-
-*세 행은 하위 수집 결과이며 의심 드라이버 세 개가 아니다. 이 게스트에서는 unloaded-driver·CI 메타데이터 일부를 검증하지 못했고, 중첩 PiDDB 레코드는 화면 표시 한도를 넘었다. 기록이 없다는 사실만으로 이력 삭제나 수동 매핑을 확정하지 않는다.* [이력 조사 절차](docs/UX.md#inspect-driver-history)
+`!mapper`는 `!unloaded`·`!piddb`·`!cihash`의 개별 기록을 하나의 표에 모으고 **Source Command**에 출처를 표시한다. 검증 VM에서는 PiDDB 144건, CI 캐시 113건, 언로드된 드라이버 9건으로 총 266행이었다. `!cihash`에서는 원시 20바이트 해시 두 개와 캐시 상태를 볼 수 있다. 각 출처에 남아 있는 이력이 수집 대상이며, 확인한 범위는 **Capture info**에서 볼 수 있다. [드라이버 이력 조사](docs/UX.md#inspect-driver-history)
 
 ### 레지스트리 하이브와 ALPC 소유자
 
-`!hive`는 관찰한 하이브의 `GetCellRoutine`을 심볼·모듈과 연결한다. **Routine**이나 **Symbol**로 정렬해 등록 정보를 비교하고, 현재 컨텍스트의 주소를 Disassembly로 연다.
+`!hive`에서 레지스트리 루트 경로, 하이브 파일 이름, 플래그와 파일 크기를 비교한다. `GetCellRoutine` 주소와 심볼도 확인할 수 있다.
 
 ![하이브 GetCellRoutine 15개와 커널 소유 모듈](docs/screenshots/registry-hive-routines.png)
 
-`!alpc`는 검증된 28000.2952 커널의 전역 포트 목록을 순회한다. 이름 없는 클라이언트·서버 통신 포트도 포함하며, 포트 유형·소유 PID/이미지·연결 이름·상대 포트를 표시한다. 정상적인 무명 포트는 **Unnamed**, 이름을 읽지 못한 포트는 **Name unavailable**로 구분한다.
+`!alpc`는 검증된 커널에서 초기화된 포트의 전역 목록을 읽어 유형, 소유 PID와 프로세스 이미지, 연결 이름, 상대 포트 주소를 표시한다. 검증 VM의 1,183개 포트 중 169개에는 이름이 있었고 1,014개는 **Unnamed**였다. 이름을 읽지 못한 경우는 **Name unavailable**로 표시한다.
 
 ![선택한 ALPC 포트와 System 소유자 정보](docs/screenshots/alpc-ports.png)
 
-*위 ALPC 이미지는 전역 포트 목록 지원 전의 Partial 캡처다. 현재 전역 순회는 120초·65,536개 제한을 적용한다. 목록에서 분리됐거나 아직 등록되지 않은 객체는 포함하지 않는다. 전역 목록 프로필이 없으면 무명 포트 수집 공백을 명시하고, 레이아웃을 검증할 수 있는 경우 이름 기반 순회 결과를 표시한다.* [하이브와 ALPC 조사](docs/UX.md#inspect-hives-and-alpc-ports)
+*위 이미지는 전역 목록을 지원하기 전의 캡처다.* 현재 전역 목록 순회에는 180초와 65,536개 포트 한도가 적용된다. 다른 커널에서는 네임스페이스 레이아웃을 검증할 수 있으면 이름 있는 포트를 수집하고, 무명 포트가 수집 범위에서 빠졌음을 표시한다. [하이브와 ALPC 조사](docs/UX.md#inspect-hives-and-alpc-ports)
 
 ### 다른 콜백과 서비스 테이블
 
 `!nmi`는 NMI 콜백 체인, `!hal`은 HAL 디스패치 함수 포인터, `!fwtable`은 펌웨어 테이블 공급자 등록을 조사한다. 확인할 수 있는 함수·모듈 정보와 레이아웃 공백을 결과에 남기며 등록을 변경하지 않는다.
 
-`!ssdt`는 레이아웃과 범위를 검증할 수 있을 때 native/shadow 서비스 테이블을 수집한다. 표가 비어 있으면 **View output**에서 이유를 확인한다.
+`!ssdt`는 검증된 프로필에서 전역 네이티브 테이블과 각 세션의 일반·필터링된 win32k 디스패치 경로를 표시한다. 검증 VM에서는 네이티브 항목 490개를 확인했고, 두 세션을 합쳐 일반 항목과 필터링된 항목이 각각 2,994개였다. **Family**, **Session**, **Service ID**, **Dispatch State**로 행을 식별한다. **Row details**에서 진입 래퍼와 등록된 첫 구현 대상을 확인한다.
+
+`!ssdt /policy`로 프로세스별 필터 모드와 판정 건수를 본다. 표에서 고른 PID를 `!ssdt /policy pid:PID`의 `PID` 자리에 넣으면 서비스마다 허용·차단·감사 판정을 확인할 수 있다. EPROCESS 주소나 한 프로세스만 식별하는 이미지 이름으로도 선택할 수 있다. 실제 시스템 호출의 결과에는 스레드 상태와 다른 접근 검사도 관여한다. [서비스 테이블과 프로세스 정책](docs/UX.md#read-a-collectors-coverage-limits)
 
 <details>
 <summary>빈 SSDT 결과가 Partial로 남는 이유</summary>
 
 ![SSDT의 범위와 레이아웃을 검증하지 못한 이유](docs/screenshots/ssdt-coverage.png)
 
-위 이미지는 프로필 추가 전의 결과다. 검증된 28000.2952 NT·win32k 이미지에서는 native 490개와 Shadow 1,497개 진입점을 표시한다. Shadow 결과는 등록된 win32k 진입점이며 세션별 내부 호출 대상은 포함하지 않는다. 다른 이미지에서 0행이나 Partial이 나오면 해당 범위의 검증 여부를 확인한다. [수집 한계 확인](docs/UX.md#read-a-collectors-coverage-limits)
+위 이미지는 28000.2952 프로필을 추가하기 전의 결과다. 표가 비어 있으면 **View output**에서 레이아웃과 테이블 범위의 검증 결과를 확인한다.
 
 </details>
+
+### Windows Filtering Platform
+
+KNDbgX 입력란에서 아래 명령을 실행하면 WFP의 다섯 종류를 한 표에 모아 볼 수 있다. 필터와 콜아웃만 필요할 때는 `!wfp filters callouts`를 실행한다.
+
+```text
+!wfp filters callouts providers sublayers layers
+```
+
+원격 KD와 커널 덤프에서는 검증된 28000.2952 프로필로 대상의 런타임 필터와 콜아웃을 읽는다. 필터 행에는 동작, 레이어, 공급자, 하위 레이어와 조건 요약이 표시된다. 콜아웃 행에는 등록 상태와 루틴 심볼이 표시된다. Base Filtering Engine(BFE) 서비스 페이지를 읽을 수 있으면 관리용 이름과 설명도 채운다. 간접 문자열은 대상에 매핑된 PE 또는 해당 모듈과 일치하는 MUI 리소스에서 해석한다. 검증 VM에서 `@bfe.dll,-1209`는 `Microsoft Corporation`으로 표시됐다. 검증된 로컬 KD에서는 BFE API를 사용한다.
+
+행 수가 같아도 **Capture info**에서 수집 사유를 확인한다. 정지된 VM에서 얻은 두 캡처는 모두 필터 258개와 콜아웃 87개를 포함한 481행이었다. 첫 캡처는 BFE 읽기 제한 시간에 도달했다(`BfeMetadataIncomplete`). 두 번째 캡처는 1,868개 항목을 모두 읽었지만 표시 문자열의 리소스 참조 세 종류를 해석하지 못했다(`BfeResourceUnavailable`). 해당 셀에는 원래 문자열이 남는다. [원격 WFP 검증 기록](docs/VALIDATION.md#paged-command-tables-and-collector-setup)
 
 ## 메모리 권한 조사하기
 
@@ -149,6 +163,8 @@ WinDbg를 대상에 연결하고 메모리를 조사하기 전에 대상을 중�
 ### Big pool 할당과 W+X 관찰
 
 `!pool big /wx /limit 16`을 실행한다. 대소문자를 구분하는 네 글자 `/tag`, 16진수 바이트 크기 `/min`·`/max`, `/addr`로 범위를 좁힌다. **wxObserved**, **inspectedPages**, **skippedPages**, **rangeClassified**를 함께 읽는다. `/wx`는 첫 페이지를 표본으로 조사하고 `/full`은 전역 예산 안에서 전체 페이지를 요청한다. `/wx`가 W+X 행만 필터링하는 것은 아니다.
+
+`!pool summary`는 태그별 할당 수와 총 바이트를 표시한다. `!pool summary /wx /tag AcpI`는 태그 요약에 페이지 표본과 조사 범위 집계를 추가한다.
 
 ![건너뛴 페이지 수가 표시된 big pool 권한 표본](docs/screenshots/pool-permissions.png)
 
@@ -179,11 +195,11 @@ IDT 예제는 451개 게이트를 보관한 Partial 결과이고, 제어 레지�
 
 ### DPC 큐와 타이머
 
-`!dpc`는 CPU별 DPC 큐를, `!timer`는 타이머 테이블을 순회한다. 검증된 28000.2952 NT 이미지에서는 인코딩된 DPC와 NULL을 해석하고 루틴·컨텍스트·중요도를 표시한다. **CPU**·**Queue**·**Routine**·**Decode**를 함께 보고, 완료한 큐 수와 전체 예상 큐 수를 비교한다.
+`!dpc`는 CPU별 큐에 등록된 루틴, 컨텍스트와 중요도를 표시한다. `!timer`에서는 타이머 객체, 100나노초 단위의 원시 만기 값, 밀리초 단위 주기와 신호 상태를 읽는다. 검증된 NT 프로필은 인코딩된 NULL을 포함해 DPC를 해석한다. 프로필이나 키를 확인할 수 없으면 루틴은 Unknown으로 남는다. **Capture info**에서 완료한 큐 수와 예상 큐 수를 비교한다.
 
 ![189개 타이머 관찰과 전체 큐 1024개 읽기 완료](docs/screenshots/timer-coverage.png)
 
-*위 이미지는 DPC 디코더 추가 전의 Partial 캡처다. 현재 디코더도 이미지·심볼·커널 코드가 검증되지 않으면 루틴을 Unknown으로 남긴다. 큐 밖에서 실행 중이거나 이미 완료된 작업은 포함하지 않는다.* [큐 조사](docs/UX.md#inspect-dpc-queues-and-timers)
+*위 이미지는 DPC 디코더 추가 전의 캡처다.* 이후 VM 검증에서는 1,024개 큐를 모두 수집했고 타이머 192개의 주소·만기 값·DPC 값이 WinDbg 기본 타이머 출력과 일치했다. [타이머와 DPC 큐](docs/UX.md#inspect-dpc-queues-and-timers)
 
 ### 호스트와 대상의 보안 상태
 
@@ -198,20 +214,20 @@ IDT 예제는 451개 게이트를 보관한 Partial 결과이고, 제어 레지�
 
 ![디버거 호스트에서 조회한 CI·HVCI 플래그](docs/screenshots/host-code-integrity.png)
 
-`!wfp`는 BFE filter·callout·provider·sublayer·layer를 열거하고, `!dma`는 DMAR/IVRS 펌웨어 테이블을 관찰한다. `!byovd`는 로컬 드라이버 파일의 SHA-256을 사용자가 제공한 카탈로그와 비교한다. 세 명령 모두 검증된 로컬 KD가 필요하므로 이 원격 게스트에는 사용할 수 없다. 테이블 존재는 DMA 보호 활성화의 증명이 아니며, 해시 일치는 악용 가능성이나 로드된 이미지의 무결성을 확정하지 않는다. [플랫폼 범위와 카탈로그 설정](docs/UX.md#distinguish-host-and-target-security-state)
+검증된 로컬 KD에서 `!dma`는 DMAR/IVRS 펌웨어 테이블을 확인하고, `!byovd`는 로컬 드라이버 파일의 SHA-256을 사용자가 제공한 카탈로그와 비교한다. DMA 보호의 실제 활성화 여부와 로드된 드라이버의 무결성은 별도 근거로 확인해야 한다. [플랫폼 범위와 카탈로그 설정](docs/UX.md#distinguish-host-and-target-security-state)
 
 </details>
 
 ### ETW 로거 메타데이터
 
-`!etw`로 대상 host silo의 로거 ID와 clock 표현 등 메타데이터를 조사한다. **Capture info / View output**에서 레이아웃 공백과 실제 빈 목록을 구분한다.
+`!etw`는 대상 host silo의 로거 이름·ID·모드·상태·유실 이벤트 수·로그 파일·클록 정보를 표시한다. **Capture info / View output**에서 수집 범위와 레이아웃 검증 결과를 확인한다. [ETW 조사](docs/UX.md#inspect-etw-logger-metadata)
 
 <details>
-<summary>이 게스트에서 확인하지 못한 ETW 메타데이터</summary>
+<summary>이전 캡처에서 레이아웃 확인이 중단된 사례</summary>
 
 ![ETW 저장소와 형식의 관계를 검증하지 못한 결과](docs/screenshots/etw-coverage.png)
 
-저장소·형식 관계를 확인하지 못해 0행, 판정 불가 1건으로 남았다. ETW가 비활성화됐다는 뜻이 아니다. 이 명령은 추적을 시작하지 않으며 호스트 로거를 게스트 정보로 대신하지 않는다. [ETW 조사](docs/UX.md#inspect-etw-logger-metadata)
+이 캡처에서는 저장소와 형식의 관계를 확인하지 못해 0행, 판정 불가 1건으로 기록됐다.
 
 </details>
 
@@ -392,6 +408,8 @@ Previous/Next는 성공적으로 읽은 범위를 기준으로 이동한다. 주
 
 다시 수집하지 않고 탭을 전환한다. 더블클릭/F2로 이름을 바꾸고 끌어서 순서를 조정한다. **Columns**·정렬·전체 셀 값 복사·**Row details**로 필요한 필드를 살펴본다. 숨긴 열도 저장된 결과에 남는다. **Capture info**는 출처와 범위를 설명하며, **Export**는 화면 밖 행과 저장된 출력을 포함한 전체 결과를 내보낸다.
 
+여러 종류의 행이 있는 결과를 스크롤하면 **Columns**에 다음 페이지에서 처음 나타난 필드가 추가된다. 사용자가 고른 열은 유지된다. WFP 통합 표에서는 필터 행을 읽으면 **Action Name**과 **Condition Summary**가, 레이어 행을 읽으면 **Field Count**가 추가된다.
+
 ![수집한 필드를 보존하면서 선택한 세 열을 표시한 콜백 결과](docs/screenshots/result-columns.png)
 
 기본 저장 위치는 `%LOCALAPPDATA%\kndbgx\logs`이며 **Copy saved path**로 확인된 경로를 가져온다. 다른 위치는 `results`에서 ID를 찾은 뒤 `result-export <id> "C:\captures\result.json"`으로 지정한다. `result-read <id> [row-offset] [finding-offset]`는 저장된 데이터를 나눠 읽는다. 최근 비고정 결과 16개와 열린 탭의 보호된 결과 128개가 64 MiB를 공유하므로 퇴출이나 DLL unload 전에 내보낸다. [저장과 복구](docs/UX.md#export-and-recovery)
@@ -482,11 +500,11 @@ Previous/Next는 성공적으로 읽은 범위를 기준으로 이동한다. 주
 | `!module` | 로드된 PE의 식별 정보와 섹션 메타데이터를 읽는다. /disk 파일 비교는 검증된 로컬 KD에서만 가능하다.<br>Experimental · x64 커널·덤프 | `!module [module] [/disk]`<br>예제: `!module fvevol`<br>`!module fvevol /disk` |
 | `!unloaded` | 남아 있는 MmUnloadedDrivers 항목을 확인한다. 기록 부재가 이력 삭제의 증거는 아니다.<br>Experimental · x64 커널·덤프 | `!unloaded`<br>예제: `!unloaded` |
 | `!piddb` | 검증된 PiDDB 항목의 드라이버 이름·원시 PE 타임스탬프·캐시된 로드 상태(NTSTATUS)를 표시한다. 현재 항목 해석은 28000.2952 x64 프로필을 지원한다.<br>Experimental · x64 커널·덤프 | `!piddb`<br>예제: `!piddb` |
-| `!cihash` | 필요한 레이아웃이 있을 때 커널 CI 해시 버킷 메타데이터를 확인한다.<br>Experimental · x64 커널·덤프 | `!cihash`<br>예제: `!cihash` |
-| `!mapper` | !unloaded·!piddb·!cihash를 함께 수집하고 각 하위 결과와 수집 범위를 보존한다.<br>Experimental · x64 커널·덤프 | `!mapper`<br>예제: `!mapper` |
+| `!cihash` | 검증된 CI 캐시의 이름, 원시 20바이트 해시 두 개와 캐시 상태를 표시한다.<br>Experimental · x64 커널·덤프 | `!cihash`<br>예제: `!cihash` |
+| `!mapper` | !unloaded·!piddb·!cihash의 개별 기록을 모아 각 행의 출처와 출처별 수집 범위를 표시한다.<br>Experimental · x64 커널·덤프 | `!mapper`<br>예제: `!mapper` |
 | `!nmi` | 등록된 NMI 콜백을 순회하고 가능한 함수 정보를 해석한다.<br>Experimental · x64 커널·덤프 | `!nmi`<br>예제: `!nmi` |
 | `!hal` | 검증된 HAL 디스패치 포인터와 소유 모듈을 확인한다.<br>Experimental · x64 커널·덤프 | `!hal`<br>예제: `!hal` |
-| `!hive` | 레지스트리 하이브의 GetCellRoutine 주소와 소유 모듈을 나열한다.<br>Experimental · x64 커널·덤프 | `!hive`<br>예제: `!hive` |
+| `!hive` | 하이브 루트 경로, 파일 이름, 플래그, 파일 크기와 GetCellRoutine 정보를 표시한다.<br>Experimental · x64 커널·덤프 | `!hive`<br>예제: `!hive` |
 | `!alpc` | 검증된 이름 있는 포트·무명 포트의 유형, 소유자와 연결 관계를 표시한다. 수집 범위와 제한을 함께 확인한다.<br>Experimental · x64 커널·덤프 | `!alpc`<br>예제: `!alpc` |
 | `!fwtable` | 대상 레이아웃을 알 수 있을 때 등록된 펌웨어 테이블 공급자를 확인한다.<br>Experimental · x64 커널·덤프 | `!fwtable`<br>예제: `!fwtable` |
 | `!etw` | 대상의 ETW 로거 메타데이터를 확인한다. 추적을 시작하거나 InfinityHook 여부를 판정하지 않는다.<br>Experimental · x64 커널·덤프 | `!etw`<br>예제: `!etw` |
@@ -533,7 +551,7 @@ Previous/Next는 성공적으로 읽은 범위를 기준으로 이동한다. 주
 
 ### CPU·커널 테이블·플랫폼 상태
 
-`!byovd`·`!wfp`·`!dma`는 검증된 로컬 KD가 필요하며 호스트 정보를 원격 게스트 정보로 대신하지 않는다. `!ci /host`와 `!hv`의 CPUID 부분은 디버거 호스트를 명시적으로 설명한다. `!byovd`는 [플랫폼 조사 절차](docs/UX.md#distinguish-host-and-target-security-state)의 카탈로그를 먼저 준비한다. 해시 일치가 악용 가능성을 확정하지는 않는다.
+`!byovd`와 `!dma`는 검증된 로컬 KD가 필요하다. `!ci /host`와 `!hv`의 CPUID 부분은 디버거 호스트를 조회한다. 원격 KD와 커널 덤프에서 `!wfp`를 사용하려면 대상 프로필이 일치하고 필요한 페이지를 읽을 수 있어야 한다. [WFP 수집 범위](#windows-filtering-platform) · [로컬 카탈로그 설정](docs/UX.md#distinguish-host-and-target-security-state)
 
 <details>
 <summary>11개 명령 — 기능·문법·예제 보기</summary>
@@ -541,15 +559,15 @@ Previous/Next는 성공적으로 읽은 범위를 기준으로 이동한다. 주
 | 명령·별칭 | 기능·사용 조건 | 문법·예제 |
 |---|---|---|
 | `!idt` | CPU별 IDT 게이트·핸들러 주소·모듈을 확인하고 같은 벡터끼리 비교한다.<br>Experimental · x64 커널·덤프 | `!idt`<br>예제: `!idt` |
-| `!ssdt` | 검증된 native·Shadow SSDT 진입점과 서비스 ID를 표시한다. 세션별 내부 호출 대상과 필터 테이블은 제외한다.<br>Experimental · x64 커널·덤프 | `!ssdt`<br>예제: `!ssdt` |
+| `!ssdt` | 네이티브 및 세션별 일반·필터링된 디스패치 대상, 프로세스 필터 정책과 서비스별 판정을 표시한다.<br>Experimental · x64 커널·덤프 | `!ssdt [/policy [pid\|eprocess\|image]]`<br>예제: `!ssdt`, `!ssdt /policy`, `!ssdt /policy pid:PID` |
 | `!msrcheck` | 검증된 선택 CPU의 LSTAR·CSTAR·STAR·FMASK·EFER를 읽는다. 다른 CPU는 Unknown으로 남긴다.<br>Experimental · x64 커널·덤프 | `!msrcheck`<br>예제: `!msrcheck` |
 | `!cr` | CPU별로 저장된 CR0·CR4·CR8 값과 해석한 플래그를 읽는다.<br>Experimental · x64 커널·덤프 | `!cr`<br>예제: `!cr` |
 | `!dpc` | 선언된 CPU별 DPC 큐를 순회한다. 지연 시간을 측정하거나 완료된 작업을 나열하지는 않는다.<br>Experimental · x64 커널·덤프 | `!dpc`<br>예제: `!dpc` |
-| `!timer` | 타이머 큐를 순회하고 큐 집계와 해석하지 못한 범위를 보존한다. 인코딩된 DPC 값은 Unknown으로 남을 수 있다.<br>Experimental · x64 커널·덤프 | `!timer`<br>예제: `!timer` |
+| `!timer` | 타이머의 원시 만기 값, 주기, 신호 상태와 큐 수집 범위를 표시한다. 프로필을 검증하면 DPC도 해석한다.<br>Experimental · x64 커널·덤프 | `!timer`<br>예제: `!timer` |
 | `!hv` | 호스트 CPUID·하이퍼바이저 관찰과 확인 가능한 디버기 CR4 상태를 구분해 표시한다.<br>Experimental · 호스트 CPUID·가용한 대상 CR4 | `!hv`<br>예제: `!hv` |
 | `!ci` | 검증된 로컬 KD의 공개 CI/HVCI 플래그를 읽는다. /host는 디버거 호스트를 명시적으로 조회한다.<br>Experimental · 로컬 KD 또는 명시적 /host | `!ci [/host]`<br>예제: `!ci`<br>`!ci /host` |
 | `!byovd` | 로컬 드라이버 파일의 SHA-256을 사용자가 제공한 카탈로그와 비교한다. /status는 카탈로그 메타데이터만 읽는다.<br>Experimental · 검증된 로컬 KD x64 | `!byovd [/status]`<br>예제: `!byovd /status`<br>`!byovd` |
-| `!wfp` | 검증된 로컬 KD에서 호스트 BFE의 filter·callout·provider·sublayer·layer를 열거한다.<br>Experimental · 검증된 로컬 KD x64 | `!wfp`<br>예제: `!wfp` |
+| `!wfp` | 필터·콜아웃과 BFE 관리 정보를 확인한다. 원격 대상은 검증된 프로필이 필요하다.<br>Experimental · x64 커널·덤프 | `!wfp [filters] [callouts] [providers] [sublayers] [layers]`<br>예제: `!wfp filters callouts`, `!wfp providers sublayers layers` |
 | `!dma` | 검증된 로컬 KD에서 호스트 DMAR/IVRS 펌웨어 테이블을 관찰한다. 테이블 존재만으로 DMA 보호 활성화를 확정하지 않는다.<br>Experimental · 검증된 로컬 KD x64 | `!dma`<br>예제: `!dma` |
 
 </details>

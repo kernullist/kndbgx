@@ -25,6 +25,8 @@ Open **Library** or press **Ctrl+K**. Search by purpose, such as `callback`, cho
 
 The screenshots were captured on 2026-11-15 from the actual **0.2.0-preview.7** workspace connected to a Windows 11 x64 VMware guest. Host-only observations and synthetic file/decoder examples are labeled separately. Counts and addresses belong to those captures; use your own target's values. Kernel collectors and Data Model integration remain experimental; see [supported sessions and limits](docs/SUPPORT.md).
 
+The driver-history, ALPC, timer, SSDT and WFP results below were verified on 2026-11-18 with a build from `main` and a stopped Windows 11 x64 VM (NT 28000.2952). [Build from source](#build-from-source) · [WinDbg validation](docs/VALIDATION.md#paged-command-tables-and-collector-setup)
+
 ![Finding callback-related tasks in the command palette](docs/screenshots/command-palette.png)
 
 **Pin left** keeps Library beside Results; stars, filters and folded groups keep frequently used commands nearby. Expand **Investigation starting points > Kernel investigation** for tasks such as crash, I/O or driver analysis. [Command discovery](docs/UX.md#find-and-run-commands)
@@ -76,7 +78,7 @@ Run `!handles /owner-pid 4` to inspect System's Process handles with VM-access r
 
 ### Driver objects, dispatch routines and device stacks
 
-Run `!driver`, choose an observed driver, then inspect it with `!drvobj \Driver\fvevol` or its object address. Compare major-function slots, handler symbols and owning modules. Follow a device address with `!devstack <device-address>`; replace angle-bracket operands with observed values.
+Run `!driver` to list driver objects with their names, image bases, sizes and first device objects. Choose a driver, then run `!drvobj \Driver\fvevol` or pass its object address to compare major-function slots, handler symbols and owning modules. Follow a device address with `!devstack <device-address>`.
 
 ![Driver dispatch slots with routine symbols and module ownership](docs/screenshots/driver-dispatch.png)
 
@@ -95,26 +97,44 @@ Run `!module fvevol` for target-memory PE and section observations. `/disk` is a
 
 ### Driver load history
 
-Run `!mapper` to display individual records from `!unloaded`, `!piddb` and `!cihash` together, identified by **Source Command**. Capture info and exports retain each collection's coverage and profile. `!cihash` displays names, two raw hashes and cached raw status when its CI image profile is verified. Missing records do not prove history erasure or manual mapping. [History workflow](docs/UX.md#inspect-driver-history)
+Run `!piddb` to see one row per cached driver entry. **Driver name**, **PE timestamp (raw)**, **Load status (NTSTATUS)** and **Cached result** identify the driver and its cached load result. The timestamp comes from the PE header. **Row details** retains the AVL links.
+
+`!mapper` combines individual records from `!unloaded`, `!piddb` and `!cihash` and labels each with **Source Command**. On the validation VM its 266 rows comprised 144 PiDDB entries, 113 CI cache entries and nine unloaded drivers. `!cihash` exposes two raw 20-byte hashes and a cached status. Each source covers the history it still holds. Check its coverage in **Capture info**. [Driver history](docs/UX.md#inspect-driver-history)
 
 ### Registry hives and ALPC owners
 
-Run `!hive` to compare registry root paths, backing-file names, flags and file sizes. Routine symbols remain available. On the reviewed 28000.2952 kernel, `!alpc` walks the global list of initialized ports, including unnamed client/server endpoints. It shows port type, owner PID/image, connection name and peer address. `Unnamed` is distinct from an unreadable name. Without that profile, named-namespace observations remain available when their layouts can be verified, with an explicit unnamed-port coverage gap. [Hive and ALPC workflow](docs/UX.md#inspect-hives-and-alpc-ports)
+Run `!hive` to compare registry root paths, backing-file names, flags and file sizes. The `GetCellRoutine` address and symbol are also available.
+
+On the verified kernel, `!alpc` walks the global list of initialized ports and shows port type, owner PID and image, connection name and peer address. Of the 1,183 ports on the VM, 169 were named and 1,014 were unnamed. **Name unavailable** marks a name the collector could not read. The global walk has a 180-second traversal budget and a 65,536-port limit. On other kernels, a verified namespace walk can still report named ports and identify the gap in unnamed-port coverage. [Hives and ALPC ports](docs/UX.md#inspect-hives-and-alpc-ports)
 
 ### Other callback and service-table surfaces
 
 Use `!nmi` for the NMI callback chain, `!hal` for HAL dispatch function pointers and `!fwtable` for registered firmware-table providers. Each result carries the available routine/module evidence and layout gaps; these commands do not modify registrations.
 
-`!ssdt` collects native, per-session Shadow SSDT and conditional filtered dispatch observations when their layout, code and extent can be verified. `!ssdt /policy` lists process filter policies; append a PID, EPROCESS address or unambiguous image name for service-level filter decisions. Open **View output** when the table is empty.
+`!ssdt` shows the global native table and the normal and filtered win32k routes for each populated session on the verified profile. The VM capture contained 490 native entries and, across two sessions, 2,994 normal and 2,994 filtered entries. **Family**, **Session**, **Service ID** and **Dispatch State** identify a row. **Row details** shows the entry wrapper and the first implementation target when one is registered.
+
+Run `!ssdt /policy` for the process list, filter modes and decision counts. Choose a PID from that table and substitute it for `PID` in `!ssdt /policy pid:PID` to see each service's filter decision. You can also select a process by EPROCESS address or unambiguous image name. The filter can allow, block or audit a service. The eventual system call also depends on thread state and other access checks. [Service tables and process policy](docs/UX.md#read-a-collectors-coverage-limits)
 
 <details>
 <summary>See why an empty SSDT result is still Partial</summary>
 
 ![SSDT scope-specific layout and extent gaps](docs/screenshots/ssdt-coverage.png)
 
-This screenshot predates the reviewed 28000.2952 profiles. The profiles cover 490 native entries and 1,497 win32k services per populated session, with separate normal and filtered rows. The table distinguishes entry wrappers, implementation targets and verified unregistered targets. Filtered routes are conditional, not a prediction of a process's policy. Unsupported layouts still produce explicit gaps; zero rows do not establish a clean table. [Coverage workflow](docs/UX.md#read-a-collectors-coverage-limits)
+This screenshot predates the 28000.2952 profiles. For an empty table, open **View output** for the layout or table extent that limited collection.
 
 </details>
+
+### Windows Filtering Platform
+
+In the KNDbgX command input, run the following to put all five WFP collections in one table. For a shorter inventory, request just the kinds you need, such as `!wfp filters callouts`.
+
+```text
+!wfp filters callouts providers sublayers layers
+```
+
+On remote KD and kernel dumps, the verified 28000.2952 profiles read runtime filters and callouts from the target. Filter rows show the action, layer, provider, sublayer and condition summary. Callout rows show registration state and routine symbols. Readable Base Filtering Engine (BFE) service pages supply management names and descriptions. KNDbgX resolves indirect strings from PE or matching MUI resources mapped on the target. On the VM, `@bfe.dll,-1209` resolved to `Microsoft Corporation`. Verified local KD uses the BFE API.
+
+Check the reason in **Capture info** even when row counts agree. Two captures on the stopped VM each returned 481 rows, including 258 filters and 87 callouts. The first reached the BFE read deadline (`BfeMetadataIncomplete`). The second read all 1,868 entries, but three distinct display references could not be resolved (`BfeResourceUnavailable`). Those cells retain their original strings. [Remote WFP validation](docs/VALIDATION.md#paged-command-tables-and-collector-setup)
 
 ## Inspect memory permissions
 
@@ -137,6 +157,8 @@ Run `!kpage nt!NtOpenProcess L4` for four page-aligned translations. Compare phy
 ### Big-pool allocations and W+X observations
 
 Run `!pool big /wx /limit 16`. Narrow by a four-character case-sensitive `/tag`, hexadecimal `/min` or `/max`, or `/addr`. Inspect **wxObserved**, **inspectedPages**, **skippedPages** and **rangeClassified** together. `/wx` samples the first page; `/full` requests all pages within the global budget. `/wx` does not filter the table to W+X rows.
+
+Use `!pool summary` for allocation counts and total bytes per tag. `!pool summary /wx /tag AcpI` keeps the tag summary and adds page-sampling and coverage counts.
 
 ![Big-pool permission sampling with explicit skipped-page counts](docs/screenshots/pool-permissions.png)
 
@@ -167,7 +189,7 @@ Run `!msrcheck` for LSTAR, CSTAR, STAR, FMASK and EFER on the verified current e
 
 ### DPC queues and timers
 
-Run `!dpc` for per-CPU routine, context and importance observations. `!timer` displays raw due time, period in milliseconds, signal state and timer object. On the verified 28000.2952 NT image it also decodes the DPC, including encoded NULL, and resolves its routine. Other images retain Unknown when no decoder is verified. Compare completed queues with expected queues; active/completed work outside these queues is not covered. [Queue workflow](docs/UX.md#inspect-dpc-queues-and-timers)
+Run `!dpc` for per-CPU queued routines, contexts and importance. `!timer` shows the timer object, raw due time in 100-nanosecond units, period in milliseconds and signal state. The verified NT profile decodes the DPC, including a valid encoded NULL. Missing key or profile data leaves the routine unknown. Compare completed and expected queues in **Capture info**. On the VM, all 1,024 queues completed and the 192 timer addresses, due times and DPC values matched WinDbg's native timer output. [Timer and DPC queues](docs/UX.md#inspect-dpc-queues-and-timers)
 
 ### Host and target security observations
 
@@ -182,7 +204,7 @@ Run `!hv` to see **HostCpuidObservation** and **TargetControlRegister** as separ
 
 ![Explicit debugger-host CI and HVCI flags](docs/screenshots/host-code-integrity.png)
 
-`!wfp filters callouts` reads the remote target runtime on the matched 28000.2952 NETIO/fwpkclnt/NT profiles. The matched target BFE service supplies filter names/descriptions and provider/sublayer metadata; providers, sublayers and layers can also be enumerated remotely. Verified local KD retains its BFE API path. `!dma` observes DMAR/IVRS firmware tables and `!byovd` compares local driver-file SHA-256 hashes with an operator-supplied catalog; those two still require verified local KD. Table presence does not prove active DMA protection, and a catalog match does not prove exploitability or loaded-image integrity. [Platform scope and catalog setup](docs/UX.md#distinguish-host-and-target-security-state)
+In verified local KD, `!dma` observes DMAR/IVRS firmware tables and `!byovd` compares local driver-file SHA-256 hashes with an operator-supplied catalog. Active DMA protection and the integrity of a loaded driver require independent evidence. [Platform scope and catalog setup](docs/UX.md#distinguish-host-and-target-security-state)
 
 </details>
 
@@ -367,6 +389,8 @@ This capture requests the layout only, not an instance. Missing type names or op
 
 Switch tabs without rerunning captures. Double-click/F2 to rename, drag to reorder, choose **Columns**, sort, copy full cell values or open **Row details**. Hidden columns remain in the saved result. **Capture info** explains source and coverage; **Export** saves all retained rows and output, including data outside the viewport.
 
+As you scroll a mixed result, **Columns** makes room for fields introduced on later pages and preserves your manual selection. In a combined WFP result, filter rows add **Action Name** and **Condition Summary**, and layer rows add **Field Count**.
+
 ![Callback result showing three selected columns while retaining all collected fields](docs/screenshots/result-columns.png)
 
 Exports go to `%LOCALAPPDATA%\kndbgx\logs`; **Copy saved path** retrieves the confirmed destination. For another destination, use `results` to find an ID, then `result-export <id> "C:\captures\result.json"`. `result-read <id> [row-offset] [finding-offset]` pages through retained data. Up to 16 unpinned and 128 protected open-tab results share 64 MiB; export before eviction or DLL unload. [Export and recovery](docs/UX.md#export-and-recovery)
@@ -508,7 +532,7 @@ Page commands require an x64 kernel target. Big-pool commands require a live ker
 
 ### CPU, kernel tables and platform state
 
-`!byovd` and `!dma` require verified local KD. Remote/dump `!wfp [filters] [callouts]` reads target runtime memory only on matched image/PDB/code profiles; it never substitutes host BFE state. Matching target BFE service pages additionally supply management names, descriptions, providers, sublayers and layers. Unavailable service pages leave explicit Partial metadata coverage. `!ci /host` and the CPUID part of `!hv` explicitly describe the debugger host. For `!byovd`, prepare the catalog documented in the [platform workflow](docs/UX.md#distinguish-host-and-target-security-state); a hash match does not establish exploitability.
+`!byovd` and `!dma` require verified local KD. `!ci /host` and the CPUID portion of `!hv` describe the debugger host. For `!wfp`, remote KD and kernel dumps require matching target profiles and readable pages. [WFP collections and coverage](#windows-filtering-platform) · [Local catalog setup](docs/UX.md#distinguish-host-and-target-security-state)
 
 <details>
 <summary>11 commands — purpose, syntax and examples</summary>
@@ -524,7 +548,7 @@ Page commands require an x64 kernel target. Big-pool commands require a live ker
 | `!hv` | Show host CPUID/hypervisor observations separately from available debuggee CR4 state.<br>Experimental · Host CPUID; target CR4 if available | `!hv`<br>Examples: `!hv` |
 | `!ci` | Read public CI/HVCI flags in verified local KD; /host explicitly queries the debugger host.<br>Experimental · Local KD, or explicit /host | `!ci [/host]`<br>Examples: `!ci`<br>`!ci /host` |
 | `!byovd` | Compare local driver-file SHA-256 values with an operator-provided catalog. /status reads catalog metadata only.<br>Experimental · Verified local KD x64 | `!byovd [/status]`<br>Examples: `!byovd /status`<br>`!byovd` |
-| `!wfp` | Read target runtime filters/callouts and matching BFE management metadata; enumerate target providers, sublayers and layers.<br>Experimental · Kernel x64 | `!wfp [filters] [callouts]`<br>Examples: `!wfp filters callouts` |
+| `!wfp` | Inspect filters, callouts and BFE management data. Remote targets require verified profiles.<br>Experimental · Kernel x64 / dump | `!wfp [filters] [callouts] [providers] [sublayers] [layers]`<br>Examples: `!wfp filters callouts`, `!wfp providers sublayers layers` |
 | `!dma` | Observe host DMAR/IVRS firmware tables in verified local KD; table presence does not prove active DMA protection.<br>Experimental · Verified local KD x64 | `!dma`<br>Examples: `!dma` |
 
 </details>
