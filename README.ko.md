@@ -105,13 +105,7 @@ WinDbg를 대상에 연결하고 메모리를 조사하기 전에 대상을 중�
 
 `!hive`에서 레지스트리 루트 경로, 하이브 파일 이름, 플래그와 파일 크기를 비교한다. `GetCellRoutine` 주소와 심볼도 확인할 수 있다.
 
-![하이브 GetCellRoutine 15개와 커널 소유 모듈](docs/screenshots/registry-hive-routines.png)
-
-`!alpc`는 검증된 커널에서 초기화된 포트의 전역 목록을 읽어 유형, 소유 PID와 프로세스 이미지, 연결 이름, 상대 포트 주소를 표시한다. 검증 VM의 1,183개 포트 중 169개에는 이름이 있었고 1,014개는 **Unnamed**였다. 이름을 읽지 못한 경우는 **Name unavailable**로 표시한다.
-
-![선택한 ALPC 포트와 System 소유자 정보](docs/screenshots/alpc-ports.png)
-
-*위 이미지는 전역 목록을 지원하기 전의 캡처다.* 현재 전역 목록 순회에는 180초와 65,536개 포트 한도가 적용된다. 다른 커널에서는 네임스페이스 레이아웃을 검증할 수 있으면 이름 있는 포트를 수집하고, 무명 포트가 수집 범위에서 빠졌음을 표시한다. [하이브와 ALPC 조사](docs/UX.md#inspect-hives-and-alpc-ports)
+`!alpc`는 검증된 커널에서 초기화된 포트의 전역 목록을 읽어 유형, 소유 PID와 프로세스 이미지, 연결 이름, 상대 포트 주소를 표시한다. 검증 VM의 1,183개 포트 중 169개에는 이름이 있었고 1,014개는 **Unnamed**였다. 이름을 읽지 못한 경우는 **Name unavailable**로 표시한다. 전역 목록 순회에는 180초와 65,536개 포트 한도가 적용된다. 다른 커널에서는 네임스페이스 레이아웃을 검증할 수 있으면 이름 있는 포트를 수집하고, 무명 포트가 수집 범위에서 빠졌음을 표시한다. [하이브와 ALPC 조사](docs/UX.md#inspect-hives-and-alpc-ports)
 
 ### 다른 콜백과 서비스 테이블
 
@@ -195,11 +189,7 @@ IDT 예제는 451개 게이트를 보관한 Partial 결과이고, 제어 레지�
 
 ### DPC 큐와 타이머
 
-`!dpc`는 CPU별 큐에 등록된 루틴, 컨텍스트와 중요도를 표시한다. `!timer`에서는 타이머 객체, 100나노초 단위의 원시 만기 값, 밀리초 단위 주기와 신호 상태를 읽는다. 검증된 NT 프로필은 인코딩된 NULL을 포함해 DPC를 해석한다. 프로필이나 키를 확인할 수 없으면 루틴은 Unknown으로 남는다. **Capture info**에서 완료한 큐 수와 예상 큐 수를 비교한다.
-
-![189개 타이머 관찰과 전체 큐 1024개 읽기 완료](docs/screenshots/timer-coverage.png)
-
-*위 이미지는 DPC 디코더 추가 전의 캡처다.* 이후 VM 검증에서는 1,024개 큐를 모두 수집했고 타이머 192개의 주소·만기 값·DPC 값이 WinDbg 기본 타이머 출력과 일치했다. [타이머와 DPC 큐](docs/UX.md#inspect-dpc-queues-and-timers)
+`!dpc`는 CPU별 큐에 등록된 루틴, 컨텍스트와 중요도를 표시한다. `!timer`에서는 타이머 객체, 100나노초 단위의 원시 만기 값, 밀리초 단위 주기와 신호 상태를 읽는다. 검증된 NT 프로필은 인코딩된 NULL을 포함해 DPC를 해석한다. 프로필이나 키를 확인할 수 없으면 루틴은 Unknown으로 남는다. **Capture info**에서 완료한 큐 수와 예상 큐 수를 비교한다. VM 검증에서는 1,024개 큐를 모두 수집했고 타이머 192개의 주소·만기 값·DPC 값이 WinDbg 기본 타이머 출력과 일치했다. [타이머와 DPC 큐](docs/UX.md#inspect-dpc-queues-and-timers)
 
 ### 호스트와 대상의 보안 상태
 
@@ -220,16 +210,7 @@ IDT 예제는 451개 게이트를 보관한 Partial 결과이고, 제어 레지�
 
 ### ETW 로거 메타데이터
 
-`!etw`는 대상 host silo의 로거 이름·ID·모드·상태·유실 이벤트 수·로그 파일·클록 정보를 표시한다. **Capture info / View output**에서 수집 범위와 레이아웃 검증 결과를 확인한다. [ETW 조사](docs/UX.md#inspect-etw-logger-metadata)
-
-<details>
-<summary>이전 캡처에서 레이아웃 확인이 중단된 사례</summary>
-
-![ETW 저장소와 형식의 관계를 검증하지 못한 결과](docs/screenshots/etw-coverage.png)
-
-이 캡처에서는 저장소와 형식의 관계를 확인하지 못해 0행, 판정 불가 1건으로 기록됐다.
-
-</details>
+`!etw`는 대상 host silo의 로거 이름·ID·모드·상태·유실 이벤트 수·로그 파일·클록 정보를 표시한다. **Capture info / View output**에서 수집 범위와 레이아웃 검증 결과를 확인한다. 이 명령은 추적을 시작하지 않으며 호스트 로거를 게스트 정보로 대신하지 않는다. [ETW 조사](docs/UX.md#inspect-etw-logger-metadata)
 
 ## 스냅샷 저장과 비교
 
@@ -513,7 +494,7 @@ Previous/Next는 성공적으로 읽은 범위를 기준으로 이동한다. 주
 
 ### 프로세스·스레드·토큰·주소 공간
 
-프로세스 선택자는 `pid:<10진수-pid>`, `image:<이름>`, `eprocess:<16진수-주소>`를 사용한다. 이름으로 선택하려면 완전한 목록이 필요하다. `!hiddenproc`·`!handles`는 라이브 커널이 필요하고, 이 분류의 다른 수집 명령은 커널 덤프도 지원한다. `/owner`·`/target`은 PID 필터의 짧은 이름이다. `/json`은 호스트 경로에 저장한다.
+프로세스 선택자는 `pid:<decimal-pid>`, `image:<name>`, `eprocess:<hex-address>`를 사용한다. 이름으로 선택하려면 완전한 목록이 필요하다. `!hiddenproc`·`!handles`는 라이브 커널이 필요하고, 이 분류의 다른 수집 명령은 커널 덤프도 지원한다. `/owner`·`/target`은 PID 필터의 짧은 이름이다. `/json`은 호스트 경로에 저장한다.
 
 <details>
 <summary>8개 명령 — 기능·문법·예제 보기</summary>
@@ -740,7 +721,7 @@ Previous/Next는 성공적으로 읽은 범위를 기준으로 이동한다. 주
 
 </details>
 
-`debug-plan` 동작: `breakpoint-add <address>`, `breakpoint-remove <10진수-id>`, `breakpoint-enable <10진수-id>`, `breakpoint-disable <10진수-id>`, `go`, `step-into`, `step-over`. 기존 브레이크포인트 ID는 `breakpoints`에서 얻는다. 계획은 일치하는 승인 전에는 실행되지 않는다. 다른 계획의 값을 복사하지 말고 반환된 ID·토큰을 사용한다. [상세 절차](docs/UX.md#execution-and-changes)
+`debug-plan` 동작: `breakpoint-add <address>`, `breakpoint-remove <decimal-id>`, `breakpoint-enable <decimal-id>`, `breakpoint-disable <decimal-id>`, `go`, `step-into`, `step-over`. 기존 브레이크포인트 ID는 `breakpoints`에서 얻는다. 계획은 일치하는 승인 전에는 실행되지 않는다. 다른 계획의 값을 복사하지 말고 반환된 ID·토큰을 사용한다. [상세 절차](docs/UX.md#execution-and-changes)
 
 ### 세션·도움말·네이티브 명령 전달
 
@@ -785,7 +766,7 @@ KNDbgX UI에 직접 입력한 미등록 명령은 WinDbg에 전달된다. CLI와
 
 심볼·페이지 누락이나 수집 한도는 **Partial** 또는 **Unavailable**로 표시한다. 행이 없다는 사실만으로 객체 부재를 단정하지 않는다. 결과는 수집 당시 컨텍스트를 유지하며, 과거 결과로 현재 대상을 변경할 수 없다. 중요한 결과는 보관 한도 도달이나 DLL 언로드 전에 내보낸다.
 
-UI에서 직접 입력한 미등록 명령은 WinDbg로 전달되며 대상이나 호스트를 변경할 수 있다. 등록된 이름에는 KNDbgX의 검증과 승인 규칙이 적용된다. CLI와 작업에서 미등록 명령을 실행하려면 `raw --ack-effects <명령>`이 필요하다. 덤프와 로컬 KD는 대상 쓰기와 실행 제어를 지원하지 않는다. [지원 범위와 제약](docs/SUPPORT.md)
+UI에서 직접 입력한 미등록 명령은 WinDbg로 전달되며 대상이나 호스트를 변경할 수 있다. 등록된 이름에는 KNDbgX의 검증과 승인 규칙이 적용된다. CLI와 작업에서 미등록 명령을 실행하려면 `raw --ack-effects <command>`이 필요하다. 덤프와 로컬 KD는 대상 쓰기와 실행 제어를 지원하지 않는다. [지원 범위와 제약](docs/SUPPORT.md)
 
 ## 소스 빌드
 
