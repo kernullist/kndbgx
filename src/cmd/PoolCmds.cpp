@@ -1,4 +1,5 @@
 #include "CollectorSupport.h"
+#include "PoolAcquisition.h"
 #include "../core/Pool.h"
 #include "../util/SystemInformation.h"
 #include "../engine/LayoutResolver.h"
@@ -7,8 +8,6 @@
 #include <map>
 
 namespace kncmd
-{
-namespace
 {
 // Read the target's own big-pool table using the matched kernel PDB.
 // A plausible slot does not confirm the layout or size unit.
@@ -150,7 +149,6 @@ bool CollectTargetBigPool(Ctx &ctx, kncore::WalkBudget &budget, const kncore::Ta
     }
     return true;
 }
-} // namespace
 
 void ScanPool(Ctx &ctx)
 {

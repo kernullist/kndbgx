@@ -25,6 +25,11 @@ bool EnumerateKernelModules(DbgSession &session, std::vector<KernelModuleInfo> *
 
 kncore::OwnershipIndex CollectOwnershipIndex(DbgSession &session, kncore::Result *report = nullptr);
 
+// Same single inventory read, handed back to the caller so a command can judge
+// ownership and match builds against exactly the snapshot it reports on.
+kncore::OwnershipIndex CollectOwnershipIndex(DbgSession &session, std::vector<KernelModuleInfo> *modules,
+                                            kncore::Result *report = nullptr);
+
 // Returns the unique containing module, or nullptr for absent/ambiguous ownership.
 const KernelModuleInfo *FindModuleForAddress(const std::vector<KernelModuleInfo> &modules, ULONG64 address);
 

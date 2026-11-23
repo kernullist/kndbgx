@@ -131,6 +131,7 @@
     <ClCompile Include="src\cmd\WfpCmds.cpp" />
     <ClCompile Include="src\cmd\DumpCmds.cpp" />
     <ClCompile Include="src\cmd\ExtraCmds.cpp" />
+    <ClCompile Include="src\cmd\MapperCmds.cpp" />
     <ClCompile Include="src\cmd\WriteGate.cpp" />
     <ClCompile Include="src\util\Jsonl.cpp" />
     <ClCompile Include="src\util\Log.cpp" />
@@ -149,6 +150,8 @@
     <ClInclude Include="src\engine\ObjectDirectory.h" />
     <ClInclude Include="src\catalog\Catalog.h" />
     <ClInclude Include="src\cmd\CmdTypes.h" />
+    <ClInclude Include="src\cmd\PoolAcquisition.h" />
+    <ClInclude Include="src\core\MapperDetect.h" />
     <ClInclude Include="src\cmd\CmdUtil.h" />
     <ClInclude Include="src\cmd\Dispatcher.h" />
     <ClInclude Include="src\cmd\ProcCollect.h" />

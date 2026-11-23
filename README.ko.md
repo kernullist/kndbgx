@@ -99,7 +99,7 @@ WinDbg를 대상에 연결하고 메모리를 조사하기 전에 대상을 중�
 
 `!piddb`는 드라이버 캐시 항목 하나를 한 행에 표시한다. **Driver name**, **PE timestamp (raw)**, **Load status (NTSTATUS)**, **Cached result**에서 이름과 캐시된 로드 결과를 확인한다. 타임스탬프는 드라이버 PE 헤더에 기록된 값이다. AVL 링크는 **Row details**에 남는다.
 
-`!mapper`는 `!unloaded`·`!piddb`·`!cihash`의 개별 기록을 하나의 표에 모으고 **Source Command**에 출처를 표시한다. 검증 VM에서는 PiDDB 144건, CI 캐시 113건, 언로드된 드라이버 9건으로 총 266행이었다. `!cihash`에서는 원시 20바이트 해시 두 개와 캐시 상태를 볼 수 있다. 각 출처에 남아 있는 이력이 수집 대상이며, 확인한 범위는 **Capture info**에서 볼 수 있다. [드라이버 이력 조사](docs/UX.md#inspect-driver-history)
+`!mapper`는 커널 메모리에 있지만 로드된 모듈이 소유하지 않는 PE 이미지를 먼저 보고하고, 이어서 `!unloaded`·`!piddb`·`!cihash`의 개별 기록을 하나의 표에 모아 **Source Command**에 출처를 표시한다. 탐지 행에는 기준 주소, 포함 범위 크기, 이미지 식별 정보(이미지가 가진 PDB 경로, 타임스탬프와 이미지 크기가 일치하는 로드된 드라이버, 또는 이미지를 지목한 이력 기록), 로드된 모듈 소유 여부, `DriverStart`가 이미지 안을 가리키는 드라이버 오브젝트, 현재 CR3에서 읽은 페이지 권한, 이력 일치, 근거 출처와 판정이 담긴다. 남아 있는 이력은 표 옆에 나열되는 것이 아니라 판정에 교차 반영된다. 기준 주소가 남아 있는 언로드 기록 범위 안에 들어가는 미소유 이미지는 설명되지 않는 매핑이 아니라 그 드라이버의 잔존 페이지로 보고되고, PE 빌드가 PiDDB 항목과 일치하는 미소유 이미지는 높은 신뢰도로 보고된다. 언로드 기록이 아직 들고 있는 범위도 후보로 탐침하므로, 빅풀 표나 드라이버 오브젝트가 지목하지 않은 이미지를 이력이 가리킬 수 있다. 검증 VM에서 이력 행은 PiDDB 144건, CI 캐시 113건, 언로드된 드라이버 9건이었다. `!cihash`에서는 원시 20바이트 해시 두 개와 캐시 상태를 볼 수 있다. 각 출처에 남아 있는 이력이 수집 대상이며, 확인한 범위는 **Capture info**에서 볼 수 있다. [드라이버 이력 조사](docs/UX.md#inspect-driver-history)
 
 ### 레지스트리 하이브와 ALPC 소유자
 
@@ -501,7 +501,7 @@ Previous/Next는 성공적으로 읽은 범위를 기준으로 이동한다. 주
 | `!unloaded` | 남아 있는 MmUnloadedDrivers 항목을 확인한다. 기록 부재가 이력 삭제의 증거는 아니다.<br>Experimental · x64 커널·덤프 | `!unloaded`<br>예제: `!unloaded` |
 | `!piddb` | 검증된 PiDDB 항목의 드라이버 이름·원시 PE 타임스탬프·캐시된 로드 상태(NTSTATUS)를 표시한다. 현재 항목 해석은 28000.2952 x64 프로필을 지원한다.<br>Experimental · x64 커널·덤프 | `!piddb`<br>예제: `!piddb` |
 | `!cihash` | 검증된 CI 캐시의 이름, 원시 20바이트 해시 두 개와 캐시 상태를 표시한다.<br>Experimental · x64 커널·덤프 | `!cihash`<br>예제: `!cihash` |
-| `!mapper` | !unloaded·!piddb·!cihash의 개별 기록을 모아 각 행의 출처와 출처별 수집 범위를 표시한다.<br>Experimental · x64 커널·덤프 | `!mapper`<br>예제: `!mapper` |
+| `!mapper` | 로드된 모듈이 소유하지 않는 PE 이미지를 남아 있는 !unloaded·!piddb·!cihash 기록과 교차해 기준 주소·크기·이미지 식별 정보·드라이버 오브젝트 연결·페이지 권한·이력 일치·근거·판정과 함께 보고하고, 이어서 이력 개별 기록을 출처와 수집 범위와 함께 표시한다.<br>Experimental · x64 커널·덤프 | `!mapper`<br>예제: `!mapper` |
 | `!nmi` | 등록된 NMI 콜백을 순회하고 가능한 함수 정보를 해석한다.<br>Experimental · x64 커널·덤프 | `!nmi`<br>예제: `!nmi` |
 | `!hal` | 검증된 HAL 디스패치 포인터와 소유 모듈을 확인한다.<br>Experimental · x64 커널·덤프 | `!hal`<br>예제: `!hal` |
 | `!hive` | 하이브 루트 경로, 파일 이름, 플래그, 파일 크기와 GetCellRoutine 정보를 표시한다.<br>Experimental · x64 커널·덤프 | `!hive`<br>예제: `!hive` |

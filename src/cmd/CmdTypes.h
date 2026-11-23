@@ -8,6 +8,7 @@
 
 #include "CmdUtil.h"
 #include "../engine/EngineCore.h"
+#include "../core/MapperDetect.h"
 #include "../core/Result.h"
 
 namespace kncmd
@@ -144,6 +145,7 @@ void ScanUnloadedDrivers(Ctx &ctx);
 void ScanPiddb(Ctx &ctx);
 void ScanCiHash(Ctx &ctx);
 void ScanMapper(Ctx &ctx);
+void ScanMapperImages(Ctx &ctx, const std::vector<kncore::MapperHistoryRecord> &history);
 void ScanPayload(Ctx &ctx);
 void ScanDriverList(Ctx &ctx);
 void ScanKpage(Ctx &ctx);

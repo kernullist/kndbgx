@@ -1237,7 +1237,7 @@ const std::vector<CommandSpec> &CommandSpecs()
         {L"!mapper",
          {},
          L"Kernel",
-         L"!unloaded + !piddb + !cihash",
+         L"unowned PE images cross-referenced with !unloaded/!piddb/!cihash",
          L"!mapper",
          Effect::TargetRead,
          Capability::KernelX64,

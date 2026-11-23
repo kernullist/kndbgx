@@ -77,6 +77,7 @@
     <ClCompile Include="src\cmd\WfpCmds.cpp" />
     <ClCompile Include="src\cmd\DumpCmds.cpp" />
     <ClCompile Include="src\cmd\ExtraCmds.cpp" />
+    <ClCompile Include="src\cmd\MapperCmds.cpp" />
     <ClCompile Include="src\engine\LayoutResolver.cpp" />
     <ClCompile Include="src\engine\PdbMetadata.cpp" />
     <ClCompile Include="src\engine\ModuleList.cpp" />

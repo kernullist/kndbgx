@@ -1291,7 +1291,7 @@
   {
     "name": "!mapper",
     "group": "Kernel",
-    "summary": "!unloaded + !piddb + !cihash",
+    "summary": "unowned PE images cross-referenced with !unloaded/!piddb/!cihash",
     "grammar": "!mapper",
     "support": "Experimental",
     "capability": "KernelX64",

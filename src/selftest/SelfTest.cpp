@@ -37,6 +37,7 @@
 #include "DiagnosticRegression.h"
 #include "PiddbRegression.h"
 #include "CommandRecordRegression.h"
+#include "MapperRegression.h"
 #include "KernelPartialRegression.h"
 #include "AlpcRegression.h"
 #include "Win32kDispatchRegression.h"
@@ -717,6 +718,7 @@ int wmain(int argc, wchar_t **argv)
     knself::RunKernelSymbolRegression(Check);
     knself::RunPiddbRegression(Check);
     knself::RunCommandRecordRegression(Check);
+    knself::RunMapperRegression(Check);
     knself::RunWfpRegression(Check);
     knself::RunBfeRegression(Check);
     knself::RunResourceRegression(Check);

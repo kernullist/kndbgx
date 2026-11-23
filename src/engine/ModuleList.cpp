@@ -140,13 +140,17 @@ bool EnumerateKernelModules(DbgSession &session, std::vector<KernelModuleInfo> *
     return ok;
 }
 
-kncore::OwnershipIndex CollectOwnershipIndex(DbgSession &session, kncore::Result *report)
+kncore::OwnershipIndex CollectOwnershipIndex(DbgSession &session, std::vector<KernelModuleInfo> *modules, kncore::Result *report)
 {
-    std::vector<KernelModuleInfo> modules;
+    std::vector<KernelModuleInfo> collected;
+    if (modules == nullptr)
+    {
+        modules = &collected;
+    }
     kncore::Result result;
-    EnumerateKernelModules(session, &modules, &result);
+    EnumerateKernelModules(session, modules, &result);
     std::vector<kncore::ImageRange> ranges;
-    for (const auto &module : modules)
+    for (const auto &module : *modules)
     {
         ranges.push_back({module.Base, module.Size, module.ModuleName,
                           module.ImageName + L":" + std::to_wstring(module.Timestamp) + L":" + std::to_wstring(module.Size)});
@@ -156,6 +160,11 @@ kncore::OwnershipIndex CollectOwnershipIndex(DbgSession &session, kncore::Result
         *report = result;
     }
     return kncore::OwnershipIndex(std::move(ranges), result.Collected.Complete, result.Stamp);
+}
+
+kncore::OwnershipIndex CollectOwnershipIndex(DbgSession &session, kncore::Result *report)
+{
+    return CollectOwnershipIndex(session, nullptr, report);
 }
 
 const KernelModuleInfo *FindModuleForAddress(const std::vector<KernelModuleInfo> &modules, ULONG64 address)

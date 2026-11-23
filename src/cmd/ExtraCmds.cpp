@@ -3,6 +3,7 @@
 #include "../core/Piddb.h"
 #include "../core/CiHash.h"
 #include "../core/HistoryRows.h"
+#include "../core/MapperDetect.h"
 #include "../core/DriverRecord.h"
 #include "../util/SnapshotStore.h"
 
@@ -446,13 +447,99 @@ void ScanCiHash(Ctx &ctx)
     FinishCollection(ctx, budget);
 }
 
+namespace
+{
+// The history rows are the command's own structured observations, so the image
+// verdict reads them back instead of reading the target again: a record that
+// carries no range, timestamp or name cannot match on that field.
+std::optional<uint64_t> MapperHistoryHex(const std::wstring &text)
+{
+    if (text.size() < 3 || text[0] != L'0' || (text[1] != L'x' && text[1] != L'X'))
+    {
+        return std::nullopt;
+    }
+    uint64_t value = 0;
+    for (size_t index = 2; index < text.size(); ++index)
+    {
+        const wchar_t digit = text[index];
+        unsigned nibble = 0;
+        if (digit >= L'0' && digit <= L'9')
+        {
+            nibble = static_cast<unsigned>(digit - L'0');
+        }
+        else if (digit >= L'a' && digit <= L'f')
+        {
+            nibble = 10u + static_cast<unsigned>(digit - L'a');
+        }
+        else if (digit >= L'A' && digit <= L'F')
+        {
+            nibble = 10u + static_cast<unsigned>(digit - L'A');
+        }
+        else
+        {
+            return std::nullopt;
+        }
+        if (value > (UINT64_MAX >> 4))
+        {
+            return std::nullopt;
+        }
+        value = (value << 4) | nibble;
+    }
+    return value;
+}
+
+void CollectMapperHistory(const kncore::Result &child, std::vector<kncore::MapperHistoryRecord> *records)
+{
+    for (const auto &row : child.Rows.Items())
+    {
+        const auto kind = row.Get(L"kind").AsString(L"");
+        kncore::MapperHistoryRecord record;
+        if (kind == L"UnloadedDriver")
+        {
+            record.Source = L"UnloadedDriver";
+            record.Name = row.Get(L"name").AsString(L"");
+            const auto start = MapperHistoryHex(row.Get(L"StartAddress").AsString(L""));
+            const auto end = MapperHistoryHex(row.Get(L"EndAddress").AsString(L""));
+            if (start && end && *end > *start)
+            {
+                record.Start = *start;
+                record.End = *end;
+                record.HasRange = true;
+            }
+            records->push_back(record);
+        }
+        else if (kind == L"PiDDBEntry")
+        {
+            record.Source = L"PiDDB";
+            record.Name = row.Get(L"name").AsString(L"");
+            const auto stamp = MapperHistoryHex(row.Get(L"timeDateStamp").AsString(L""));
+            if (stamp)
+            {
+                record.TimeDateStamp = static_cast<uint32_t>(*stamp);
+                record.HasTimestamp = true;
+            }
+            records->push_back(record);
+        }
+        else if (kind == L"CiHashEntry")
+        {
+            record.Source = L"CiHash";
+            record.Name = row.Get(L"name").AsString(L"");
+            records->push_back(record);
+        }
+    }
+}
+} // namespace
+
 void ScanMapper(Ctx &ctx)
 {
+    // The history collectors run first because their retained records are inputs
+    // to the image verdict. Their rows are appended after the image rows, so the
+    // table still opens with what is mapped right now and every source keeps its
+    // own provenance and collection coverage.
     const std::vector<std::pair<const wchar_t *, HandlerFn>> collectors = {
         {L"!unloaded", ScanUnloadedDrivers}, {L"!piddb", ScanPiddb}, {L"!cihash", ScanCiHash}};
-    ctx.Out.Details.Source = L"Composite:MapperHistoryObservations";
-    ctx.Out.Details.Collected.Complete = true;
-    ctx.Out.Details.Collected.StopReason = L"AllCollectionsComplete";
+    std::vector<std::pair<CmdText, const wchar_t *>> children;
+    std::vector<kncore::MapperHistoryRecord> records;
     for (const auto &[name, handler] : collectors)
     {
         if (ctx.Session.Cancelled())
@@ -466,12 +553,27 @@ void ScanMapper(Ctx &ctx)
         const std::vector<std::wstring> args = {name};
         Ctx nested{ctx.Session, args, child};
         handler(nested);
-        ctx.Out.AddLine(child.Text());
-        if (!kncore::AppendHistoryCollection(ctx.Out.Details, child.Details))
+        CollectMapperHistory(child.Details, &records);
+        children.emplace_back(child, name);
+    }
+
+    // The image scan owns the composite result first, so its rows lead the table.
+    ScanMapperImages(ctx, records);
+
+    ctx.Out.Details.Source = L"Composite:MapperImages+MapperHistoryObservations";
+    if (ctx.Out.Details.Collected.Complete)
+    {
+        ctx.Out.Details.Collected.StopReason = L"AllCollectionsComplete";
+    }
+    for (const auto &entry : children)
+    {
+        ctx.Out.AddLine(entry.first.Text());
+        if (!kncore::AppendHistoryCollection(ctx.Out.Details, entry.first.Details))
         {
             break;
         }
     }
+    ExportCollected(ctx);
 }
 
 void ScanPayload(Ctx &ctx)
