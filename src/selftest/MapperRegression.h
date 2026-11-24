@@ -193,5 +193,37 @@ template <typename Check> void RunMapperRegression(Check check)
     check(ClassifyMapperImage(facts).Reason.find(L"no driver object's DriverStart lies inside it") != std::wstring::npos &&
               MapperImageText(facts, ClassifyMapperImage(facts)).find(L"driver=none") != std::wstring::npos,
           "mapper.read-driver-namespace-supports-the-absence-claim");
+
+    // The reporting gate decides whether a candidate becomes a detection row, so these are
+    // the inputs that live collection turned into false positives: pages of mapped firmware
+    // images that no record named, non-executable copies of loaded drivers, and PE-shaped
+    // bytes whose image did not verify.
+    check(MapperRowDecision(facts) == MapperRowDrop::None, "mapper.record-named-executable-image-is-reported");
+
+    auto sweepPage = facts;
+    sweepPage.SweepOnly = true;
+    check(MapperRowDecision(sweepPage) == MapperRowDrop::SweepPageNoRecord,
+          "mapper.sweep-page-without-a-record-is-not-a-detection-row");
+    auto sweepResidue = sweepPage;
+    sweepResidue.UnloadedDriverRangeMatch = true;
+    check(MapperRowDecision(sweepResidue) == MapperRowDrop::None,
+          "mapper.record-that-names-a-sweep-page-keeps-it-reportable");
+
+    auto copy = facts;
+    copy.PageRangeClassified = true;
+    copy.PageRangeComplete = true;
+    copy.PageExecutable = false;
+    check(MapperRowDecision(copy) == MapperRowDrop::ImageCopyNotExecutable,
+          "mapper.non-executable-image-is-not-a-detection-row");
+    auto partialWalk = copy;
+    partialWalk.PageRangeComplete = false;
+    check(MapperRowDecision(partialWalk) == MapperRowDrop::None,
+          "mapper.partial-page-coverage-does-not-invent-a-non-executable-image");
+
+    auto mzOnly = facts;
+    mzOnly.PeValid = false;
+    mzOnly.PeMessage = L"declared image size exceeds the containing range";
+    check(MapperRowDecision(mzOnly) == MapperRowDrop::MzPrefixOnly,
+          "mapper.unverified-pe-headers-are-not-a-detection-row");
 }
 } // namespace knself

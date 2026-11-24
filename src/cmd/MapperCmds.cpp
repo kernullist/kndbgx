@@ -32,6 +32,9 @@ struct MapperCandidateSource
     uint64_t Size = 0;
     std::wstring PoolTag;
     std::optional<bool> NonPaged;
+    // A record named this address or the range containing it: a big-pool entry, a page
+    // inside a big-pool allocation, or a retained unload record's range. A page only the
+    // sweep reached has no such record.
     bool FromPool = false;
     bool FromDriverObject = false;
     // A page the sweep reached rather than a range a source named: no inventory
@@ -650,6 +653,11 @@ void ScanMapperImages(Ctx &ctx, const std::vector<kncore::MapperHistoryRecord> &
     uint64_t reported = 0;
     uint64_t moduleOwned = 0;
     uint64_t unowned = 0;
+    // Candidates that were read and judged but are not mapping claims. They are counted by
+    // reason so a sweep that found PE-shaped bytes stays visible in the summary line.
+    uint64_t mzPrefixOnly = 0;
+    uint64_t sweepPageNoRecord = 0;
+    uint64_t imageCopyNotExecutable = 0;
     for (const auto *source : ordered)
     {
         if (!CheckCollection(ctx, budget))
@@ -670,6 +678,9 @@ void ScanMapperImages(Ctx &ctx, const std::vector<kncore::MapperHistoryRecord> &
         facts.NonPaged = source->NonPaged;
         facts.DriverObjectInventoryVerified = driverNamespaceVerified;
         facts.DriverObjectInventoryNote = driverNamespaceNote;
+        // A candidate the sweep reached and no record named is recorded as such: it is
+        // counted by reason instead of becoming a mapping row.
+        facts.SweepOnly = source->FromSweep && !source->FromPool && !source->FromDriverObject;
         if (source->FromPool)
         {
             facts.Sources.push_back(L"BigPoolAllocation");
@@ -794,7 +805,8 @@ void ScanMapperImages(Ctx &ctx, const std::vector<kncore::MapperHistoryRecord> &
         const uint64_t permissionRange = facts.Size != 0 ? facts.Size : facts.ImageSize;
         if (dtbKnown && permissionRange != 0)
         {
-            const uint64_t pages = std::min<uint64_t>((permissionRange + 4095) / 4096, 16);
+            const uint64_t requiredPages = (permissionRange + 4095) / 4096;
+            const uint64_t pages = std::min<uint64_t>(requiredPages, 16);
             uint64_t inspected = 0;
             bool first = true;
             bool writable = true;
@@ -824,6 +836,9 @@ void ScanMapperImages(Ctx &ctx, const std::vector<kncore::MapperHistoryRecord> &
             if (inspected != 0)
             {
                 facts.PageRangeClassified = inspected == pages;
+                // The walk is bounded, so only a range that fits the sampled pages can carry a
+                // permission conclusion for the whole image.
+                facts.PageRangeComplete = inspected == requiredPages;
                 facts.PageWritable = facts.PageRangeClassified ? std::optional<bool>(writable) : facts.PageWritable;
                 facts.PageExecutable = facts.PageRangeClassified ? std::optional<bool>(executable) : facts.PageExecutable;
                 facts.Sources.push_back(L"PageTableWalk");
@@ -838,6 +853,26 @@ void ScanMapperImages(Ctx &ctx, const std::vector<kncore::MapperHistoryRecord> &
             }
         }
 
+        // A row is a mapping claim: the PE image verified and a record ties the address to
+        // an image. Everything else is counted by reason, because the command read the
+        // candidate and its absence from the table has to stay visible.
+        const auto drop = kncore::MapperRowDecision(facts);
+        if (drop == kncore::MapperRowDrop::MzPrefixOnly)
+        {
+            ++mzPrefixOnly;
+            continue;
+        }
+        if (drop == kncore::MapperRowDrop::ImageCopyNotExecutable)
+        {
+            ++imageCopyNotExecutable;
+            continue;
+        }
+        if (drop == kncore::MapperRowDrop::SweepPageNoRecord)
+        {
+            ++sweepPageNoRecord;
+            continue;
+        }
+
         const auto verdict = kncore::ClassifyMapperImage(facts);
         ++unowned;
         budget.Report.Rows.Push(MapperImageRow(facts, verdict));
@@ -849,7 +884,9 @@ void ScanMapperImages(Ctx &ctx, const std::vector<kncore::MapperHistoryRecord> &
     }
 
     ctx.Out.AddLine(L"[mapper] candidates=" + std::to_wstring(candidates.size()) + L" sweepSlots=" + std::to_wstring(sweepSlots) +
-                    L" unowned=" + std::to_wstring(unowned) +
+                    L" unowned=" + std::to_wstring(unowned) + L" mzPrefixOnly=" + std::to_wstring(mzPrefixOnly) +
+                    L" sweepPageNoRecord=" + std::to_wstring(sweepPageNoRecord) +
+                    L" imageCopyNotExecutable=" + std::to_wstring(imageCopyNotExecutable) +
                     L" moduleOwnedSkipped=" + std::to_wstring(moduleOwned) + L" driverObjects=" + std::to_wstring(drivers.size()) +
                     L" driverStartsOwned=" + std::to_wstring(driverStartsOwned) + L" historyRecords=" +
                     std::to_wstring(history.size()) + L" modules=" + std::to_wstring(modules.size()) +
@@ -857,7 +894,13 @@ void ScanMapperImages(Ctx &ctx, const std::vector<kncore::MapperHistoryRecord> &
     budget.Report.Limitations.Push(knjson::Value(
         L"Candidates are big-pool allocations whose first bytes are MZ, the interior pages of a big-pool allocation, "
         L"driver-object DriverStart ranges, the pages a loaded module does not own next to each module range, and the ranges "
-        L"retained unload records describe. None of them is a verdict of maliciousness: an unowned image can be an unloaded "
+        L"retained unload records describe. A candidate is reported as a row only when its PE headers verified and a record "
+        L"ties the address to an image: a driver object's DriverStart, the big-pool allocation or retained unload range that "
+        L"contains it, or a retained history record that matched it. The summary line counts the rest by reason - mzPrefixOnly "
+        L"for PE-shaped bytes whose image did not verify, imageCopyNotExecutable for a verified image whose whole range was "
+        L"walked and holds no executable page, and sweepPageNoRecord for a page the sweep reached that no record names - so "
+        L"those counts have to be "
+        L"read together with the rows. None of them is a verdict of maliciousness: an unowned image can be an unloaded "
         L"driver's leftover pages or a legitimate allocation. A history match is a cross-reference against a retained record, "
         L"so a missing match does not establish that history was erased. Page permissions come from the current CR3 and are "
         L"non-atomic with the rest of the collection. An image without a debug directory has no PDB identity to report. "

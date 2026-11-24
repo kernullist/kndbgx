@@ -84,6 +84,17 @@ struct MapperImageFacts
     std::optional<bool> PageExecutable;
     std::optional<bool> PageWritable;
     bool PageRangeClassified = false;
+    // True only when the permission walk covered every page of the range that bounds the
+    // image. The walk is bounded, so a large image is classified from the pages that were
+    // read; a conclusion that no page of the image can execute needs the whole range, and a
+    // sampled prefix cannot support it.
+    bool PageRangeComplete = false;
+    // True when the page sweep reached this candidate and no record named it: no driver
+    // object's DriverStart, no big-pool allocation and no retained unload record
+    // describes the address or the range containing it. The sweep is a candidate
+    // generator rather than evidence, so the reporting gate counts such a page instead
+    // of turning it into a mapping row.
+    bool SweepOnly = false;
     std::vector<std::wstring> Sources;
     // History cross-references. Each flag is set only by a retained record the
     // caller actually read, so an unmatched image stays unclassified rather
@@ -360,6 +371,48 @@ inline MapperVerdict ClassifyMapperImage(const MapperImageFacts &facts)
     verdict.Reason = MapperOwnershipText(facts) + L" and " + MapperDriverLinkageText(facts);
     verdict.Confidence = L"Medium";
     return verdict;
+}
+
+// Why a candidate is not reported as a mapping row. A mapping claim needs both a
+// verified PE image and an observation that ties the address to an image, and the three
+// reasons below are exactly the inputs that live collection turned into false
+// positives: pages of mapped firmware images that no record named, non-executable copies
+// of loaded drivers, and a pool allocation whose first two bytes were MZ.
+enum class MapperRowDrop
+{
+    None,                   // the candidate is reported as a mapping claim
+    MzPrefixOnly,           // the prefix bytes matched and no PE image verified
+    ImageCopyNotExecutable, // a verified image whose whole range was walked and cannot execute
+    SweepPageNoRecord,      // the sweep reached the page and no record names it
+};
+
+// Whether a candidate becomes a detection row, and if not, which observation withheld
+// it. The classification above states what the facts showed; this gate states whether
+// they amount to a mapping someone observed, because a table of rows is a claim about
+// the target and not a list of everything that looked like an image.
+inline MapperRowDrop MapperRowDecision(const MapperImageFacts &facts)
+{
+    if (!facts.PeValid)
+    {
+        // Two bytes of a page are not an image: without verified headers the command
+        // cannot tell a mapped image from an allocation that starts with MZ.
+        return MapperRowDrop::MzPrefixOnly;
+    }
+    if (facts.PageRangeComplete && facts.PageExecutable.has_value() && !*facts.PageExecutable)
+    {
+        // Every page of the image's range was walked and none of them can execute, so these
+        // bytes are a copy of an image rather than a driver that runs. A range the bounded
+        // walk only sampled keeps its row, because a prefix cannot establish that the rest of the
+        // image cannot execute.
+        return MapperRowDrop::ImageCopyNotExecutable;
+    }
+    if (facts.SweepOnly && !facts.UnloadedDriverRangeMatch && !facts.DriverDatabaseMatch && !facts.CiCacheMatch)
+    {
+        // Nothing the debugger read points at this page: it holds bytes whose start
+        // looks like an image, and no record says an image was mapped there.
+        return MapperRowDrop::SweepPageNoRecord;
+    }
+    return MapperRowDrop::None;
 }
 
 inline std::wstring MapperPermissionText(const MapperImageFacts &facts)
