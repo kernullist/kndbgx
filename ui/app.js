@@ -288,7 +288,7 @@
     { key: "pid", label: "PID" }, { key: "image", label: "Image" }, { key: "eprocess", label: "EPROCESS" },
     { key: "dtb", label: "DTB" }, { key: "createTime", label: "Created (FILETIME)" }
   ];
-  state.memory = { snapshot: null, selected: -1, loading: false, cancelled: false, error: "", failedRead: null, evidenceOpen: false };
+  state.memory = { snapshot: null, selected: -1, selectedOffset: 0, dump: null, loading: false, cancelled: false, error: "", failedRead: null, evidenceOpen: false };
   state.memoryPanel = { visible: true, width: 520, effectiveWidth: 520, overlay: false, drag: null, tab: "memory" };
   state.inspectorPanel = { width: null, effectiveWidth: 296, resizable: false, drag: null };
   state.disassembly = { snapshot: null, selected: -1, loading: false, cancelled: false, error: "", history: [],
@@ -391,7 +391,7 @@
 
   function workerMethod(method)
   {
-    return ["execute", "executePlan", "previewWrite", "navigateResult", "processAction", "memoryRead", "disassemblyRead", "breakpointPlan", "breakpointApply", "debuggerAction", "saveLog", "status", "symbolModules", "symbolHealth"].indexOf(method) >= 0;
+    return ["execute", "executePlan", "previewWrite", "navigateResult", "processAction", "memoryRead", "memoryDump", "disassemblyRead", "breakpointPlan", "breakpointApply", "debuggerAction", "saveLog", "status", "symbolModules", "symbolHealth"].indexOf(method) >= 0;
   }
 
   function queryOperation(id)
@@ -3575,9 +3575,9 @@
     return navigation.source.resultId === state.resultId && navigation.source.collection === state.resultCollection;
   }
 
-  function inspectionAddressNavigation(view, snapshot, row, index)
+  function inspectionAddressNavigation(view, snapshot, row, index, cellOffset)
   {
-    var byteOffset = view === "memory" ? index * memoryRowBytes() : 0;
+    var byteOffset = view === "memory" ? index * memoryRowBytes() + (cellOffset || 0) : 0;
     var sourceIndex = view === "memory" ? Math.floor(byteOffset / 16) : index;
     return { address: row.address, space: view === "memory" ? snapshot.space : "virtual", row: row,
       origin: { view: view, snapshot: snapshot },
@@ -3887,14 +3887,22 @@
         "Attach the owning process before reading its virtual addresses." :
         button.disabled ? "A current result and stopped target are required." : "")) || "";
     });
-    if (state.copyMenu && [uiElement("cell-open-memory"), uiElement("cell-open-disassembly")].indexOf(focused) >= 0 &&
+    var location = state.copyMenu && state.copyMenu.memoryLocation;
+    ["dump-raw", "dump-pe"].forEach(function (operation)
+    {
+      var button = uiElement("cell-" + operation);
+      setHidden(button, !location);
+      button.disabled = !memoryDumpAvailable(location, operation);
+      button.title = location && operation === "dump-pe" && location.space === "physical" ? "PE modules require a virtual address." : "";
+    });
+    if (state.copyMenu && ["cell-open-memory", "cell-open-disassembly", "cell-dump-raw", "cell-dump-pe"].map(uiElement).includes(focused) &&
         (focused.disabled || focused.classList.contains("hidden")))
     {
-      uiElement("cell-copy-value").focus({ preventScroll: true });
+      uiElement(state.copyMenu.value === null ? "cell-copy-row" : "cell-copy-value").focus({ preventScroll: true });
     }
   }
 
-  function openCopyMenu(node, value, label, rowText, event, navigation)
+  function openCopyMenu(node, value, label, rowText, event, navigation, memoryLocation)
   {
     closeResultTabMenu(false);
     closeCopyMenu(false);
@@ -3905,7 +3913,8 @@
       rememberInspectionNodes(menu);
       node.ownerDocument.body.appendChild(menu);
     }
-    state.copyMenu = { anchor: node, value: value, label: label, rowText: rowText, grid: copyFocusGrid(node), navigation: navigation };
+    state.copyMenu = { anchor: node, value: value, label: label, rowText: rowText, grid: copyFocusGrid(node), navigation: navigation, memoryLocation: memoryLocation };
+    setHidden(uiElement("cell-copy-value"), value === null);
     setHidden(uiElement("cell-copy-row"), typeof rowText !== "string");
     updateCopyNavigation();
     setHidden(menu, false);
@@ -3915,10 +3924,10 @@
     var y = event.clientY || anchor.bottom;
     menu.style.left = Math.max(8, Math.min(x, view.innerWidth - menu.offsetWidth - 8)) + "px";
     menu.style.top = Math.max(8, Math.min(y, view.innerHeight - menu.offsetHeight - 8)) + "px";
-    uiElement("cell-copy-value").focus({ preventScroll: true });
+    uiElement(value === null ? "cell-copy-row" : "cell-copy-value").focus({ preventScroll: true });
   }
 
-  function bindCopyValue(node, readValue, label, accessibleLabel, select, readRow, navigation)
+  function bindCopyValue(node, readValue, label, accessibleLabel, select, readRow, navigation, memoryLocation)
   {
     node.classList.add("copyable");
     node.tabIndex = -1;
@@ -3926,7 +3935,7 @@
     node.setAttribute("aria-description", node.textContent);
     node.setAttribute("aria-keyshortcuts", "Enter Space Control+C Shift+F10");
     node.title = (node.title || "") + (node.title ? "\n" : "") +
-      (navigation ? "Click to select and copy; right-click to open Memory or Disassembly" :
+      (memoryLocation ? "Right-click for memory dump options" : navigation ? "Click to select and copy; right-click to open Memory or Disassembly" :
         "Click to copy the full value; right-click for copy options");
     function selectCell()
     {
@@ -3943,7 +3952,7 @@
     }
     function copyValue(event)
     {
-      if (node.disabled || (event.detail && event.detail > 1) || hasSelectedText(node))
+      if (node.disabled || (memoryLocation && readValue() === null) || (event.detail && event.detail > 1) || hasSelectedText(node))
       {
         return;
       }
@@ -3953,14 +3962,14 @@
     }
     function showMenu(event)
     {
-      if (node.disabled || typeof readValue() !== "string")
+      if (node.disabled || (typeof readValue() !== "string" && !memoryLocation))
       {
         return;
       }
       event.preventDefault();
       event.stopPropagation();
       selectCell();
-      openCopyMenu(node, readValue(), label, readRow ? readRow() : null, event, navigation);
+      openCopyMenu(node, readValue(), label, readRow ? readRow() : null, event, navigation, memoryLocation);
     }
     node.addEventListener("click", copyValue);
     node.addEventListener("contextmenu", showMenu);
@@ -4019,7 +4028,7 @@
     else if (["ArrowDown", "ArrowUp", "Home", "End"].indexOf(event.key) >= 0)
     {
       event.preventDefault();
-      var choices = ["cell-copy-value", "cell-copy-row", "cell-open-memory", "cell-open-disassembly"].map(uiElement).filter(function (node)
+      var choices = ["cell-copy-value", "cell-copy-row", "cell-open-memory", "cell-open-disassembly", "cell-dump-raw", "cell-dump-pe"].map(uiElement).filter(function (node)
       {
         return !node.classList.contains("hidden") && !node.disabled;
       });
@@ -5330,7 +5339,7 @@
     uiElement("memory-evidence-summary").textContent = snapshot ? "Saved capture" + (memoryCurrent() ? " in the last checked context." :
       "; previous or unconfirmed context. These bytes do not describe the current target.") : "No memory capture is available.";
     var cause = "Cause: Unknown. A failed or short read does not prove an invalid pointer, paged-out memory or a missing dump page. " +
-      "Page-table and VAD mappings were not checked. Opening this panel does not read the target or change its state.";
+      "VAD mappings were not checked. Opening this panel uses the saved capture only.";
     if (snapshot)
     {
       var evidence = snapshot.evidence;
@@ -5454,6 +5463,137 @@
     {
       uiElement(id).disabled = state.busy;
     });
+    var draft = state.memory.dump;
+    uiElement("memory-dump-path").readOnly = !!draft && draft.saving;
+    uiElement("memory-dump-length").readOnly = !!draft && draft.saving;
+    uiElement("btn-memory-dump-run").disabled = !draft || !memoryDumpAvailable(draft.location, draft.operation);
+  }
+
+  function memoryDumpAvailable(location, operation)
+  {
+    return !!location && location.origin.view === "memory" && (operation !== "dump-pe" || location.space === "virtual") &&
+      addressNavigationAvailable(location, operation);
+  }
+
+  function closeMemoryDump()
+  {
+    state.memory.dump = null;
+    setHidden(uiElement("memory-dump"), true);
+  }
+
+  ["dump-raw", "dump-pe"].forEach(function (operation)
+  {
+    uiElement("cell-" + operation).addEventListener("click", function ()
+    {
+      var location = state.copyMenu && state.copyMenu.memoryLocation;
+      if (!memoryDumpAvailable(location, operation))
+      {
+        return;
+      }
+      closeCopyMenu(false);
+      state.memory.dump = { operation: operation, location: location, saving: false };
+      uiElement("memory-dump-title").textContent = operation + " / " + location.space + " " + location.address +
+        (operation === "dump-pe" ? " / containing module" : "");
+      var snapshot = location.origin.snapshot;
+      var length = uiElement("memory-dump-length");
+      length.disabled = operation === "dump-pe";
+      length.value = String(snapshot.bytes.length - Number(BigInt(location.address) - snapshot.address));
+      setHidden(uiElement("memory-dump-length-field"), length.disabled);
+      uiElement("memory-dump-path").value = "";
+      uiElement("memory-dump-error").textContent = "";
+      setHidden(uiElement("memory-dump"), false);
+      updateMemoryActions();
+      uiElement("memory-dump-path").focus();
+    });
+  });
+
+  uiElement("btn-memory-dump-cancel").addEventListener("click", function ()
+  {
+    if (state.memory.dump && state.memory.dump.saving)
+    {
+      els.btnCancel.click();
+      return;
+    }
+    closeMemoryDump();
+    uiElement("memory-grid").focus();
+  });
+  uiElement("memory-dump").addEventListener("submit", function (event)
+  {
+    event.preventDefault();
+    var draft = state.memory.dump;
+    if (!draft || !memoryDumpAvailable(draft.location, draft.operation))
+    {
+      return;
+    }
+    var location = draft.location;
+    var path = uiElement("memory-dump-path").value;
+    var raw = draft.operation === "dump-raw";
+    var length = raw ? uiElement("memory-dump-length").value : "";
+    if (!path.trim() || /["\u0000-\u001f]/.test(path) || /[\\/]$/.test(path))
+    {
+      uiElement("memory-dump-error").textContent = "Enter an output file path without quotes.";
+      return;
+    }
+    if (raw && (!/^[1-9][0-9]{0,7}$/.test(length) || Number(length) > 67108864 ||
+      BigInt(location.address) + BigInt(length) - 1n > 0xffffffffffffffffn))
+    {
+      uiElement("memory-dump-error").textContent = "Choose 1 to 67108864 bytes within the address space.";
+      return;
+    }
+    var command = draft.operation + " " + location.address + (raw ? " 0x" + Number(length).toString(16) : "") +
+      ' "' + path + '"' + (location.space === "physical" ? " /phys" : "");
+    uiElement("memory-dump-error").textContent = "";
+    executeCurrentInput({ operation: draft.operation, source: location.source, path: path, length: length }, null, command);
+  });
+
+  function renderMemoryPte()
+  {
+    var node = uiElement("memory-pte");
+    var snapshot = state.memory.snapshot;
+    node.title = "";
+    if (!snapshot || snapshot.space === "physical")
+    {
+      node.textContent = snapshot ? "PTE / Not applicable to physical addresses" : "";
+      return;
+    }
+    var address = snapshot.address + BigInt(state.memory.selectedOffset);
+    var page = Array.isArray(snapshot.pageTables) && snapshot.pageTables.find(function (entry)
+    {
+      return entry && entry.kind === "PageTranslation" && entry.va === memoryHex(address & ~0xfffn);
+    });
+    var prefix = "PTE" + (memoryCurrent() ? "" : " (previous snapshot)") + " / ";
+    var entries = page && page.entries;
+    var leaf = Array.isArray(entries) && entries[entries.length - 1];
+    var levels = ["", "PTE", "PDE", "PDPTE", "PML4E", "PML5E"];
+    var level = leaf && /^[1-5]$/.test(leaf.level) && levels[leaf.level];
+    var bits = level && /^0x[0-9a-f]{16}$/i.test(leaf.value) ? BigInt(leaf.value) : null;
+    if (bits !== null)
+    {
+      node.title = "VA " + memoryHex(address) + " / " + level + " slot (physical) " + leaf.address + " / DTB " + page.dtb;
+    }
+    if (page && page.error === "mapping not present" && bits !== null && !(bits & 1n))
+    {
+      node.textContent = prefix + level + " " + leaf.value + " [P=0] / mapping not present";
+      return;
+    }
+    if (!page || page.error || bits === null || !(bits & 1n) || Number(leaf.level) > 3 ||
+      typeof page.writable !== "boolean" || typeof page.executable !== "boolean")
+    {
+      node.textContent = prefix + (page && page.error || (typeof snapshot.pageTables === "string" && snapshot.pageTables) || "Unavailable");
+      return;
+    }
+    var sizes = ["", "4 KiB", "2 MiB", "1 GiB"];
+    var flags = ["P", bits & 2n ? "RW" : "RO", bits & 4n ? "User" : "Supervisor", bits >> 63n ? "NX" : "X"];
+    for (var [mask, name] of [[8n, "PWT"], [16n, "PCD"], [32n, "A"], [64n, "D"], [256n, "G"],
+      [leaf.level === "1" ? 128n : 4096n, "PAT"]])
+    {
+      if (bits & mask)
+      {
+        flags.push(name);
+      }
+    }
+    node.textContent = prefix + sizes[leaf.level] + " " + level + " " + leaf.value + " [" + flags.join(" ") +
+      "] / Effective " + (page.writable ? "RW" : "RO") + " " + (page.executable ? "X" : "NX");
   }
 
   function updateMemorySummary()
@@ -5484,6 +5624,7 @@
     uiElement("memory-notice").textContent = notice;
     setHidden(uiElement("memory-notice"), !notice);
     updateMemoryActions();
+    renderMemoryPte();
     renderMemoryEvidence();
   }
 
@@ -5492,9 +5633,10 @@
     return uiElement("memory-row-width").value === "8" ? 8 : 16;
   }
 
-  function chooseMemoryRow(index)
+  function chooseMemoryRow(index, cellOffset)
   {
     state.memory.selected = index;
+    state.memory.selectedOffset = index < 0 ? 0 : index * memoryRowBytes() + (cellOffset || 0);
     Array.prototype.forEach.call(uiElement("memory-rows").children, function (row, position)
     {
       var selected = index === position;
@@ -5507,9 +5649,10 @@
     });
     var snapshot = state.memory.snapshot;
     uiElement("memory-position").textContent = snapshot && index >= 0 ?
-      "Selected " + memoryHex(snapshot.address + BigInt(index * memoryRowBytes())) : "No memory selected";
+      "Selected " + memoryHex(snapshot.address + BigInt(state.memory.selectedOffset)) : "No memory selected";
     uiElement("memory-grid").setAttribute("aria-activedescendant", index >= 0 ? "memory-row-" + index : "");
     renderMemoryEvidence();
+    renderMemoryPte();
   }
 
   function renderMemoryRows()
@@ -5566,40 +5709,51 @@
         row.setAttribute("role", "row");
         row.setAttribute("aria-rowindex", String(rowIndex + 2));
         row.style.gridTemplateColumns = template;
-        function addCell(text, copied, label, navigation)
+        function addCell(text, copied, label, offset, addressColumn)
         {
           var cell = document.createElement("span");
           cell.setAttribute("role", "gridcell");
           cell.textContent = text;
           cell.title = label;
-          if (copied !== null)
+          var location = inspectionAddressNavigation("memory", snapshot,
+            { address: memoryHex(address + BigInt(offset)), addressSpace: snapshot.space }, rowIndex, offset);
+          function selectAddress()
           {
-            bindCopyValue(cell, function ()
+            if (state.memory.selected !== rowIndex || state.memory.selectedOffset !== rowIndex * rowBytes + offset)
             {
-              return copied;
-            }, label, "Copy " + label, function ()
-            {
-              chooseMemoryRow(rowIndex);
-            }, function ()
-            {
-              return JSON.stringify({ address: memoryHex(address), addressSpace: snapshot.space, bytes: bytes }, null, 2);
-            }, navigation);
+              chooseMemoryRow(rowIndex, offset);
+            }
           }
-          else
+          cell.addEventListener("focus", selectAddress);
+          bindCopyValue(cell, function ()
           {
-            cell.className = "memory-unreadable";
-            cell.title = label + " / Click for read details";
-            cell.addEventListener("click", function (event)
+            return copied;
+          }, label, copied === null ? "Read details for " + label : "Copy " + label, selectAddress, function ()
+          {
+            return JSON.stringify({ address: memoryHex(address), addressSpace: snapshot.space, bytes: bytes }, null, 2);
+          }, addressColumn ? location : null, location);
+          if (copied === null)
+          {
+            cell.classList.add("memory-unreadable");
+            cell.title = label + " / Click for read details; right-click for dump options";
+            function openDetails(event)
             {
               event.stopPropagation();
-              chooseMemoryRow(rowIndex);
+              selectAddress();
               setMemoryEvidence(true);
+            }
+            cell.addEventListener("click", openDetails);
+            cell.addEventListener("keydown", function (event)
+            {
+              if (!event.repeat && !event.isComposing && (event.key === "Enter" || event.key === " "))
+              {
+                openDetails(event);
+              }
             });
           }
           row.appendChild(cell);
         }
-        addCell(memoryHex(address), memoryHex(address), "address " + memoryHex(address),
-          inspectionAddressNavigation("memory", snapshot, { address: memoryHex(address), addressSpace: snapshot.space }, rowIndex));
+        addCell(memoryHex(address), memoryHex(address), "address " + memoryHex(address), 0, true);
         for (var offset = 0; offset < rowBytes; offset += width)
         {
           var unit = bytes.slice(offset, offset + width);
@@ -5611,7 +5765,7 @@
           {
             return value.toString(16).padStart(2, "0");
           }).join("") : "??".repeat(width);
-          addCell(hex, known ? "0x" + hex : null, (width * 8) + "-bit value at " + memoryHex(address + BigInt(offset)));
+          addCell(hex, known ? "0x" + hex : null, (width * 8) + "-bit value at " + memoryHex(address + BigInt(offset)), offset);
         }
         var ascii = bytes.map(function (value)
         {
@@ -5619,7 +5773,7 @@
         }).join("");
         if (asciiVisible)
         {
-          addCell(ascii, ascii, "ASCII display at " + memoryHex(address));
+          addCell(ascii, ascii, "ASCII display at " + memoryHex(address), 0);
         }
         row.addEventListener("click", function ()
         {
@@ -5629,7 +5783,9 @@
         container.appendChild(row);
       })(index);
     }
-    chooseMemoryRow(state.memory.selected < rowCount ? state.memory.selected : -1);
+    var selectedOffset = state.memory.selectedOffset;
+    chooseMemoryRow(state.memory.selected >= 0 && selectedOffset < rowCount * rowBytes ? Math.floor(selectedOffset / rowBytes) : -1,
+      selectedOffset % rowBytes);
   }
 
   function readMemory(source)
@@ -5723,7 +5879,9 @@
       return readPage().then(function ()
       {
         memory.snapshot = { address: address, space: space, bytes: bytes, stamp: result.data.target, resultId: result.resultId,
-          expression: expression, evidence: checkedMemoryEvidence((result.data.analysis || {}).memoryRead, address, space, bytes) };
+          expression: expression, pageTables: result.pageTables,
+          evidence: checkedMemoryEvidence((result.data.analysis || {}).memoryRead, address, space, bytes) };
+        closeMemoryDump();
         memory.failedRead = null;
         memory.selected = -1;
         uiElement("memory-address").value = memoryHex(address);
@@ -5760,16 +5918,7 @@
     uiElement(id).addEventListener("change", updateMemoryActions);
   });
   uiElement("memory-format").addEventListener("change", renderMemoryRows);
-  var previousMemoryRowBytes = memoryRowBytes();
-  uiElement("memory-row-width").addEventListener("change", function ()
-  {
-    if (state.memory.selected >= 0)
-    {
-      state.memory.selected = Math.floor(state.memory.selected * previousMemoryRowBytes / memoryRowBytes());
-    }
-    previousMemoryRowBytes = memoryRowBytes();
-    renderMemoryRows();
-  });
+  uiElement("memory-row-width").addEventListener("change", renderMemoryRows);
   uiElement("memory-ascii").addEventListener("change", renderMemoryRows);
   ["prev", "next"].forEach(function (direction)
   {
@@ -10984,7 +11133,7 @@
 
     appendCommandEcho(command);
 
-    if (binding && binding.resultId)
+    if (binding)
     {
       executeNow(command, null, binding, screen);
     }
@@ -11175,10 +11324,31 @@
     state.busy = true;
     setStatusBusy(true);
     phase("Queued");
-    var method = binding ? "navigateResult" : (plan ? "executePlan" : "execute");
+    var method = binding ? (binding.source ? "memoryDump" : "navigateResult") : (plan ? "executePlan" : "execute");
     var params = binding || (plan ? { planId: plan.planId, approvalToken: plan.approvalToken } : { command: command });
+    var draft = method === "memoryDump" ? state.memory.dump : null;
+    if (draft)
+    {
+      draft.saving = true;
+      updateMemoryActions();
+    }
     send(method, params).then(function (reply) {
       state.currentRequest = "";
+      var result = (reply && reply.result) || {};
+      var saved = draft && reply && reply.ok && result.artifactCommitted === true;
+      if (draft && draft === state.memory.dump)
+      {
+        draft.saving = false;
+        if (saved)
+        {
+          closeMemoryDump();
+          uiElement("memory-grid").focus();
+        }
+        else
+        {
+          uiElement("memory-dump-error").textContent = (reply && reply.error) || result.error || result.retentionError || "Memory export failed.";
+        }
+      }
       if (!reply || !reply.ok) {
         appendLine("[kndbgx] " + ((reply && reply.error) || "request failed"), reply && reply.outcomeUnknown ? "t-warn" : "t-error");
         phase("Failed");
@@ -11186,7 +11356,6 @@
         if (reply && reply.outcomeUnknown) { phase("Outcome unknown"); }
         return;
       }
-      var result = reply.result || {};
       if (result.currentTarget)
       {
         state.target = result.currentTarget;
@@ -11197,7 +11366,11 @@
         updateInputUI();
       }
       if (result.cls) { clearOutput(); }
-      if (result.ok === false) { appendLine("[kndbgx] " + (result.error || result.retentionError || "execution incomplete"), "t-error"); }
+      if (result.ok === false)
+      {
+        var message = result.error || result.retentionError || reply.error || "Execution incomplete.";
+        appendLine("[kndbgx] " + (saved ? "Dump saved to " + binding.path + ". " : "") + message, saved ? "t-warn" : "t-error");
+      }
       var capture = result.data && result.data.commandId === "breakpoints" ? captureBreakpoints(result).catch(function (error)
       {
         state.breakpoints.error = error.message;
@@ -11401,7 +11574,10 @@
       workspaceGeometryObserver.observe(uiElement(id));
     });
   }
-  els.btnRun.addEventListener("click", executeCurrentInput);
+  els.btnRun.addEventListener("click", function ()
+  {
+    executeCurrentInput();
+  });
   els.resultHistory.addEventListener("change", function () { loadResult(els.resultHistory.value); });
   uiElement("result-id-input").addEventListener("keydown", function (event)
   {
@@ -11725,7 +11901,7 @@
   function operationTitle(operation)
   {
     var phaseLabel = operation.phase === "CancelRequested" ? "Cancellation requested" : operation.phase;
-    var methodLabel = { execute: "Command", saveLog: "Export", memoryRead: "Read memory", disassemblyRead: "Read disassembly",
+    var methodLabel = { execute: "Command", saveLog: "Export", memoryRead: "Read memory", memoryDump: "Save memory dump", disassemblyRead: "Read disassembly",
       navigateResult: "Open address", processAction: "Process action", previewWrite: "Review change", executePlan: "Apply change",
       breakpointPlan: "Review breakpoint", breakpointApply: "Change breakpoint", debuggerAction: "Execution control",
       status: "Check context", completeSymbols: "Find symbols", symbolModules: "Read module inventory",

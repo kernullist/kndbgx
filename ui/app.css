@@ -1332,6 +1332,27 @@ body.inspection-floating
   overflow: auto;
   border-top: 1px solid var(--line);
 }
+#memory-dump
+{
+  display: grid;
+  gap: 6px;
+  padding: 8px 12px;
+  border-block: 1px solid var(--line);
+}
+#memory-dump label
+{
+  display: grid;
+  gap: 3px;
+}
+#memory-dump input
+{
+  min-width: 0;
+  width: 100%;
+}
+#memory-dump-error:empty, #memory-pte:empty
+{
+  display: none;
+}
 .memory-row
 {
   display: grid;

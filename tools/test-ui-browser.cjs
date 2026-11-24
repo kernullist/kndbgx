@@ -411,9 +411,16 @@ async function main()
                             capture: { kind: "KernelRemote", class: "1", qualifier: "0", dumpFlags: null },
                             attempts: [{ address: "0x" + address.toString(16).padStart(16, "0"), requested: String(length), read: "7",
                                 status: "Partial", nativeError: { domain: "HRESULT", code: "0x0000000080004005" } }] } : undefined;
-                        reply(request, { resultId: id, rowCount: String(length / 16), data: {
+                        reply(request, { resultId: id, rowCount: String(length / 16), pageTables: options.pageTables, data: {
                             commandId: params.space === "physical" ? "!db" : "db", status: "Partial", target: stamp,
                             analysis: { memoryRead: memoryEvidence } } });
+                    }
+                    else if (request.method === "memoryDump")
+                    {
+                        const id = params.operation + "-" + request.requestId;
+                        fixtures[id] = [{ kind: "DumpArtifact", path: params.path }];
+                        reply(request, { ok: true, artifactCommitted: true, resultId: id, rowCount: "1", outputLength: "0",
+                            data: { commandId: params.operation, target: stamp, status: "Success" } });
                     }
                     else if (request.method === "disassemblyRead")
                     {
@@ -7733,6 +7740,47 @@ async function main()
                     Array.from(document.querySelectorAll("[title], [aria-label]")).map(node =>
                         (node.getAttribute("title") || "") + " " + (node.getAttribute("aria-label") || "")).join(" "));
                 assert.doesNotMatch(labels, /\b(evidence|contract)\b/i);
+            }
+            finally
+            {
+                await local.close();
+            }
+        });
+        await check("T-UI-BROWSER Memory PTE and dump actions in docked and floating views", async () =>
+        {
+            const { local, workspace } = await floatingWorkspace({ pageTables: [
+                { kind: "PageTranslation", va: "0xffff800000000000",
+                    entries: [{ level: "1", value: "0x8000000001023001" }], writable: false, executable: false },
+                { kind: "PageTranslation", va: "0xffff800000001000",
+                entries: [{ level: "1", value: "0x8000000001023003" }], writable: true, executable: false }] });
+            try
+            {
+                await workspace.locator("#tab-memory-view").click();
+                await workspace.locator("#memory-address").fill("0xffff800000000fff");
+                await workspace.locator("#memory-size").selectOption("64");
+                await workspace.locator("#btn-memory-read").click();
+                await workspace.locator("#memory-pte").filter({ hasText: "Effective RO NX" }).waitFor();
+                await workspace.locator("#memory-grid").press("Home");
+                await workspace.locator("#memory-row-0 [role=gridcell]").nth(1).focus();
+                await workspace.keyboard.press("Tab");
+                await workspace.locator("#memory-pte").filter({ hasText: "Effective RW NX" }).waitFor();
+                for (const operation of ["dump-raw", "dump-pe"])
+                {
+                    const view = operation === "dump-raw" ? workspace : await detachInspectionView(workspace, "memory");
+                    await view.locator("#memory-row-1 [role=gridcell]").nth(3).click({ button: "right" });
+                    await view.locator("#cell-" + operation).click();
+                    assert.match(await view.locator("#memory-dump-title").textContent(), /0xffff800000001011/);
+                    const path = "C:\\case files\\" + operation + ".bin";
+                    await view.locator("#memory-dump-path").fill(path);
+                    await view.locator("#btn-memory-dump-run").click();
+                    await view.locator("#memory-dump").waitFor({ state: "hidden" });
+                    const params = await workspace.evaluate(() => window.knTestRequests.filter(v => v.method === "memoryDump").at(-1).params);
+                    assert.equal(params.operation, operation);
+                    assert.equal(params.source.index, "1");
+                    assert.equal(params.source.byteOffset, "2");
+                    assert.equal(params.path, path);
+                    assert.equal(params.length, operation === "dump-raw" ? "46" : "");
+                }
             }
             finally
             {

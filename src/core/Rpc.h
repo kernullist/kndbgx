@@ -9,7 +9,7 @@ namespace kncore
 inline bool RpcNeedsWorker(const std::wstring &method)
 {
     return method == L"execute" || method == L"status" || method == L"previewWrite" || method == L"executePlan" || method == L"saveLog" ||
-           method == L"navigateResult" || method == L"processAction" || method == L"memoryRead" || method == L"disassemblyRead" ||
+           method == L"navigateResult" || method == L"processAction" || method == L"memoryRead" || method == L"memoryDump" || method == L"disassemblyRead" ||
            method == L"breakpointPlan" || method == L"breakpointApply" || method == L"debuggerAction" || method == L"completeSymbols" ||
            method == L"symbolModules" || method == L"symbolHealth";
 }
@@ -51,6 +51,9 @@ inline bool RpcShape(const knjson::Value &request, std::wstring &reason)
                               {L"expectedStamp", knjson::Type::Object}}},
         {L"classify", {{L"command", knjson::Type::String}}},
         {L"execute", {{L"command", knjson::Type::String}}},
+        {L"memoryDump",
+         {{L"source", knjson::Type::Object}, {L"operation", knjson::Type::String},
+          {L"length", knjson::Type::String}, {L"path", knjson::Type::String}}},
         {L"memoryRead",
          {{L"expression", knjson::Type::String}, {L"space", knjson::Type::String},
           {L"length", knjson::Type::String}, {L"source", knjson::Type::Object}, {L"expectedStamp", knjson::Type::Object}}},

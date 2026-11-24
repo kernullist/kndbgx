@@ -22,6 +22,7 @@
 #include "../cmd/Jobs.h"
 #include "../engine/EngineCore.h"
 #include "../engine/EventInfo.h"
+#include "../engine/PageWalk.h"
 #include "../engine/SymbolQuery.h"
 #include "../engine/SymbolHealth.h"
 #include "../util/Log.h"
@@ -42,6 +43,50 @@ knjson::Value InstructionPointer(knengine::DbgSession &session, bool stopped)
     ULONG64 address = 0;
     return stopped && SUCCEEDED(session.Client()->QueryInterface(IID_PPV_ARGS(&registers))) &&
                    registers->GetInstructionOffset(&address) == S_OK ? knjson::Value(kncore::Hex(address)) : knjson::Value();
+}
+
+knjson::Value MemoryPageTables(knengine::DbgSession &session, const kncore::SessionStamp &stamp,
+                               const knjson::Value &read, const std::function<bool()> &cancelled)
+{
+    uint64_t address = 0;
+    uint64_t length = 0;
+    if (read.Get(L"addressSpace").AsString(L"") != L"virtual" ||
+        !kncore::ParseUnsigned(read.Get(L"address").AsString(L""), 16, &address) ||
+        !kncore::ParseUnsigned(read.Get(L"length").AsString(L""), 10, &length) || length > 1024 || !kncore::ValidRange(address, length))
+    {
+        return {};
+    }
+    kncore::TargetArchitecture architecture;
+    if (!kncmd::KernelArchitecture(session, &architecture))
+    {
+        return knjson::Value(L"Requires an x64 kernel target with readable CR4");
+    }
+    // ReadVirtual uses the debugger's implicit process. The vtop override and
+    // the processor's CR3 can both refer to a different address space.
+    const auto process = stamp.Context.ImplicitProcess.value_or(0);
+    Microsoft::WRL::ComPtr<IDebugDataSpaces> spaces;
+    USHORT dtbOffset = 0;
+    ULONG returned = 0;
+    uint64_t dtb = 0;
+    if (!architecture.KernelPointer(process) || FAILED(session.Client()->QueryInterface(IID_PPV_ARGS(&spaces))) ||
+        spaces->ReadDebuggerData(DEBUG_DATA_OffsetEprocessDirectoryTableBase, &dtbOffset, sizeof(dtbOffset), &returned) != S_OK ||
+        returned != sizeof(dtbOffset) || dtbOffset == 0 || !kncore::ValidRange(process, dtbOffset + sizeof(dtb)) ||
+        !session.ReadExact(kncore::AddressSpace::Virtual, process + dtbOffset, &dtb) || dtb == 0)
+    {
+        return knjson::Value(L"Directory table base unavailable for the debugger's selected process");
+    }
+    auto pages = knjson::Value::MakeArray();
+    for (uint64_t offset = 0; offset < length; offset += 0x1000 - ((address + offset) & 0xfff))
+    {
+        if ((cancelled && cancelled()) || session.Cancelled() || session.RefreshStamp() != stamp)
+        {
+            return knjson::Value(L"Page table capture interrupted or debugger context changed");
+        }
+        knengine::PageWalkResult walk;
+        knengine::WalkPageTables(session, architecture, (address + offset) & ~0xfffULL, dtb, &walk);
+        pages.Push(knengine::PageWalkObservation(walk));
+    }
+    return session.RefreshStamp() == stamp ? pages : knjson::Value(L"Debugger context changed during page table capture");
 }
 
 knjson::Value CurrentProcessResult(knengine::DbgSession &session, const knengine::SessionStatus &status,
@@ -390,6 +435,10 @@ knjson::Value ExecuteResult(knengine::DbgSession &session, const std::wstring &c
         const kncmd::CommandResult dispatched = kncmd::DispatchCommand(session, commandLine, expected, cancelled, input);
 
         result.Set(L"ok", knjson::Value(dispatched.Ok));
+        if (dispatched.Data.Analysis.Get(L"artifactCommitted").AsBool(false))
+        {
+            result.Set(L"artifactCommitted", knjson::Value(true));
+        }
         const bool inspection = kncmd::IsResultInspection(dispatched.Data.CommandId);
         const auto retained = inspection ? nullptr
                               : dispatched.ResultId.empty()
@@ -501,7 +550,7 @@ knjson::Value HandleRequest(const knjson::Value &request, knengine::DbgSession *
     }
     const bool engineMethod = method == L"status" || (method == L"execute" && !detachedRequest) || method == L"previewWrite" ||
                               method == L"executePlan" || method == L"navigateResult" || method == L"processAction" || method == L"memoryRead" ||
-                              method == L"disassemblyRead" || method == L"breakpointPlan" || method == L"breakpointApply" ||
+                              method == L"memoryDump" || method == L"disassemblyRead" || method == L"breakpointPlan" || method == L"breakpointApply" ||
                               method == L"debuggerAction" || method == L"completeSymbols" ||
                               method == L"symbolModules" || method == L"symbolHealth";
     const bool bindsTarget = (engineMethod && method != L"status") ||
@@ -880,6 +929,27 @@ knjson::Value HandleRequest(const knjson::Value &request, knengine::DbgSession *
                 break;
             }
             result = ExecuteResult(*ownedSession, *command, &stamp, cancelled);
+            if (params.Get(L"space").AsString(L"") == L"virtual" && ownedSession->RefreshStamp() == stamp &&
+                kncore::MatchesStamp(stamp, result.Get(L"data").Get(L"target")))
+            {
+                result.Set(L"pageTables", MemoryPageTables(*ownedSession, stamp, result.Get(L"data").Get(L"analysis").Get(L"memoryRead"), cancelled));
+            }
+            break;
+        }
+
+        if (method == L"memoryDump")
+        {
+            knengine::SessionStatus status = {};
+            ownedSession->QueryStatus(&status);
+            const auto source = kncore::Results().Find(params.Get(L"source").Get(L"resultId").AsString(L""));
+            const auto command = source ? kncore::MemoryDumpCommand(params, *source, ownedSession->RefreshStamp(), status.KernelMode) : std::nullopt;
+            if (!status.Connected || !status.Stopped || !command)
+            {
+                ok = false;
+                result = knjson::Value(L"Invalid dump parameters or expired memory capture. Check the file path and read the stopped target again.");
+                break;
+            }
+            result = ExecuteResult(*ownedSession, *command, &source->Data.Stamp, cancelled);
             break;
         }
 
@@ -1194,6 +1264,10 @@ knjson::Value HandleRequest(const knjson::Value &request, knengine::DbgSession *
         bounded.Set(L"rowsDelivery", knjson::Value(L"NotRequested"));
         bounded.Set(L"findingsDelivery", knjson::Value(L"NotRequested"));
         bounded.Set(L"outputLength", result.Get(L"outputLength"));
+        if (result.Get(L"artifactCommitted").AsBool(false))
+        {
+            bounded.Set(L"artifactCommitted", knjson::Value(true));
+        }
         if (!result.Get(L"currentTarget").IsNull())
         {
             bounded.Set(L"currentTarget", result.Get(L"currentTarget"));

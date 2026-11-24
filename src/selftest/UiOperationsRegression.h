@@ -106,6 +106,7 @@ template <typename Check> void RunUiOperationsRegression(Check check)
     auto hugeResult = result;
     hugeResult.Set(L"data", knjson::Value(std::wstring(100000, L'x')));
     hugeResult.Set(L"resultId", knjson::Value(L"huge-result"));
+    hugeResult.Set(L"artifactCommitted", knjson::Value(true));
     auto currentTarget = knjson::Value::MakeObject();
     currentTarget.Set(L"sessionId", knjson::Value(L"1"));
     currentTarget.Set(L"targetGeneration", knjson::Value(L"3"));
@@ -118,6 +119,8 @@ template <typename Check> void RunUiOperationsRegression(Check check)
           "third.T10.terminal-receipts-bound-large-metadata-and-preserve-result-identity");
     check(receipt.Get(L"result").Get(L"currentTarget").Write() == currentTarget.Write(),
           "ui-command.compact-receipt-preserves-current-target");
+    check(receipt.Get(L"result").Get(L"artifactCommitted").AsBool(false),
+          "memory-dump.compact-receipt-preserves-committed-file");
     RpcGate gate;
     gate.Navigate(12, L"fresh-document-token");
     std::wstring reason;

@@ -68,6 +68,13 @@ function harness(options = {})
                     callback({ target: this, preventDefault: noop, stopPropagation: noop, ...event });
                 }
             },
+            click()
+            {
+                if (!this.disabled)
+                {
+                    this.fire("click");
+                }
+            },
             appendChild(child)
             {
                 this.children.push(child);
@@ -1160,6 +1167,8 @@ await check("T-UI-KERNEL investigation selection drafts input without executing"
     assert.equal(workflow.value, "");
     assert.equal(app.focused()?.id, "prompt");
     app.nodes.get("btn-run").fire("click");
+    assert.equal(app.latest("classify")?.params.command, "triage power");
+    assert.equal(app.latest("navigateResult"), undefined);
     assert.equal(workflow.disabled, true);
     const executingDraft = app.nodes.get("prompt").value;
     workflow.value = "triage memory";
@@ -5054,7 +5063,7 @@ async function memoryReply(app, bytes, options = {})
 {
     const id = options.id || "memory-view";
     const rows = memoryRows(bytes, options.address, options.space);
-    await app.reply("memoryRead", { ok: true, result: { resultId: id, rowCount: String(rows.length),
+    await app.reply("memoryRead", { ok: true, result: { resultId: id, rowCount: String(rows.length), pageTables: options.pageTables,
         data: { commandId: options.space === "physical" ? "!db" : "db", target: options.target || stamp,
             status: bytes.includes(null) ? "Partial" : "Success", analysis: { memoryRead: options.evidence } } } });
     for (let offset = 0; offset < rows.length; offset += 2)
@@ -5089,6 +5098,114 @@ async function memoryApp(options = {})
     app.nodes.get("memory-size").value = "64";
     return app;
 }
+
+await check("T-UI-MEMORY-PTE unaligned view and group selection follow the captured page without a second read", async () =>
+{
+    const app = await memoryApp();
+    app.nodes.get("btn-memory-read").fire("click");
+    const pageTables = [
+        { kind: "PageTranslation", va: "0xffff800000000000", entries: [{ level: "1", value: "0x00000000000001e7" }],
+            writable: false, executable: false },
+        { kind: "PageTranslation", va: "0xffff800000001000", entries: [{ level: "2", value: "0x8000000000201083" }],
+            writable: true, executable: false }];
+    await memoryReply(app, Array(64).fill(0), { address: "0xffff800000000ffc", pageTables });
+    const count = app.messages.length;
+    const pte = app.nodes.get("memory-pte");
+    assert.match(pte.textContent, /4 KiB PTE.*P RW User X A D G PAT.*Effective RO NX/);
+    app.nodes.get("memory-format").value = "4";
+    app.nodes.get("memory-format").fire("change");
+    app.nodes.get("memory-rows").children[0].children[2].fire("contextmenu");
+    assert.match(pte.textContent, /2 MiB PDE.*P RW Supervisor NX PAT.*Effective RW NX/);
+    assert.match(app.nodes.get("memory-position").textContent, /0xffff800000001000/);
+    assert.equal(app.messages.length, count);
+    app.nodes.get("btn-memory-read").fire("click");
+    await memoryReply(app, Array(64).fill(0), { pageTables: [{ kind: "PageTranslation", va: "0xffff800000001000",
+        entries: [{ level: "3", value: "0x0000000000000000" }], error: "mapping not present" }] });
+    assert.match(pte.textContent, /PDPTE 0x0000000000000000 \[P=0\].*mapping not present/);
+    assert.doesNotMatch(pte.textContent, /Effective/);
+});
+
+await check("T-UI-MEMORY-DUMP right-click binds the exact cell across formats, handles missing bytes and prevents stale exports", async () =>
+{
+    for (const operation of ["dump-raw", "dump-pe"])
+    {
+        const app = await memoryApp();
+        const space = operation === "dump-raw" ? "physical" : "virtual";
+        app.nodes.get("memory-space").value = space;
+        app.nodes.get("btn-memory-read").fire("click");
+        await memoryReply(app, Array(64).fill(null), { space });
+        app.nodes.get("memory-row-width").value = "8";
+        app.nodes.get("memory-row-width").fire("change");
+        app.nodes.get("memory-format").value = "2";
+        app.nodes.get("memory-format").fire("change");
+        const cell = app.nodes.get("memory-rows").children[3].children[2];
+        cell.fire("contextmenu");
+        assert.equal(app.nodes.get("cell-dump-pe").disabled, space === "physical");
+        if (space === "physical")
+        {
+            assert.match(app.nodes.get("memory-pte").textContent, /physical addresses/);
+        }
+        app.nodes.get("cell-" + operation).fire("click");
+        assert.match(app.nodes.get("memory-dump-title").textContent, /0xffff80000000101a/);
+        assert.equal(app.nodes.get("memory-dump-length").value, "38");
+        assert.equal(app.nodes.get("memory-dump-length").disabled, operation === "dump-pe");
+        app.nodes.get("memory-dump-path").value = "C:\\case files\\test.bin";
+        app.nodes.get("memory-dump").fire("submit");
+        const request = app.latest("memoryDump");
+        assert.equal(request.params.operation, operation);
+        assert.equal(request.params.source.resultId, "memory-view");
+        assert.equal(request.params.source.index, "1");
+        assert.equal(request.params.source.byteOffset, "10");
+        assert.equal(request.params.path, "C:\\case files\\test.bin");
+        assert.equal(request.params.length, operation === "dump-raw" ? "38" : "");
+        assert.equal(app.nodes.get("memory-dump-path").readOnly, true);
+        assert.equal(app.nodes.get("memory-dump-length").readOnly, true);
+        await app.deliver(request, { ok: false, error: "Source result expired" });
+        assert.match(app.nodes.get("memory-dump-error").textContent, /Source result expired/);
+        assert.equal(app.nodes.get("memory-dump-path").readOnly, false);
+        await processStatus(app, { ...stamp, stopEpoch: "99" });
+        assert.equal(app.nodes.get("btn-memory-dump-run").disabled, true);
+        app.nodes.get("memory-dump").fire("submit");
+        assert.equal(app.messages.filter(item => item.method === "memoryDump").length, 1);
+    }
+});
+
+await check("T-UI-MEMORY-DUMP cancellation waits for the host and honors a committed file after a reporting failure", async () =>
+{
+    for (const committed of [false, true])
+    {
+        const app = await memoryApp();
+        app.nodes.get("btn-memory-read").click();
+        await memoryReply(app, Array(64).fill(0));
+        app.nodes.get("memory-rows").children[0].children[1].fire("contextmenu");
+        app.nodes.get("cell-dump-raw").click();
+        const path = " capture.bin";
+        app.nodes.get("memory-dump-path").value = path;
+        const form = app.nodes.get("memory-dump");
+        form.fire("submit");
+        const request = app.latest("memoryDump");
+        assert.equal(request.params.path, path);
+        app.nodes.get("btn-memory-dump-cancel").click();
+        assert.equal(app.latest("interrupt")?.params.requestId, request.requestId);
+        assert.equal(form.classList.contains("hidden"), false);
+        const result = committed ? { ok: false, artifactCommitted: true, retentionError: "Result retention budget exceeded" } :
+            { ok: false, error: "Cancelled" };
+        await app.deliver(request, { ok: true, result });
+        assert.equal(form.classList.contains("hidden"), committed);
+        if (committed)
+        {
+            const message = app.nodes.get("workspace-feedback-text").textContent;
+            assert.ok(message.includes(path) && message.includes(result.retentionError));
+        }
+        else
+        {
+            assert.match(app.nodes.get("memory-dump-error").textContent, /Cancelled/);
+            app.nodes.get("btn-memory-dump-cancel").click();
+            assert.equal(form.classList.contains("hidden"), true);
+        }
+        assert.equal(app.messages.filter(item => item.method === "memoryDump").length, 1);
+    }
+});
 
 function instructionRows(count, address = "0xffff800000001000")
 {

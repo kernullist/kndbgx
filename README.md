@@ -320,6 +320,8 @@ Select a result row and open **Row details**, then choose **Open Memory** or **D
 
 **Memory > Read options** chooses Virtual/Physical and byte count. Change byte/word/dword/qword display and ASCII using captured data; `??` marks unavailable bytes. **Read details** retains the context, ranges, transferred counts and native errors. `s <address> L<bytes> <byte...>` searches a bounded range.
 
+For x64 kernel virtual reads, **PTE** shows the selected cell's page size, raw leaf entry, flags and effective write/execute permissions. Right-click a cell and choose **dump-raw** to save bytes starting at that address. The default length extends to the end of the view. Physical reads automatically use `/phys`. Choose **dump-pe** on a virtual address to save the containing module in mapped-image layout. Enter an output file path and choose **Save dump**.
+
 <details>
 <summary>Address actions and saved memory-read details</summary>
 

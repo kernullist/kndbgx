@@ -77,6 +77,44 @@ inline std::optional<std::wstring> MemoryViewCommand(const knjson::Value &parame
     return std::wstring(space == L"physical" ? L"!db \"" : L"db \"") + expression + L"\" L" + Hex(length);
 }
 
+inline std::optional<std::wstring> MemoryDumpCommand(const knjson::Value &parameters, const StoredResult &source,
+                                                     const SessionStamp &current, bool kernelMode)
+{
+    const auto &binding = parameters.Get(L"source");
+    if ((source.Data.CommandId != L"db" && source.Data.CommandId != L"!db") ||
+        binding.Get(L"collection").AsString(L"") != L"rows" || !binding.Get(L"byteOffset").IsString())
+    {
+        return std::nullopt;
+    }
+    const auto location = ResolveStampedResultAddress(source, binding, current);
+    const auto path = parameters.Get(L"path").AsString(L"");
+    // Fixed byte addresses need a system and address space. User dumps often
+    // have no implicit kernel objects, and a stack frame is not required.
+    if (!location || !current.Context.System || (location->Space == L"virtual" &&
+        (!current.Context.Process || (kernelMode && !current.Context.ImplicitProcess.value_or(0)))) ||
+        path.find_first_not_of(L' ') == std::wstring::npos || path.ends_with(L'\\') || path.ends_with(L'/') || path.find(L'"') != std::wstring::npos ||
+        !ValidUtf16(path, false) || std::any_of(path.begin(), path.end(), [](wchar_t ch)
+        {
+            return ch < 32;
+        }))
+    {
+        return std::nullopt;
+    }
+    const auto operation = parameters.Get(L"operation").AsString(L"");
+    const auto length = parameters.Get(L"length").AsString(L"");
+    if (operation == L"dump-pe" && location->Space == L"virtual" && length.empty())
+    {
+        return operation + L" " + Hex(location->Address) + L" \"" + path + L"\"";
+    }
+    uint64_t bytes = 0;
+    if (operation == L"dump-raw" && ParseUnsigned(length, 10, &bytes) && bytes <= 0x4000000 && ValidRange(location->Address, bytes))
+    {
+        return operation + L" " + Hex(location->Address) + L" " + Hex(bytes) + L" \"" + path + L"\"" +
+               (location->Space == L"physical" ? L" /phys" : L"");
+    }
+    return std::nullopt;
+}
+
 inline knjson::Value MemoryByteRows(uint64_t address, AddressSpace space, std::span<const unsigned char> bytes,
                                    std::span<const unsigned char> valid)
 {

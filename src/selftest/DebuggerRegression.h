@@ -295,6 +295,49 @@ template <typename Check> void RunDebuggerRegression(Check check)
         binding.Set(L"byteOffset", knjson::Value(L"8"));
         check(BoundResultCommand(source, binding, source.Data.Stamp) == L"navigate va 0xffff800012345680",
               "workspace.memory-eight-byte-row-keeps-source-binding");
+        auto dump = knjson::Value::MakeObject();
+        source.Data.CommandId = L"db";
+        dump.Set(L"source", binding);
+        dump.Set(L"path", knjson::Value(L"C:\\dump files\\a;b.bin"));
+        dump.Set(L"length", knjson::Value(L"56"));
+        dump.Set(L"operation", knjson::Value(L"dump-raw"));
+        std::wstring dumpReason;
+        check(RpcNeedsWorker(L"memoryDump") && RpcShape(FixtureRpc(L"memoryDump", 1, dump), dumpReason) &&
+                  MemoryDumpCommand(dump, source, source.Data.Stamp, true) == L"dump-raw 0xffff800012345680 0x0000000000000038 \"C:\\dump files\\a;b.bin\"",
+              "memory-dump.raw-resolves-stored-byte-and-quotes-file");
+        auto userDump = source;
+        userDump.Data.Stamp.Context.ImplicitProcess.reset();
+        userDump.Data.Stamp.Context.ImplicitThread.reset();
+        userDump.Data.Stamp.Context.ScopeFrame.reset();
+        auto userBinding = binding;
+        userBinding.Set(L"expectedStamp", userDump.Data.Stamp.ToJson());
+        auto userParams = dump;
+        userParams.Set(L"source", userBinding);
+        check(MemoryDumpCommand(userParams, userDump, userDump.Data.Stamp, false).has_value() &&
+                  !MemoryDumpCommand(userParams, userDump, userDump.Data.Stamp, true) &&
+                  !BoundResultAddress(userDump, userBinding, userDump.Data.Stamp),
+              "memory-dump.user-process-does-not-require-kernel-objects-or-frame");
+        dump.Set(L"length", knjson::Value(L"67108865"));
+        check(!MemoryDumpCommand(dump, source, source.Data.Stamp, true), "memory-dump.rejects-oversized-range");
+        dump.Set(L"operation", knjson::Value(L"dump-pe"));
+        dump.Set(L"length", knjson::Value(L""));
+        check(MemoryDumpCommand(dump, source, source.Data.Stamp, true) == L"dump-pe 0xffff800012345680 \"C:\\dump files\\a;b.bin\"" &&
+                  !MemoryDumpCommand(dump, source, changed, true), "memory-dump.pe-preserves-interior-address-and-rejects-stale-stamp");
+        auto physical = source;
+        physical.Data.CommandId = L"!db";
+        auto physicalRow = memory;
+        physicalRow.Set(L"addressSpace", knjson::Value(L"physical"));
+        physical.Data.Rows = knjson::Value::MakeArray();
+        physical.Data.Rows.Push(physicalRow);
+        check(!MemoryDumpCommand(dump, physical, physical.Data.Stamp, true), "memory-dump.no-physical-pe");
+        dump.Set(L"length", knjson::Value(L"1"));
+        dump.Set(L"operation", knjson::Value(L"dump-raw"));
+        check(MemoryDumpCommand(dump, physical, physical.Data.Stamp, true) == L"dump-raw 0xffff800012345680 0x0000000000000001 \"C:\\dump files\\a;b.bin\" /phys",
+              "memory-dump.raw-keeps-physical-space");
+        dump.Set(L"path", knjson::Value(L"x\";g"));
+        check(!MemoryDumpCommand(dump, source, source.Data.Stamp, true), "memory-dump.rejects-embedded-quote");
+        dump.Set(L"path", knjson::Value(L"C:/captures/"));
+        check(!MemoryDumpCommand(dump, source, source.Data.Stamp, true), "memory-dump.rejects-directory-path");
         binding.Set(L"byteOffset", knjson::Value(L"16"));
         check(!BoundResultAddress(source, binding, source.Data.Stamp), "workspace.memory-offset-cannot-leave-retained-row");
         binding.Set(L"byteOffset", knjson::Value(8.0));

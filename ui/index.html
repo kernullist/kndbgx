@@ -250,8 +250,20 @@
           </div>
           <div id="memory-summary" class="memory-summary" role="status">Enter an address and choose Read.</div>
           <div id="memory-context" class="memory-summary"></div>
+          <div id="memory-pte" class="memory-summary" role="status"></div>
           <div id="memory-notice" class="notice hidden" role="status"></div>
           <div class="memory-evidence-tools"><button id="btn-memory-evidence" disabled aria-expanded="false" aria-controls="memory-evidence">Read details</button><span>Read results and unconfirmed causes</span></div>
+          <form id="memory-dump" class="hidden" aria-labelledby="memory-dump-title">
+            <strong id="memory-dump-title"></strong>
+            <label id="memory-dump-length-field" for="memory-dump-length">Length in bytes (max 64 MiB)
+              <input id="memory-dump-length" type="number" min="1" max="67108864" step="1" required />
+            </label>
+            <label for="memory-dump-path">Output file
+              <input id="memory-dump-path" placeholder="C:\captures\memory.bin" maxlength="16384" spellcheck="false" required />
+            </label>
+            <div><button id="btn-memory-dump-run" type="submit">Save dump</button> <button id="btn-memory-dump-cancel" type="button">Cancel</button></div>
+            <span id="memory-dump-error" role="status"></span>
+          </form>
           <section id="memory-evidence" class="memory-evidence hidden" role="region" aria-labelledby="memory-evidence-title">
             <header><h3 id="memory-evidence-title">Read details</h3><button id="btn-memory-evidence-close" class="quiet" aria-label="Close read details">Close</button></header>
             <p id="memory-evidence-attempt" class="hidden"></p>
@@ -336,6 +348,8 @@
       <button id="cell-copy-row" role="menuitem" tabindex="-1">Copy row as JSON</button>
       <button id="cell-open-memory" class="hidden" role="menuitem" tabindex="-1">Open Memory</button>
       <button id="cell-open-disassembly" class="hidden" role="menuitem" tabindex="-1">Open Disassembly</button>
+      <button id="cell-dump-raw" class="hidden" role="menuitem" tabindex="-1">dump-raw…</button>
+      <button id="cell-dump-pe" class="hidden" role="menuitem" tabindex="-1">dump-pe…</button>
     </div>
   </div>
   <script src="/app.js" defer></script>

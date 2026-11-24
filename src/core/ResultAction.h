@@ -49,10 +49,10 @@ struct ResultAddress
     std::wstring Space;
 };
 
-inline std::optional<ResultAddress> BoundResultAddress(const StoredResult &source, const knjson::Value &parameters,
-                                                       const SessionStamp &current)
+inline std::optional<ResultAddress> ResolveStampedResultAddress(const StoredResult &source, const knjson::Value &parameters,
+                                                                const SessionStamp &current)
 {
-    if (source.Id != parameters.Get(L"resultId").AsString(L"") || source.Data.Stamp != current || !current.Context.Complete() ||
+    if (source.Id != parameters.Get(L"resultId").AsString(L"") || source.Data.Stamp != current ||
         !MatchesStamp(source.Data.Stamp, parameters.Get(L"expectedStamp")))
     {
         return std::nullopt;
@@ -150,6 +150,12 @@ inline std::optional<ResultAddress> BoundResultAddress(const StoredResult &sourc
         return ResultAddress{address, space};
     }
     return std::nullopt;
+}
+
+inline std::optional<ResultAddress> BoundResultAddress(const StoredResult &source, const knjson::Value &parameters,
+                                                       const SessionStamp &current)
+{
+    return current.Context.Complete() ? ResolveStampedResultAddress(source, parameters, current) : std::nullopt;
 }
 
 inline std::optional<std::wstring> BoundResultCommand(const StoredResult &source, const knjson::Value &parameters,

@@ -439,6 +439,10 @@ Open an address from a result, or enter an address, symbol or expression directl
 
 ![Bytes and ASCII read from the selected callback routine](screenshots/memory.png)
 
+On x64 kernel targets, **PTE** shows the captured entry for the selected virtual address. It includes the page size, raw leaf flags and effective write and execute permissions across the page-table walk. If the walk stops at a non-present entry, the view shows its level and raw value. A physical read has no PTE.
+
+Right-click a value cell to export from its first byte. **dump-raw** defaults to the remaining bytes in the capture and accepts lengths up to 64 MiB. **dump-pe** saves the mapped module containing the selected virtual address. Both commands read the stopped target again when you choose **Save dump**. Use a new output filename on the debugger host. An incomplete read preserves any existing file. During a save, **Cancel** requests cancellation and the form waits for the host to report the outcome.
+
 **Read details** shows saved ranges, transferred counts and native errors without another target read. This capture read all 256 requested bytes. Readability alone does not establish pointer validity, allocation lifetime or ownership; a failed read does not establish why a page is missing.
 
 <details>

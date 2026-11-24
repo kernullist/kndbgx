@@ -134,7 +134,7 @@ class UiOperations
                 }
                 auto result = knjson::Value::MakeObject();
                 for (const auto field :
-                     {L"ok", L"resultId", L"path", L"rowCount", L"findingCount", L"outputLength", L"currentTarget"})
+                     {L"ok", L"resultId", L"path", L"rowCount", L"findingCount", L"outputLength", L"currentTarget", L"artifactCommitted"})
                 {
                     result.Set(field, reply.Get(L"result").Get(field));
                 }
