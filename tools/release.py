@@ -13,7 +13,7 @@ from privacy import check_repository, git_names, load_private_terms, private_pat
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-VERSION = "0.2.0-preview.9"
+VERSION = "0.2.0-preview.10"
 
 
 def digest(data):
@@ -243,7 +243,7 @@ def package(configuration, output, private_patterns=()):
              "runtime/dia/msdia140.dll": read_public_file(ROOT, "x64/Release/runtime/dia/msdia140.dll")}
     for name in ("LICENSE", "README.md", "README.ko.md", "THIRD_PARTY_NOTICES.md",
                  "docs/COMMANDS.md", "docs/command-contract.json",
-                 "docs/SUPPORT.md", "docs/VALIDATION.md", "docs/UX.md",
+                 "docs/SUPPORT.md", "docs/VALIDATION.md", "docs/UX.md", "docs/WINDBG-LOAD.md",
                  "deps/dependencies.lock.json", "deps/webview2/LICENSE.txt"):
         files[name] = read_public_file(ROOT, name)
     for screenshot in ("workspace.png", "command-palette.png", "result-columns.png",
