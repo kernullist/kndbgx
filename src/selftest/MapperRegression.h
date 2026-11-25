@@ -86,6 +86,22 @@ template <typename Check> void RunMapperRegression(Check check)
     check(MapperModuleInventoryUsable(true, false, 129, 129), "mapper.module-inventory-that-owns-drivers-is-usable");
     check(MapperModuleInventoryUsable(true, false, 0, 0), "mapper.inventory-without-driver-objects-stays-usable");
 
+    // The observed deficient session: 129 driver objects and a module list that owned one
+    // DriverStart. Explaining a single driver image is not describing the target, so that list
+    // cannot support an absence claim for any of the other 128.
+    check(!MapperModuleInventoryUsable(true, false, 129, 1),
+          "mapper.module-inventory-that-explains-one-of-129-drivers-is-not-usable");
+    // The same session after its list was reloaded owned 128 of the 129: the one image it does
+    // not own is the mapped driver this command exists to find, so that shape has to stay
+    // usable.
+    check(MapperModuleInventoryUsable(true, false, 129, 128),
+          "mapper.module-inventory-that-explains-all-but-one-driver-stays-usable");
+    // The boundary is a majority of the target's driver images, so a list that explains exactly
+    // half of them is still not the inventory those images were loaded into.
+    check(!MapperModuleInventoryUsable(true, false, 129, 64) && !MapperModuleInventoryUsable(true, false, 2, 1) &&
+              MapperModuleInventoryUsable(true, false, 129, 65),
+          "mapper.module-inventory-must-explain-a-majority-of-driver-images");
+
     check(MapperImageIdentity(facts) == L"pool tag Mapp", "mapper.identity-falls-back-to-the-pool-tag");
     auto withPdb = facts;
     withPdb.PdbPath = L"symbols/hidden.sys.pdb";
@@ -225,5 +241,65 @@ template <typename Check> void RunMapperRegression(Check check)
     mzOnly.PeMessage = L"declared image size exceeds the containing range";
     check(MapperRowDecision(mzOnly) == MapperRowDrop::MzPrefixOnly,
           "mapper.unverified-pe-headers-are-not-a-detection-row");
+
+    // A row claims that no loaded module owns the image, which is a statement about the module
+    // list. When that list did not describe the target's driver images, the claim is not
+    // available for any candidate the list does not own - observed live as 69 rows in a session
+    // whose list owned one of 129 driver starts - so the candidate is withheld and counted
+    // instead of being reported at low confidence.
+    auto deficientInventory = facts;
+    deficientInventory.ModuleInventoryVerified = false;
+    deficientInventory.ModuleInventoryNote = L"NoCollectedImageContainsAddress";
+    deficientInventory.DriverObjectLinked = true;
+    deficientInventory.DriverObject = 0xffffbd8161900000ULL;
+    deficientInventory.DriverObjectName = L"MapperTestDriver";
+    check(MapperRowDecision(deficientInventory) == MapperRowDrop::ModuleOwnershipUnverified,
+          "mapper.row-is-withheld-when-the-module-inventory-did-not-describe-the-target");
+    // A candidate inside a loaded module's range makes no absence claim, so it is still judged by
+    // the rules above while the deficiency is being counted.
+    auto insideUnusableInventory = deficientInventory;
+    insideUnusableInventory.InLoadedModuleList = true;
+    insideUnusableInventory.ModuleOwner = L"nt";
+    check(MapperRowDecision(insideUnusableInventory) == MapperRowDrop::None,
+          "mapper.module-range-candidate-survives-an-unusable-inventory");
+
+    // The summary line and the recorded limitations are where a reader sees what was withheld
+    // and what the ownership claims rested on, so both are checked here.
+    check(MapperModuleInventoryDeficiencyText(129, 1).find(L"1 of the 129") != std::wstring::npos,
+          "mapper.deficiency-text-carries-the-ownership-counts");
+
+    MapperSummaryCounts deficientCounts;
+    deficientCounts.Candidates = 27529;
+    deficientCounts.SweepSlots = 13383;
+    deficientCounts.ModuleOwnershipUnverified = 69;
+    deficientCounts.ModuleOwnedSkipped = 119;
+    deficientCounts.DriverObjects = 129;
+    deficientCounts.DriverStartsOwned = 1;
+    deficientCounts.Modules = 196;
+    deficientCounts.ModuleInventoryUsable = false;
+    const auto deficientSummary = MapperSummaryText(deficientCounts);
+    check(deficientSummary.find(L"moduleOwnershipUnverified=69") != std::wstring::npos &&
+              deficientSummary.find(L"driverObjects=129") != std::wstring::npos &&
+              deficientSummary.find(L"driverStartsOwned=1") != std::wstring::npos,
+          "mapper.summary-carries-the-withheld-count-and-the-ownership-ratio");
+    check(deficientSummary.find(L"module inventory unusable") != std::wstring::npos &&
+              deficientSummary.find(L"owns 1 of the 129 driver object DriverStart values") != std::wstring::npos,
+          "mapper.summary-explains-the-module-inventory-deficiency");
+
+    MapperSummaryCounts usableCounts;
+    usableCounts.Candidates = 27529;
+    usableCounts.Rows = 1;
+    usableCounts.ModuleOwnedSkipped = 119;
+    usableCounts.DriverObjects = 129;
+    usableCounts.DriverStartsOwned = 128;
+    usableCounts.Modules = 196;
+    const auto usableSummary = MapperSummaryText(usableCounts);
+    check(usableSummary.find(L"unowned=1") != std::wstring::npos &&
+              usableSummary.find(L"moduleOwnershipUnverified=0") != std::wstring::npos &&
+              usableSummary.find(L"unusable") == std::wstring::npos,
+          "mapper.summary-reports-a-row-without-claiming-a-deficiency");
+    check(MapperLimitationsText().find(L"moduleOwnershipUnverified") != std::wstring::npos &&
+              MapperLimitationsText().find(L"does not describe the target's own driver images") != std::wstring::npos,
+          "mapper.limitations-explain-the-module-inventory-deficiency");
 }
 } // namespace knself

@@ -431,10 +431,11 @@ void ScanMapperImages(Ctx &ctx, const std::vector<kncore::MapperHistoryRecord> &
     kncore::Result inventory;
     const auto owners = knengine::CollectOwnershipIndex(ctx.Session, &modules, &inventory);
     // The debugger's module list must describe this target's loaded drivers. A list
-    // that owns none of the driver objects' DriverStart values is not the inventory
-    // those images were loaded into - observed live as a session whose module list had
-    // not been reloaded, where every loaded driver was reported as a mapping - so the
-    // absence claims stay unverified until the list describes the target.
+    // that explains fewer than half of the driver objects' DriverStart values is not the
+    // inventory those images were loaded into - observed live as a session whose module
+    // list had not been reloaded, where 69 candidates became rows and every loaded driver
+    // was reported as a mapping - so the absence claims are withheld until the list
+    // describes the target.
     uint64_t driverStartsOwned = 0;
     for (const auto &driver : drivers)
     {
@@ -447,10 +448,15 @@ void ScanMapperImages(Ctx &ctx, const std::vector<kncore::MapperHistoryRecord> &
         kncore::MapperModuleInventoryUsable(inventory.Collected.Complete, modules.empty(), drivers.size(), driverStartsOwned);
     if (!moduleInventoryUsable)
     {
-        UnknownScope(ctx, budget, L"LoadedModules",
-                     inventory.Collected.StopReason.empty()
-                         ? L"Debugger module list does not describe this target's loaded drivers"
-                         : inventory.Collected.StopReason);
+        // The verdict rests on the share of the target's driver images the list explained,
+        // so the coverage gap names those counts; a read that also stopped early keeps its
+        // own reason beside them.
+        std::wstring inventoryReason = kncore::MapperModuleInventoryDeficiencyText(drivers.size(), driverStartsOwned);
+        if (!inventory.Collected.Complete && !inventory.Collected.StopReason.empty())
+        {
+            inventoryReason += L"; the read stopped with " + inventory.Collected.StopReason;
+        }
+        UnknownScope(ctx, budget, L"LoadedModules", inventoryReason);
     }
 
     ULONG64 dtb = ctx.Session.ContextDtb();
@@ -658,6 +664,7 @@ void ScanMapperImages(Ctx &ctx, const std::vector<kncore::MapperHistoryRecord> &
     uint64_t mzPrefixOnly = 0;
     uint64_t sweepPageNoRecord = 0;
     uint64_t imageCopyNotExecutable = 0;
+    uint64_t moduleOwnershipUnverified = 0;
     for (const auto *source : ordered)
     {
         if (!CheckCollection(ctx, budget))
@@ -867,6 +874,11 @@ void ScanMapperImages(Ctx &ctx, const std::vector<kncore::MapperHistoryRecord> &
             ++imageCopyNotExecutable;
             continue;
         }
+        if (drop == kncore::MapperRowDrop::ModuleOwnershipUnverified)
+        {
+            ++moduleOwnershipUnverified;
+            continue;
+        }
         if (drop == kncore::MapperRowDrop::SweepPageNoRecord)
         {
             ++sweepPageNoRecord;
@@ -883,30 +895,22 @@ void ScanMapperImages(Ctx &ctx, const std::vector<kncore::MapperHistoryRecord> &
         ++reported;
     }
 
-    ctx.Out.AddLine(L"[mapper] candidates=" + std::to_wstring(candidates.size()) + L" sweepSlots=" + std::to_wstring(sweepSlots) +
-                    L" unowned=" + std::to_wstring(unowned) + L" mzPrefixOnly=" + std::to_wstring(mzPrefixOnly) +
-                    L" sweepPageNoRecord=" + std::to_wstring(sweepPageNoRecord) +
-                    L" imageCopyNotExecutable=" + std::to_wstring(imageCopyNotExecutable) +
-                    L" moduleOwnedSkipped=" + std::to_wstring(moduleOwned) + L" driverObjects=" + std::to_wstring(drivers.size()) +
-                    L" driverStartsOwned=" + std::to_wstring(driverStartsOwned) + L" historyRecords=" +
-                    std::to_wstring(history.size()) + L" modules=" + std::to_wstring(modules.size()) +
-                    (moduleInventoryUsable ? L"" : L" (module inventory unusable)"));
-    budget.Report.Limitations.Push(knjson::Value(
-        L"Candidates are big-pool allocations whose first bytes are MZ, the interior pages of a big-pool allocation, "
-        L"driver-object DriverStart ranges, the pages a loaded module does not own next to each module range, and the ranges "
-        L"retained unload records describe. A candidate is reported as a row only when its PE headers verified and a record "
-        L"ties the address to an image: a driver object's DriverStart, the big-pool allocation or retained unload range that "
-        L"contains it, or a retained history record that matched it. The summary line counts the rest by reason - mzPrefixOnly "
-        L"for PE-shaped bytes whose image did not verify, imageCopyNotExecutable for a verified image whose whole range was "
-        L"walked and holds no executable page, and sweepPageNoRecord for a page the sweep reached that no record names - so "
-        L"those counts have to be "
-        L"read together with the rows. None of them is a verdict of maliciousness: an unowned image can be an unloaded "
-        L"driver's leftover pages or a legitimate allocation. A history match is a cross-reference against a retained record, "
-        L"so a missing match does not establish that history was erased. Page permissions come from the current CR3 and are "
-        L"non-atomic with the rest of the collection. An image without a debug directory has no PDB identity to report. "
-        L"Module ownership is judged against the debugger's module list and is reported as unverified when that list does "
-        L"not describe the target's own driver images, because a list that owns none of them cannot support the claim "
-        L"that nothing owns a range."));
+    kncore::MapperSummaryCounts summary;
+    summary.Candidates = candidates.size();
+    summary.SweepSlots = sweepSlots;
+    summary.Rows = unowned;
+    summary.MzPrefixOnly = mzPrefixOnly;
+    summary.SweepPageNoRecord = sweepPageNoRecord;
+    summary.ImageCopyNotExecutable = imageCopyNotExecutable;
+    summary.ModuleOwnershipUnverified = moduleOwnershipUnverified;
+    summary.ModuleOwnedSkipped = moduleOwned;
+    summary.DriverObjects = drivers.size();
+    summary.DriverStartsOwned = driverStartsOwned;
+    summary.HistoryRecords = history.size();
+    summary.Modules = modules.size();
+    summary.ModuleInventoryUsable = moduleInventoryUsable;
+    ctx.Out.AddLine(kncore::MapperSummaryText(summary));
+    budget.Report.Limitations.Push(knjson::Value(kncore::MapperLimitationsText()));
     FinishCollection(ctx, budget);
 }
 } // namespace kncmd

@@ -210,19 +210,43 @@ inline std::wstring MapperHistoryText(const MapperImageFacts &facts)
 }
 
 // An absence claim needs an inventory that describes this target: the loaded-module
-// list must have been read completely, must not be empty, and must own at least one
-// of the driver images the target's own \Driver namespace reports. A list that owns
-// none of them is not the inventory those images were loaded into - observed live as
-// a session whose module list had not been reloaded - so ownership stays unverified
-// instead of being reported as unowned for every driver.
+// list must have been read completely, must not be empty, and must explain most of the
+// driver images the target's own \Driver namespace reports. Explaining one of them is not
+// enough: a list that does not explain more than half is not the inventory those images were
+// loaded into, and every driver image it does not own would be reported as unowned. Both
+// shapes were observed live in one session - before its list was reloaded it owned one of
+// 129 driver object DriverStart values and 69 candidates became rows, and after the reload
+// it owned 128 of the 129, where the single image it did not own was the mapped driver
+// this command exists to find.
 inline bool MapperModuleInventoryUsable(bool inventoryComplete, bool inventoryEmpty, uint64_t driverObjects,
-                                        uint64_t driverObjectsOwned)
+                                       uint64_t driverObjectsOwned)
 {
     if (!inventoryComplete || inventoryEmpty)
     {
         return false;
     }
-    return driverObjects == 0 || driverObjectsOwned != 0;
+    if (driverObjects == 0)
+    {
+        // The target's driver namespace reported nothing to compare the list against, so
+        // the read status is the only evidence there is.
+        return true;
+    }
+    return driverObjectsOwned > driverObjects / 2;
+}
+
+// The comparison behind that verdict, so a coverage gap or a summary line states how far
+// the list was from the target instead of only that something was wrong. The counts are the
+// ones the command reports: the driver objects read from the driver namespace and the ones
+// whose DriverStart a loaded module range contained.
+inline std::wstring MapperModuleInventoryDeficiencyText(uint64_t driverObjects, uint64_t driverObjectsOwned)
+{
+    if (driverObjects == 0)
+    {
+        return L"Debugger module list was read but the driver namespace reported no driver objects to compare it with";
+    }
+    return L"Debugger module list owns " + std::to_wstring(driverObjectsOwned) + L" of the " +
+           std::to_wstring(driverObjects) + L" driver object DriverStart values, so it does not describe this target's "
+           L"loaded drivers";
 }
 
 // The containing range an image was found in is not always known: a driver object
@@ -312,9 +336,10 @@ inline MapperVerdict ClassifyMapperImage(const MapperImageFacts &facts)
     }
     if (!facts.ModuleInventoryVerified)
     {
-        // The image is absent from the inventory that was read, but that inventory
-        // was incomplete, so the row reports a suspect whose ownership stays
-        // unverified rather than a mapping that no module owns.
+        // The image is absent from the inventory that was read, but that inventory did
+        // not describe the target, so the ownership stays unverified rather than becoming
+        // a mapping that no module owns. These are the facts the reporting gate withholds,
+        // so this classification states them without publishing a row.
         verdict.Classification = L"ManualMappedSuspectModuleOwnershipUnverified";
         verdict.Reason = MapperOwnershipText(facts);
         if (facts.DriverObjectLinked)
@@ -373,23 +398,28 @@ inline MapperVerdict ClassifyMapperImage(const MapperImageFacts &facts)
     return verdict;
 }
 
-// Why a candidate is not reported as a mapping row. A mapping claim needs both a
-// verified PE image and an observation that ties the address to an image, and the three
-// reasons below are exactly the inputs that live collection turned into false
-// positives: pages of mapped firmware images that no record named, non-executable copies
-// of loaded drivers, and a pool allocation whose first two bytes were MZ.
+// Why a candidate is not reported as a mapping row. A mapping claim needs a verified PE
+// image, an observation that ties the address to an image, and an inventory that can
+// support the absence the row asserts. The reasons below are exactly the inputs that live
+// collection turned into false positives: a module list that could not support the absence,
+// pages of mapped firmware images that no record named, non-executable copies of loaded
+// drivers, and a pool allocation whose first two bytes were MZ.
 enum class MapperRowDrop
 {
-    None,                   // the candidate is reported as a mapping claim
-    MzPrefixOnly,           // the prefix bytes matched and no PE image verified
-    ImageCopyNotExecutable, // a verified image whose whole range was walked and cannot execute
-    SweepPageNoRecord,      // the sweep reached the page and no record names it
+    None,                      // the candidate is reported as a mapping claim
+    ModuleOwnershipUnverified, // the absence claim about the loaded-module list is unverified
+    MzPrefixOnly,              // the prefix bytes matched and no PE image verified
+    ImageCopyNotExecutable,    // a verified image whose whole range was walked and cannot execute
+    SweepPageNoRecord,         // the sweep reached the page and no record names it
 };
 
 // Whether a candidate becomes a detection row, and if not, which observation withheld
 // it. The classification above states what the facts showed; this gate states whether
 // they amount to a mapping someone observed, because a table of rows is a claim about
-// the target and not a list of everything that looked like an image.
+// the target and not a list of everything that looked like an image. A row that says no
+// loaded module owns an image is an absence claim about the module list, so it also needs
+// that list to have described the target, which is why an unverified ownership is withheld
+// instead of being reported at low confidence.
 inline MapperRowDrop MapperRowDecision(const MapperImageFacts &facts)
 {
     if (!facts.PeValid)
@@ -397,6 +427,17 @@ inline MapperRowDrop MapperRowDecision(const MapperImageFacts &facts)
         // Two bytes of a page are not an image: without verified headers the command
         // cannot tell a mapped image from an allocation that starts with MZ.
         return MapperRowDrop::MzPrefixOnly;
+    }
+    if (!facts.InLoadedModuleList && !facts.ModuleInventoryVerified)
+    {
+        // The row's claim is that no loaded module owns this image, and that claim rests on
+        // an inventory that describes the target. When the list did not describe the target's
+        // own driver images, every candidate it does not own would be reported as a mapping
+        // nobody verified - observed live as 69 rows from a list that owned one of 129 driver
+        // starts - so the candidate is withheld instead. A stale or ambiguous ownership index
+        // leaves the same claim unverified and is withheld the same way, while a candidate
+        // inside a loaded module's range makes no absence claim and is judged below.
+        return MapperRowDrop::ModuleOwnershipUnverified;
     }
     if (facts.PageRangeComplete && facts.PageExecutable.has_value() && !*facts.PageExecutable)
     {
@@ -457,5 +498,73 @@ inline std::wstring MapperImageText(const MapperImageFacts &facts, const MapperV
     line += L" pages=" + MapperPermissionText(facts) + L" pe=" + (facts.PeValid ? L"valid" : L"unverified");
     line += L" confidence=" + verdict.Confidence;
     return line;
+}
+
+// The counters the command's summary line carries. The line is assembled here so what a
+// reader sees - the rows, the counts withheld by reason and the inventory the ownership
+// claims rested on - can be tested directly instead of only through a live session.
+struct MapperSummaryCounts
+{
+    uint64_t Candidates = 0;
+    uint64_t SweepSlots = 0;
+    uint64_t Rows = 0; // candidates reported as mapping claims
+    uint64_t MzPrefixOnly = 0;
+    uint64_t SweepPageNoRecord = 0;
+    uint64_t ImageCopyNotExecutable = 0;
+    uint64_t ModuleOwnershipUnverified = 0;
+    uint64_t ModuleOwnedSkipped = 0;
+    uint64_t DriverObjects = 0;
+    uint64_t DriverStartsOwned = 0;
+    uint64_t HistoryRecords = 0;
+    uint64_t Modules = 0;
+    bool ModuleInventoryUsable = true;
+};
+
+// One line per run. A table of rows is a claim about the target, so the line carries what
+// was withheld and the comparison the ownership claims rested on, not only the rows.
+inline std::wstring MapperSummaryText(const MapperSummaryCounts &counts)
+{
+    std::wstring line = L"[mapper] candidates=" + std::to_wstring(counts.Candidates) + L" sweepSlots=" +
+                        std::to_wstring(counts.SweepSlots) + L" unowned=" + std::to_wstring(counts.Rows) +
+                        L" mzPrefixOnly=" + std::to_wstring(counts.MzPrefixOnly) +
+                        L" sweepPageNoRecord=" + std::to_wstring(counts.SweepPageNoRecord) +
+                        L" imageCopyNotExecutable=" + std::to_wstring(counts.ImageCopyNotExecutable) +
+                        L" moduleOwnershipUnverified=" + std::to_wstring(counts.ModuleOwnershipUnverified) +
+                        L" moduleOwnedSkipped=" + std::to_wstring(counts.ModuleOwnedSkipped) +
+                        L" driverObjects=" + std::to_wstring(counts.DriverObjects) + L" driverStartsOwned=" +
+                        std::to_wstring(counts.DriverStartsOwned) + L" historyRecords=" +
+                        std::to_wstring(counts.HistoryRecords) + L" modules=" + std::to_wstring(counts.Modules);
+    if (!counts.ModuleInventoryUsable)
+    {
+        // Every withheld candidate rests on this comparison, so the line states the
+        // comparison instead of only that something was wrong.
+        line += L" (module inventory unusable: " +
+                MapperModuleInventoryDeficiencyText(counts.DriverObjects, counts.DriverStartsOwned) + L")";
+    }
+    return line;
+}
+
+// The limitations the command records with its result. They are kept here so the wording
+// that tells a reader what the rows do not establish is testable like the rest of the gate.
+inline std::wstring MapperLimitationsText()
+{
+    return L"Candidates are big-pool allocations whose first bytes are MZ, the interior pages of a big-pool allocation, "
+           L"driver-object DriverStart ranges, the pages a loaded module does not own next to each module range, and the ranges "
+           L"retained unload records describe. A candidate is reported as a row only when its PE headers verified and a record "
+           L"ties the address to an image: a driver object's DriverStart, the big-pool allocation or retained unload range that "
+           L"contains it, or a retained history record that matched it. The summary line counts the rest by reason - mzPrefixOnly "
+           L"for PE-shaped bytes whose image did not verify, imageCopyNotExecutable for a verified image whose whole range was "
+           L"walked and holds no executable page, sweepPageNoRecord for a page the sweep reached that no record names, and "
+           L"moduleOwnershipUnverified for a candidate whose absence from the loaded-module list could not be established - "
+           L"because the list did not describe the target's own driver images, or because the ownership index could not "
+           L"decide the address - so those counts have to be read together with the rows. None of them is a "
+           L"verdict of maliciousness: an unowned image can be an unloaded driver's leftover pages or a legitimate "
+           L"allocation. A history match is a cross-reference against a retained record, so a missing match does not establish "
+           L"that history was erased. Page permissions come from the current CR3 and are non-atomic with the rest of the "
+           L"collection. An image without a debug directory has no PDB identity to report. Module ownership is judged against "
+           L"the debugger's module list and a row is withheld when that list does not describe the target's own driver "
+           L"images, because a list that does not explain more than half of the target's driver object DriverStart values "
+           L"cannot support the claim that nothing owns a range; those candidates are counted as moduleOwnershipUnverified "
+           L"instead.";
 }
 } // namespace kncore
